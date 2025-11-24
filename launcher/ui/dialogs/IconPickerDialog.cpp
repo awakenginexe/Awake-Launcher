@@ -35,9 +35,25 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
     ui->setupUi(this);
     setWindowModality(Qt::WindowModal);
 
-    searchBar = new QLineEdit(this);
-    searchBar->setPlaceholderText(tr("Search..."));
-    ui->verticalLayout->insertWidget(0, searchBar);
+    static const QString context_text[] = {
+        tr("All"),
+        tr("Modern"),
+        tr("Legacy"),
+        tr("Modpacks"),
+    };
+    static const Context context_id[] = {
+        Any,
+        Modern,
+        Legacy,
+        Modpacks,
+    };
+    const int cnt = sizeof(context_text) / sizeof(context_text[0]);
+    for (int i = 0; i < cnt; ++i) {
+        ui->contextCombo->addItem(context_text[i], context_id[i]);
+        if (i == 0) {
+            ui->contextCombo->insertSeparator(i + 1);
+        }
+    }
 
     proxyModel = new QSortFilterProxyModel(this);
     proxyModel->setSourceModel(APPLICATION->icons());
@@ -45,11 +61,8 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
     ui->iconView->setModel(proxyModel);
 
     auto contentsWidget = ui->iconView;
-    contentsWidget->setViewMode(QListView::IconMode);
     contentsWidget->setFlow(QListView::LeftToRight);
     contentsWidget->setIconSize(QSize(48, 48));
-    contentsWidget->setMovement(QListView::Static);
-    contentsWidget->setResizeMode(QListView::Adjust);
     contentsWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     contentsWidget->setSpacing(5);
     contentsWidget->setWordWrap(false);
@@ -86,7 +99,11 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
 
     auto buttonFolder = ui->buttonBox->addButton(tr("Open Folder"), QDialogButtonBox::ResetRole);
     connect(buttonFolder, &QPushButton::clicked, this, &IconPickerDialog::openFolder);
-    connect(searchBar, &QLineEdit::textChanged, this, &IconPickerDialog::filterIcons);
+    connect(ui->searchLine, &QLineEdit::textChanged, this, &IconPickerDialog::filterIcons);
+    connect(ui->contextCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        Context category = static_cast<Context>(ui->contextCombo->itemData(index).toInt());
+        filterIconsByCategory(category);
+    });
     // Prevent incorrect indices from e.g. filesystem changes
     connect(APPLICATION->icons(), &IconList::iconUpdated, this, [this]() { proxyModel->invalidate(); });
 }
@@ -181,4 +198,23 @@ void IconPickerDialog::openFolder()
 void IconPickerDialog::filterIcons(const QString& query)
 {
     proxyModel->setFilterFixedString(query);
+}
+
+void IconPickerDialog::filterIconsByCategory(Context category)
+{
+    switch (category) {
+        default:
+        case Any:
+            proxyModel->setFilterRegularExpression("");
+            break;
+        case Modern:
+            proxyModel->setFilterRegularExpression("^(?:ftb_logo|(?!.*_legacy$)(?!^(?:curseforge_|modrinth_|ftb_|technic_|atl_))[A-Za-z0-9._-]+)$");
+            break;
+        case Legacy:
+            proxyModel->setFilterRegularExpression("^(?:[A-Za-z0-9._-]+_legacy|ftb_glow)$");
+            break;
+        case Modpacks:
+            proxyModel->setFilterRegularExpression("^(?!(?:ftb_glow|ftb_logo))(?:curseforge_|modrinth_|ftb_|technic_|atl_)[A-Za-z0-9._-]*$");
+            break;
+    }
 }
