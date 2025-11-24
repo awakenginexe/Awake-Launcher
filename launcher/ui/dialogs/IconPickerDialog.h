@@ -32,6 +32,14 @@ class IconPickerDialog : public QDialog {
     int execWithSelection(QString selection);
     QString selectedIconKey;
 
+    enum IconPickerCategory {
+        Any,
+        Modern,
+        Legacy,
+        Modpacks,
+    };
+    Q_ENUM(IconPickerCategory)
+
    protected:
     virtual bool eventFilter(QObject*, QEvent*);
 
@@ -41,14 +49,6 @@ class IconPickerDialog : public QDialog {
     QLineEdit* searchBar;
     QSortFilterProxyModel* proxyModel;
 
-    enum Context {
-        Any,
-        Modern,
-        Legacy,
-        Modpacks,
-    };
-    Q_ENUM(Context)
-
    private slots:
     void selectionChanged(QItemSelection, QItemSelection);
     void activated(QModelIndex);
@@ -57,5 +57,5 @@ class IconPickerDialog : public QDialog {
     void removeSelectedIcon();
     void openFolder();
     void filterIcons(const QString& text);
-    void filterIconsByCategory(Context);
+    void filterIconsByCategory(IconPickerCategory);
 };

@@ -41,7 +41,7 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
         tr("Legacy"),
         tr("Modpacks"),
     };
-    static const Context context_id[] = {
+    static const IconPickerCategory context_id[] = {
         Any,
         Modern,
         Legacy,
@@ -101,7 +101,7 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
     connect(buttonFolder, &QPushButton::clicked, this, &IconPickerDialog::openFolder);
     connect(ui->searchLine, &QLineEdit::textChanged, this, &IconPickerDialog::filterIcons);
     connect(ui->contextCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-        Context category = static_cast<Context>(ui->contextCombo->itemData(index).toInt());
+        IconPickerCategory category = static_cast<IconPickerCategory>(ui->contextCombo->itemData(index).toInt());
         filterIconsByCategory(category);
     });
     // Prevent incorrect indices from e.g. filesystem changes
@@ -200,7 +200,7 @@ void IconPickerDialog::filterIcons(const QString& query)
     proxyModel->setFilterFixedString(query);
 }
 
-void IconPickerDialog::filterIconsByCategory(Context category)
+void IconPickerDialog::filterIconsByCategory(IconPickerCategory category)
 {
     switch (category) {
         default:
