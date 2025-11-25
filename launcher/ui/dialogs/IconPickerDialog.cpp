@@ -30,6 +30,71 @@
 #include "icons/IconList.h"
 #include "icons/IconUtils.h"
 
+class IconProxyModel : public QSortFilterProxyModel
+{
+public:
+    explicit IconProxyModel(QObject* parent = nullptr) : QSortFilterProxyModel(parent)
+    {
+    }
+
+    void setCategory(IconPickerDialog::IconPickerCategory category)
+    {
+        if (m_category == category)
+            return;
+        m_category = category;
+        invalidateFilter();
+    }
+
+protected:
+    bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override
+    {
+        if (!QSortFilterProxyModel::filterAcceptsRow(source_row, source_parent))
+            return false;
+
+        if (m_category == IconPickerDialog::Any)
+            return true;
+
+        auto model = static_cast<IconList*>(sourceModel());
+        QModelIndex index = model->index(source_row, 0, source_parent);
+        QString key = model->data(index, Qt::UserRole).toString();
+        const MMCIcon* icon = model->icon(key);
+
+        if (!icon)
+            return false;
+
+        bool isModpack = false;
+        bool isBuiltin = icon->isBuiltIn();
+        bool isLegacy = isBuiltin && icon->name().endsWith("_legacy", Qt::CaseInsensitive);
+
+        if (!isBuiltin) {
+            const QString& name = icon->name();
+            if (name.startsWith("curseforge_", Qt::CaseInsensitive) ||
+                name.startsWith("modrinth_", Qt::CaseInsensitive) ||
+                name.startsWith("ftb_", Qt::CaseInsensitive) ||
+                name.startsWith("technic_", Qt::CaseInsensitive) ||
+                name.startsWith("atl_", Qt::CaseInsensitive)) {
+                isModpack = true;
+            }
+        }
+
+        switch (m_category) {
+            case IconPickerDialog::Legacy:
+                return isBuiltin && isLegacy;
+            case IconPickerDialog::Modpacks:
+                return isModpack;
+            case IconPickerDialog::Modern:
+                return isBuiltin && !isLegacy;
+            case IconPickerDialog::Custom:
+                return !isBuiltin && !isModpack;
+            default:
+                return true;
+        }
+    }
+
+private:
+    IconPickerDialog::IconPickerCategory m_category = IconPickerDialog::Any;
+};
+
 IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui::IconPickerDialog)
 {
     ui->setupUi(this);
@@ -40,12 +105,14 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
         tr("Modern"),
         tr("Legacy"),
         tr("Modpacks"),
+        tr("Custom"),
     };
     static const IconPickerCategory context_id[] = {
         Any,
         Modern,
         Legacy,
         Modpacks,
+        Custom,
     };
     const int cnt = sizeof(context_text) / sizeof(context_text[0]);
     for (int i = 0; i < cnt; ++i) {
@@ -202,19 +269,5 @@ void IconPickerDialog::filterIcons(const QString& query)
 
 void IconPickerDialog::filterIconsByCategory(IconPickerCategory category)
 {
-    switch (category) {
-        default:
-        case Any:
-            proxyModel->setFilterRegularExpression("");
-            break;
-        case Modern:
-            proxyModel->setFilterRegularExpression("^(?:ftb_logo|(?!.*_legacy$)(?!^(?:curseforge_|modrinth_|ftb_|technic_|atl_))[A-Za-z0-9._-]+)$");
-            break;
-        case Legacy:
-            proxyModel->setFilterRegularExpression("^(?:[A-Za-z0-9._-]+_legacy|ftb_glow)$");
-            break;
-        case Modpacks:
-            proxyModel->setFilterRegularExpression("^(?!(?:ftb_glow|ftb_logo))(?:curseforge_|modrinth_|ftb_|technic_|atl_)[A-Za-z0-9._-]*$");
-            break;
-    }
+    static_cast<IconProxyModel*>(proxyModel)->setCategory(category);
 }
