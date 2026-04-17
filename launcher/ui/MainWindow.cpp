@@ -656,7 +656,7 @@ void MainWindow::repopulateAccountsMenu()
     auto accounts = APPLICATION->accounts();
     MinecraftAccountPtr defaultAccount = accounts->defaultAccount();
     
-    bool canChangeSkin = defaultAccount && (defaultAccount->accountType() != AccountType::Offline) && !defaultAccount->isActive();
+    bool canChangeSkin = defaultAccount && (defaultAccount->accountType() == AccountType::MSA) && !defaultAccount->isActive();
     ui->actionManageSkins->setEnabled(canChangeSkin);
 
     QString active_profileId = "";
