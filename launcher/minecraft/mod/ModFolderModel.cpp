@@ -51,6 +51,7 @@
 #include <QUrl>
 #include <QUuid>
 #include <algorithm>
+#include <set>
 
 #include "minecraft/mod/Resource.h"
 #include "minecraft/mod/ResourceFolderModel.h"
