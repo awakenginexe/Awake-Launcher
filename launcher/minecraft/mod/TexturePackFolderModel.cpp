@@ -41,12 +41,12 @@
 TexturePackFolderModel::TexturePackFolderModel(const QDir& dir, BaseInstance* instance, bool is_indexed, bool create_dir, QObject* parent)
     : ResourceFolderModel(QDir(dir), instance, is_indexed, create_dir, parent)
 {
-    m_column_names = QStringList({ "Enable", "Image", "Name", "Last Modified", "Provider", "Size" });
-    m_column_names_translated = QStringList({ tr("Enable"), tr("Image"), tr("Name"), tr("Last Modified"), tr("Provider"), tr("Size") });
-    m_column_sort_keys = { SortType::ENABLED, SortType::NAME, SortType::NAME, SortType::DATE, SortType::PROVIDER, SortType::SIZE };
+    m_column_names = QStringList({ "Enable", "Image", "Name", "Last Modified", "Provider", "Size", "File Name" });
+    m_column_names_translated = QStringList({ tr("Enable"), tr("Image"), tr("Name"), tr("Last Modified"), tr("Provider"), tr("Size"), tr("File Name") });
+    m_column_sort_keys = { SortType::ENABLED, SortType::NAME, SortType::NAME, SortType::DATE, SortType::PROVIDER, SortType::SIZE, SortType::FILENAME };
     m_column_resize_modes = { QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Stretch,
-                              QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive };
-    m_columnsHideable = { false, true, false, true, true, true };
+                               QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive };
+    m_columnsHideable = { false, true, false, true, true, true, true };
 }
 
 Task* TexturePackFolderModel::createParseTask(Resource& resource)
@@ -96,6 +96,9 @@ QVariant TexturePackFolderModel::data(const QModelIndex& index, int role) const
         case SizeColumn:
             mappedIndex = index.siblingAtColumn(ResourceFolderModel::SizeColumn);
             break;
+        case FileNameColumn:
+            mappedIndex = index.siblingAtColumn(ResourceFolderModel::FileNameColumn);
+            break;
     }
 
     if (mappedIndex.isValid()) {
@@ -116,6 +119,7 @@ QVariant TexturePackFolderModel::headerData(int section, [[maybe_unused]] Qt::Or
                 case ImageColumn:
                 case ProviderColumn:
                 case SizeColumn:
+                case FileNameColumn:
                     return columnNames().at(section);
                 default:
                     return {};
@@ -132,6 +136,8 @@ QVariant TexturePackFolderModel::headerData(int section, [[maybe_unused]] Qt::Or
                     return tr("The source provider of the texture pack.");
                 case SizeColumn:
                     return tr("The size of the texture pack.");
+                case FileNameColumn:
+                    return tr("The file name of the texture pack.");
                 default:
                     return {};
             }

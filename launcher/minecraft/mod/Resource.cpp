@@ -173,6 +173,9 @@ int Resource::compare(const Resource& other, SortType type) const
             if (dateTimeChanged() < other.dateTimeChanged())
                 return -1;
             break;
+        case SortType::FILENAME:
+            return fileinfo().fileName().localeAwareCompare(other.fileinfo().fileName());
+
         case SortType::SIZE: {
             if (this->type() != other.type()) {
                 if (this->type() == ResourceType::FOLDER)
@@ -187,6 +190,7 @@ int Resource::compare(const Resource& other, SortType type) const
                 return -1;
             break;
         }
+
         case SortType::PROVIDER: {
             auto compare_result = QString::compare(provider(), other.provider(), Qt::CaseInsensitive);
             if (compare_result != 0)
@@ -200,7 +204,11 @@ int Resource::compare(const Resource& other, SortType type) const
 
 bool Resource::applyFilter(QRegularExpression filter) const
 {
-    return filter.match(name()).hasMatch();
+    if (filter.match(name()).hasMatch())
+        return true;
+    if (filter.match(fileinfo().fileName()).hasMatch())
+        return true;
+    return false;
 }
 
 bool Resource::enable(EnableAction action)

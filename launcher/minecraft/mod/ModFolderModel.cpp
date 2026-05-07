@@ -63,18 +63,18 @@ ModFolderModel::ModFolderModel(const QDir& dir, BaseInstance* instance, bool is_
     : ResourceFolderModel(QDir(dir), instance, is_indexed, create_dir, parent)
 {
     m_column_names = QStringList({ "Enable", "Image", "Name", "Version", "Last Modified", "Provider", "Size", "Side", "Loaders",
-                                   "Minecraft Versions", "Release Type", "Requires", "Required By" });
+                                   "Minecraft Versions", "Release Type", "Requires", "Required By", "File Name" });
     m_column_names_translated =
         QStringList({ tr("Enable"), tr("Image"), tr("Name"), tr("Version"), tr("Last Modified"), tr("Provider"), tr("Size"), tr("Side"),
-                      tr("Loaders"), tr("Minecraft Versions"), tr("Release Type"), tr("Requires"), tr("Required By") });
+                       tr("Loaders"), tr("Minecraft Versions"), tr("Release Type"), tr("Requires"), tr("Required By"), tr("File Name") });
     m_column_sort_keys = { SortType::ENABLED,      SortType::NAME,     SortType::NAME,       SortType::VERSION, SortType::DATE,
                            SortType::PROVIDER,     SortType::SIZE,     SortType::SIDE,       SortType::LOADERS, SortType::MC_VERSIONS,
-                           SortType::RELEASE_TYPE, SortType::REQUIRES, SortType::REQUIRED_BY };
+                           SortType::RELEASE_TYPE, SortType::REQUIRES, SortType::REQUIRED_BY, SortType::FILENAME };
     m_column_resize_modes = { QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Stretch,     QHeaderView::Interactive,
-                              QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive,
-                              QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive,
-                              QHeaderView::Interactive };
-    m_columnsHideable = { false, true, false, true, true, true, true, true, true, true, true, true, true };
+                               QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive,
+                               QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive,
+                               QHeaderView::Interactive, QHeaderView::Interactive };
+    m_columnsHideable = { false, true, false, true, true, true, true, true, true, true, true, true, true, true };
 
     connect(this, &ModFolderModel::parseFinished, this, &ModFolderModel::onParseFinished);
 }
@@ -155,6 +155,9 @@ QVariant ModFolderModel::data(const QModelIndex& index, int role) const
         case SizeColumn:
             mappedIndex = index.siblingAtColumn(ResourceFolderModel::SizeColumn);
             break;
+        case FileNameColumn:
+            mappedIndex = index.siblingAtColumn(ResourceFolderModel::FileNameColumn);
+            break;
     }
 
     if (mappedIndex.isValid()) {
@@ -182,6 +185,7 @@ QVariant ModFolderModel::headerData(int section, [[maybe_unused]] Qt::Orientatio
                 case SizeColumn:
                 case RequiredByColumn:
                 case RequiresColumn:
+                case FileNameColumn:
                     return columnNames().at(section);
                 default:
                     return QVariant();
@@ -213,6 +217,8 @@ QVariant ModFolderModel::headerData(int section, [[maybe_unused]] Qt::Orientatio
                     return tr("For each mod, the number of other mods which depend on it.");
                 case RequiresColumn:
                     return tr("For each mod, the number of other mods it depends on.");
+                case FileNameColumn:
+                    return tr("The file name of the mod.");
                 default:
                     return QVariant();
             }

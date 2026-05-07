@@ -47,12 +47,13 @@
 DataPackFolderModel::DataPackFolderModel(const QString& dir, BaseInstance* instance, bool is_indexed, bool create_dir, QObject* parent)
     : ResourceFolderModel(QDir(dir), instance, is_indexed, create_dir, parent)
 {
-    m_column_names = QStringList({ "Enable", "Image", "Name", "Pack Format", "Last Modified" });
-    m_column_names_translated = QStringList({ tr("Enable"), tr("Image"), tr("Name"), tr("Pack Format"), tr("Last Modified") });
-    m_column_sort_keys = { SortType::ENABLED, SortType::NAME, SortType::NAME, SortType::PACK_FORMAT, SortType::DATE };
-    m_column_resize_modes = { QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Stretch, QHeaderView::Interactive,
-                              QHeaderView::Interactive };
-    m_columnsHideable = { false, true, false, true, true };
+    m_column_names = QStringList({ "Enable", "Image", "Name", "Pack Format", "Last Modified", "File Name" });
+    m_column_names_translated =
+        QStringList({ tr("Enable"), tr("Image"), tr("Name"), tr("Pack Format"), tr("Last Modified"), tr("File Name") });
+    m_column_sort_keys = { SortType::ENABLED, SortType::NAME, SortType::NAME, SortType::PACK_FORMAT, SortType::DATE, SortType::FILENAME };
+    m_column_resize_modes = { QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Stretch,
+                              QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive };
+    m_columnsHideable = { false, true, false, true, true, true };
 }
 
 QVariant DataPackFolderModel::data(const QModelIndex& index, int role) const
@@ -109,6 +110,9 @@ QVariant DataPackFolderModel::data(const QModelIndex& index, int role) const
         case ProviderColumn:
             mappedIndex = index.siblingAtColumn(ResourceFolderModel::ProviderColumn);
             break;
+        case FileNameColumn:
+            mappedIndex = index.siblingAtColumn(ResourceFolderModel::FileNameColumn);
+            break;
             // FIXME: there is no size column due to an oversight
     }
 
@@ -129,6 +133,7 @@ QVariant DataPackFolderModel::headerData(int section, [[maybe_unused]] Qt::Orien
                 case PackFormatColumn:
                 case DateColumn:
                 case ImageColumn:
+                case FileNameColumn:
                     return columnNames().at(section);
                 default:
                     return {};
@@ -145,6 +150,8 @@ QVariant DataPackFolderModel::headerData(int section, [[maybe_unused]] Qt::Orien
                     return tr("The data pack format ID, as well as the Minecraft versions it was designed for.");
                 case DateColumn:
                     return tr("The date and time this data pack was last changed (or added).");
+                case FileNameColumn:
+                    return tr("The file name of the data pack.");
                 default:
                     return {};
             }

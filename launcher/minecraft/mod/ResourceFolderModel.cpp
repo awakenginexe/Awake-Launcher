@@ -530,6 +530,8 @@ QVariant ResourceFolderModel::data(const QModelIndex& index, int role) const
                     return m_resources[row]->provider();
                 case SizeColumn:
                     return m_resources[row]->sizeStr();
+                case FileNameColumn:
+                    return m_resources[row]->fileinfo().fileName();
                 default:
                     return {};
             }
@@ -601,6 +603,7 @@ QVariant ResourceFolderModel::headerData(int section, [[maybe_unused]] Qt::Orien
                 case DateColumn:
                 case ProviderColumn:
                 case SizeColumn:
+                case FileNameColumn:
                     return columnNames().at(section);
                 default:
                     return {};
@@ -618,6 +621,8 @@ QVariant ResourceFolderModel::headerData(int section, [[maybe_unused]] Qt::Orien
                     return tr("The source provider of the resource.");
                 case SizeColumn:
                     return tr("The size of the resource.");
+                case FileNameColumn:
+                    return tr("The file name of the resource.");
                 default:
                     return {};
             }

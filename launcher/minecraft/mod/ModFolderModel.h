@@ -73,6 +73,7 @@ class ModFolderModel : public ResourceFolderModel {
         ReleaseTypeColumn,
         RequiresColumn,
         RequiredByColumn,
+        FileNameColumn,
         NUM_COLUMNS
     };
     ModFolderModel(const QDir& dir, BaseInstance* instance, bool is_indexed, bool create_dir, QObject* parent = nullptr);

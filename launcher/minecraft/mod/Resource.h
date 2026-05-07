@@ -78,6 +78,7 @@ enum class SortType {
     RELEASE_TYPE,
     REQUIRES,
     REQUIRED_BY,
+    FILENAME,
 };
 
 enum class EnableAction { ENABLE, DISABLE, TOGGLE };
