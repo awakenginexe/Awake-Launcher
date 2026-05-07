@@ -40,26 +40,25 @@
 #include <QIcon>
 #include <QStyle>
 
-#include "Version.h"
-
 #include "minecraft/mod/tasks/LocalDataPackParseTask.h"
 
-DataPackFolderModel::DataPackFolderModel(const QString& dir, BaseInstance* instance, bool is_indexed, bool create_dir, QObject* parent)
-    : ResourceFolderModel(QDir(dir), instance, is_indexed, create_dir, parent)
+DataPackFolderModel::DataPackFolderModel(const QString& dir, BaseInstance* instance, bool isIndexed, bool createDir, QObject* parent)
+    : ResourceFolderModel(QDir(dir), instance, isIndexed, createDir, parent)
 {
-    m_column_names = QStringList({ "Enable", "Image", "Name", "Pack Format", "Last Modified", "File Name" });
-    m_column_names_translated =
+    m_columnNames = QStringList({ "Enable", "Image", "Name", "Pack Format", "Last Modified", "File Name" });
+    m_columnNamesTranslated =
         QStringList({ tr("Enable"), tr("Image"), tr("Name"), tr("Pack Format"), tr("Last Modified"), tr("File Name") });
-    m_column_sort_keys = { SortType::ENABLED, SortType::NAME, SortType::NAME, SortType::PACK_FORMAT, SortType::DATE, SortType::FILENAME };
-    m_column_resize_modes = { QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Stretch,
-                              QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive };
+    m_columnSortKeys = { SortType::Enabled, SortType::Name, SortType::Name, SortType::PackFormat, SortType::Date, SortType::Filename };
+    m_columnResizeModes = { QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Stretch,
+                            QHeaderView::Interactive, QHeaderView::Interactive, QHeaderView::Interactive };
     m_columnsHideable = { false, true, false, true, true, true };
 }
 
 QVariant DataPackFolderModel::data(const QModelIndex& index, int role) const
 {
-    if (!validateIndex(index))
+    if (!validateIndex(index)) {
         return {};
+    }
 
     int row = index.row();
     int column = index.column();
@@ -68,11 +67,9 @@ QVariant DataPackFolderModel::data(const QModelIndex& index, int role) const
         case Qt::BackgroundRole:
             return rowBackground(row);
         case Qt::DisplayRole:
-            switch (column) {
-                case PackFormatColumn: {
-                    const auto& resource = at(row);
-                    return resource.packFormatStr();
-                }
+            if (column == PackFormatColumn) {
+                const auto& resource = at(row);
+                return resource.packFormatStr();
             }
             break;
         case Qt::DecorationRole: {
@@ -92,6 +89,8 @@ QVariant DataPackFolderModel::data(const QModelIndex& index, int role) const
             if (column == ImageColumn) {
                 return QSize(32, 32);
             }
+            break;
+        default:
             break;
     }
 
@@ -113,7 +112,9 @@ QVariant DataPackFolderModel::data(const QModelIndex& index, int role) const
         case FileNameColumn:
             mappedIndex = index.siblingAtColumn(ResourceFolderModel::FileNameColumn);
             break;
-            // FIXME: there is no size column due to an oversight
+        // FIXME: there is no size column due to an oversight
+        default:
+            break;
     }
 
     if (mappedIndex.isValid()) {
@@ -167,7 +168,7 @@ QVariant DataPackFolderModel::headerData(int section, [[maybe_unused]] Qt::Orien
 
 int DataPackFolderModel::columnCount(const QModelIndex& parent) const
 {
-    return parent.isValid() ? 0 : NUM_COLUMNS;
+    return parent.isValid() ? 0 : NumColumns;
 }
 
 Resource* DataPackFolderModel::createResource(const QFileInfo& file)
@@ -177,5 +178,5 @@ Resource* DataPackFolderModel::createResource(const QFileInfo& file)
 
 Task* DataPackFolderModel::createParseTask(Resource& resource)
 {
-    return new LocalDataPackParseTask(m_next_resolution_ticket, static_cast<DataPack*>(&resource));
+    return new LocalDataPackParseTask(m_nextResolutionTicket, static_cast<DataPack*>(&resource));
 }
