@@ -43,7 +43,16 @@
 class DataPackFolderModel : public ResourceFolderModel {
     Q_OBJECT
    public:
-    enum Columns : std::uint8_t { ActiveColumn = 0, ImageColumn, NameColumn, PackFormatColumn, DateColumn, FileNameColumn, NumColumns };
+    enum Columns : std::uint8_t {
+        ActiveColumn = 0,
+        ImageColumn,
+        NameColumn,
+        PackFormatColumn,
+        DateColumn,
+        SizeColumn,
+        FileNameColumn,
+        NumColumns
+    };
 
     explicit DataPackFolderModel(const QString& dir, BaseInstance* instance, bool isIndexed, bool createDir, QObject* parent = nullptr);
 
