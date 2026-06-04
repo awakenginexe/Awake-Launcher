@@ -122,7 +122,7 @@ IconPickerDialog::IconPickerDialog(QWidget* parent) : QDialog(parent), ui(new Ui
         }
     }
 
-    proxyModel = new QSortFilterProxyModel(this);
+    proxyModel = new IconProxyModel(this);
     proxyModel->setSourceModel(APPLICATION->icons());
     proxyModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
     ui->iconView->setModel(proxyModel);
