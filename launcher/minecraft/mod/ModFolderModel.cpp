@@ -110,7 +110,7 @@ QVariant ModFolderModel::data(const QModelIndex& index, int role) const
                     return at(row).loaders();
                 }
                 case McVersionsColumn: {
-                    return at(row).mcVersions();
+                    return at(row).mcVersionsString();
                 }
                 case ReleaseTypeColumn: {
                     return at(row).releaseType();
