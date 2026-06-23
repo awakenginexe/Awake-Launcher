@@ -64,7 +64,6 @@ bool InstanceProxyModel::subSortLessThan(const QModelIndex& left, const QModelIn
         return pdataLeft->lastLaunch() > pdataRight->lastLaunch();
     } else if (sortMode == "Playtime") {
         if (pdataLeft->totalTimePlayed() == pdataRight->totalTimePlayed()) {
-            // fallback to name sorting if playtime is equal
             return m_naturalSort.compare(pdataLeft->name(), pdataRight->name()) < 0;
         }
         return pdataLeft->totalTimePlayed() > pdataRight->totalTimePlayed();
