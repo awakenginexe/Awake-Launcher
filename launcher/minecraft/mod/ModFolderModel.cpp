@@ -342,7 +342,6 @@ QSet<Mod*> collectMods(const QSet<Mod*>& mods, QHash<QString, QSet<Mod*>> relati
                 auto affectedId = affected->mod_id();
 
                 if (findById(mods, affectedId) == nullptr && !seen.contains(affectedId)) {
-                    seen.insert(affectedId);
                     if (shouldBeEnabled != affected->enabled()) {
                         affectedList << affected;
                     }
