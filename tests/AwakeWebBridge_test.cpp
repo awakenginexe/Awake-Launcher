@@ -104,12 +104,14 @@ static void writeFile(const QString& path, const QByteArray& bytes)
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) qFatal("Cannot write web bridge test fixture");
 }
 
+#include "NativeTestAccounts.h"
 int main(int argc, char** argv)
 {
     const auto original = QDir::currentPath();
     QDir().mkpath(original + "/.validation");
     QTemporaryDir data(original + "/.validation/awake-bridge-XXXXXX");
     if (!data.isValid()) return 1;
+    seedStartupAccount(data.path());
     writeFile(data.path() + "/awakelauncher.cfg", "Language=en_US\nIgnoreJavaWizard=true\nAutomaticJavaDownload=true\nAutomaticJavaSwitch=true\nUserAskedAboutAutomaticJavaDownload=true\nProxyType=HTTP\nProxyAddr=127.0.0.1\nProxyPort=9\n");
     for (const auto& id : {QString("one"), QString("two")}) {
         const auto path = data.path() + "/instances/" + id;

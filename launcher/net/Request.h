@@ -97,6 +97,7 @@ class Request : public Task {
         MakeEternal = 2,
         AutoRetry = 4,
         AddAPIHeaders = 8,
+        Sensitive = 16,
     };
     Q_DECLARE_FLAGS(Options, Option)
 

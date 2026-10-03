@@ -159,14 +159,14 @@ class AwakeLibraryTest : public QObject {
         AccountListPage page;
         auto* action = page.findChild<QAction*>("actionAddMicrosoft");
         QVERIFY(action);
-        QVERIFY(!action->isEnabled());
-        QVERIFY(!APPLICATION->capabilities().testFlag(Application::SupportsMSA));
+        QCOMPARE(action->isEnabled(), !APPLICATION->getMSAClientID().isEmpty());
+        QCOMPARE(APPLICATION->capabilities().testFlag(Application::SupportsMSA), action->isEnabled());
         APPLICATION->settings()->set("MSAClientIDOverride", "test-public-client-id");
         QVERIFY(action->isEnabled());
         QVERIFY(APPLICATION->capabilities().testFlag(Application::SupportsMSA));
         APPLICATION->settings()->set("MSAClientIDOverride", "");
-        QVERIFY(!action->isEnabled());
-        QVERIFY(!APPLICATION->capabilities().testFlag(Application::SupportsMSA));
+        QCOMPARE(action->isEnabled(), !APPLICATION->getMSAClientID().isEmpty());
+        QCOMPARE(APPLICATION->capabilities().testFlag(Application::SupportsMSA), action->isEnabled());
     }
     void screenshotSelectionAndReducedMotion()
     {
@@ -240,6 +240,7 @@ static void writeFile(const QString& path, const QByteArray& bytes)
         qFatal("Cannot write UI test fixture");
 }
 
+#include "NativeTestAccounts.h"
 int main(int argc, char** argv)
 {
     const auto originalPath = QDir::currentPath();
@@ -247,6 +248,7 @@ int main(int argc, char** argv)
     if (!data.isValid())
         return 1;
     const QString path = data.path();
+    seedStartupAccount(path);
     writeFile(
         path + "/awakelauncher.cfg",
         QByteArray("Language=en_US\nApplicationTheme=awake-dark\nIconTheme=pe_light\n"

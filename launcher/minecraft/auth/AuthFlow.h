@@ -15,7 +15,7 @@ class AuthFlow : public Task {
    public:
     enum class Action { Refresh, Login, DeviceCode };
 
-    explicit AuthFlow(AccountData* data, Action action = Action::Refresh);
+    explicit AuthFlow(AccountData* data, Action action = Action::Refresh, QNetworkAccessManager* network = nullptr);
     virtual ~AuthFlow() = default;
 
     void executeTask() override;

@@ -17,7 +17,7 @@
 
 #include <Application.h>
 
-AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
+AuthFlow::AuthFlow(AccountData* data, Action action, QNetworkAccessManager* network) : Task(), m_data(data)
 {
     if (data->type == AccountType::MSA) {
         if (action == Action::DeviceCode) {
@@ -37,6 +37,7 @@ AuthFlow::AuthFlow(AccountData* data, Action action) : Task(), m_data(data)
         m_steps.append(makeShared<MinecraftProfileStep>(m_data));
         m_steps.append(makeShared<GetSkinStep>(m_data));
     }
+    for (const auto& step : m_steps) step->setNetwork(network);
     changeState(AccountTaskState::STATE_CREATED);
 }
 
@@ -74,6 +75,7 @@ void AuthFlow::nextStep()
 
 void AuthFlow::stepFinished(AccountTaskState resultingState, QString message)
 {
+    if (!isRunning()) return;
     if (changeState(resultingState, message))
         nextStep();
 }
@@ -147,8 +149,12 @@ bool AuthFlow::changeState(AccountTaskState newState, QString reason)
 }
 bool AuthFlow::abort()
 {
-    if (m_currentStep)
+    if (m_currentStep) {
+        disconnect(m_currentStep.get(), nullptr, this, nullptr);
         m_currentStep->abort();
+        m_currentStep.reset();
+    }
+    m_steps.clear();
     emitAborted();
     return true;
 }

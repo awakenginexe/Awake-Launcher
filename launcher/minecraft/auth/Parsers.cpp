@@ -82,7 +82,6 @@ bool getBool(QJsonValue value, bool& out)
 bool parseXTokenResponse(QByteArray& data, Token& output, QString name)
 {
     qDebug() << "Parsing" << name << ":";
-    qCDebug(authCredentials()) << data;
     auto obj = Json::requireObject(data, "xbox live auth response");
     if (!obj) {
         qWarning() << "Failed to parse response from user.auth.xboxlive.com as JSON:" << obj.error();
@@ -140,7 +139,6 @@ bool parseXTokenResponse(QByteArray& data, Token& output, QString name)
 bool parseMinecraftProfile(QByteArray& data, MinecraftProfile& output)
 {
     qDebug() << "Parsing Minecraft profile...";
-    qCDebug(authCredentials()) << data;
 
     auto obj = Json::requireObject(data, "xbox live profile response");
     if (!obj) {
@@ -279,7 +277,6 @@ decoded base64 "value":
 bool parseMinecraftProfileMojang(QByteArray& data, MinecraftProfile& output)
 {
     qDebug() << "Parsing Minecraft profile...";
-    qCDebug(authCredentials()) << data;
 
     auto obj = Json::requireObject(data, "mojang minecraft profile");
 
@@ -388,7 +385,6 @@ bool parseMinecraftProfileMojang(QByteArray& data, MinecraftProfile& output)
 bool parseMinecraftEntitlements(QByteArray& data, MinecraftEntitlement& output)
 {
     qDebug() << "Parsing Minecraft entitlements...";
-    qCDebug(authCredentials()) << data;
 
     auto obj = Json::requireObject(data, "xbox live entitlements response");
     if (!obj) {
@@ -420,7 +416,6 @@ bool parseMinecraftEntitlements(QByteArray& data, MinecraftEntitlement& output)
 bool parseRolloutResponse(QByteArray& data, bool& result)
 {
     qDebug() << "Parsing Rollout response...";
-    qCDebug(authCredentials()) << data;
 
     auto obj = Json::requireObject(data, "rollout response");
     if (!obj) {
@@ -447,7 +442,6 @@ bool parseRolloutResponse(QByteArray& data, bool& result)
 bool parseMojangResponse(QByteArray& data, Token& output)
 {
     qDebug() << "Parsing Mojang response...";
-    qCDebug(authCredentials()) << data;
 
     auto obj = Json::requireObject(data, "mojang login response");
     if (!obj) {

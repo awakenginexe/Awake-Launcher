@@ -21,12 +21,12 @@ void MinecraftProfileStep::perform()
                                            { "Accept", "application/json" },
                                            { "Authorization", QString("Bearer %1").arg(m_data->yggdrasilToken.token).toUtf8() } };
 
-    auto [request, response] = Net::Request::makeByteArray(url);
+    auto [request, response] = Net::Request::makeByteArray(url, Net::Request::Option::Sensitive);
     m_request = request;
     m_request->addHeaderProxy(std::make_unique<Net::RawHeaderProxy>(headers));
     m_request->enableAutoRetry(true);
 
-    m_task.reset(new NetJob("MinecraftProfileStep", APPLICATION->network()));
+    m_task.reset(new NetJob("MinecraftProfileStep", network()));
     m_task->setAskRetry(false);
     m_task->addNetAction(m_request);
 
@@ -49,8 +49,6 @@ void MinecraftProfileStep::onRequestDone(QByteArray* response)
         qWarning() << " Internal error no.:" << m_request->error();
         qWarning() << " Error string      :" << m_request->errorString();
 
-        qWarning() << " Response:";
-        qWarning() << QString::fromUtf8(*response);
 
         if (Net::isApplicationError(m_request->error()) && !Net::isServerError(m_request->error())) {
             emit finished(AccountTaskState::STATE_FAILED_SOFT,
@@ -68,5 +66,6 @@ void MinecraftProfileStep::onRequestDone(QByteArray* response)
         return;
     }
 
+    qInfo() << "[Auth] Minecraft profile retrieved";
     emit finished(AccountTaskState::STATE_WORKING, tr("Got Minecraft profile"));
 }
