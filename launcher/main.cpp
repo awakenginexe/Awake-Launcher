@@ -36,6 +36,9 @@
 #include <iostream>
 
 #include "Application.h"
+#ifdef AWAKE_WEB_ENABLED
+#include "awake/web/AwakeWebAssets.h"
+#endif
 
 #if defined Q_OS_WIN32
 #include "console/WindowsConsole.h"
@@ -43,6 +46,10 @@
 
 int main(int argc, char* argv[])
 {
+#ifdef AWAKE_WEB_ENABLED
+    Awake::Web::registerScheme();
+    Q_INIT_RESOURCE(awake_web);
+#endif
 #if defined Q_OS_WIN32
     // used on Windows to attach the standard IO streams
     console::WindowsConsoleGuard _consoleGuard;

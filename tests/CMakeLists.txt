@@ -12,9 +12,9 @@ ecm_add_test(AwakeSearch_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_M
 ecm_add_test(AwakeLibrary_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME AwakeLibrary)
 target_compile_definitions(AwakeLibrary PRIVATE AWAKE_TEST_JAVA_PATH="${Java_JAVA_EXECUTABLE}")
-set_tests_properties(AwakeLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+set_tests_properties(AwakeLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 60)
 add_test(NAME AwakeEmptyLibrary COMMAND AwakeLibrary emptyLibraryStartup -o -,txt)
-set_tests_properties(AwakeEmptyLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_TEST_EMPTY_LIBRARY=1" TIMEOUT 60)
+set_tests_properties(AwakeEmptyLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_TEST_EMPTY_LIBRARY=1;AWAKE_FRONTEND=widgets" TIMEOUT 60)
 if(WIN32)
     set_property(TEST AwakeLibrary APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
     set_property(TEST AwakeEmptyLibrary APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
@@ -89,3 +89,15 @@ ecm_add_test(XmlLogs_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR
 
 ecm_add_test(Commandline_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME Commandline)
+
+if(Launcher_ENABLE_AWAKE_WEB)
+    ecm_add_test(AwakeWebPolicy_test.cpp ../launcher/awake/web/AwakeWebPolicy.cpp
+        LINK_LIBRARIES Qt6::Core Qt6::Test TEST_NAME AwakeWebPolicy)
+    target_include_directories(AwakeWebPolicy PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+    ecm_add_test(AwakeWebBridge_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME AwakeWebBridge)
+    set_tests_properties(AwakeWebBridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 60)
+    if(WIN32)
+        ecm_add_test(AwakeWebShell_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME AwakeWebShell)
+        set_tests_properties(AwakeWebShell PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
+    endif()
+endif()

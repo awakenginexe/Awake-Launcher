@@ -112,6 +112,7 @@
 #include "ui/themes/ITheme.h"
 #include "ui/themes/ThemeManager.h"
 #include "ui/widgets/LabeledToolButton.h"
+#include "ui/widgets/PageContainer.h"
 
 #include "minecraft/PackProfile.h"
 #include "minecraft/VersionFile.h"
@@ -130,6 +131,10 @@
 #include "KonamiCode.h"
 #include "awake/LibraryDelegate.h"
 #include "awake/LibraryWidget.h"
+#ifdef AWAKE_WEB_ENABLED
+#include "awake/web/AwakeWebBridge.h"
+#include "awake/web/AwakeWebShell.h"
+#endif
 
 #include "InstanceCopyTask.h"
 #include "InstanceDirUpdate.h"
@@ -151,6 +156,9 @@ QString profileInUseFilter(const QString& profile, bool used)
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
+#ifdef AWAKE_WEB_ENABLED
+    m_webMode = qEnvironmentVariable("AWAKE_FRONTEND") != "widgets";
+#endif
     ui->setupUi(this);
 
     setWindowIcon(APPLICATION->logo());
@@ -366,6 +374,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
             m_library->setReducedMotion(reduced);
         });
         ui->horizontalLayout->addWidget(m_library);
+        if (m_webMode)
+            m_library->hide();
         ui->mainToolBar->removeAction(ui->actionAddInstance);
         ui->instanceToolBar->hide();
 
@@ -411,7 +421,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         connect(proxymodel, &QAbstractItemModel::layoutChanged, this, updateCount);
         updateCount();
         auto* find = new QShortcut(QKeySequence::Find, this);
-        connect(find, &QShortcut::activated, m_library, &Awake::LibraryWidget::focusSearch);
+        connect(find, &QShortcut::activated, this, [this] {
+#ifdef AWAKE_WEB_ENABLED
+            if (m_webMode && m_webShell) {
+                m_webShell->focusSearch();
+                return;
+            }
+#endif
+            m_library->focusSearch();
+        });
     }
     // The cat background
     {
@@ -509,8 +527,101 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->mainToolBar->hide();
     ui->newsToolBar->hide();
     ui->instanceToolBar->hide();
-    setMinimumSize(900, 620);
+    setMinimumSize(m_webMode ? QSize(760, 480) : QSize(900, 620));
+#ifdef AWAKE_WEB_ENABLED
+    if (m_webMode) {
+        m_webShell = new Awake::Web::Shell(ui->centralWidget);
+        ui->horizontalLayout->setContentsMargins(0, 0, 0, 0);
+        ui->horizontalLayout->addWidget(m_webShell);
+        m_webBridge = new Awake::Web::Bridge(m_webShell->assets(), [this](const QString& id) {
+            setSelectedInstanceById(id);
+            return m_selectedInstance && m_selectedInstance->id() == id;
+        }, [this](const QString& action, const QString& id) { return invokeWebAction(action, id); }, m_webShell);
+        connect(m_webShell, &Awake::Web::Shell::failed, this, &MainWindow::showWidgetFrontend);
+        connect(view->selectionModel(), &QItemSelectionModel::currentChanged, m_webBridge, [this] {
+            if (m_webBridge) m_webBridge->scheduleState();
+        });
+        m_webShell->start(m_webBridge);
+        statusBar()->hide();
+        ui->menuBar->hide();
+    }
+#endif
 }
+
+#ifdef AWAKE_WEB_ENABLED
+void MainWindow::showWidgetFrontend(const QString& reason)
+{
+    if (!m_webMode) return;
+    m_webMode = false;
+    m_webShell->shutdown();
+    m_webBridge = nullptr;
+    m_webShell->hide();
+    setMinimumSize(900, 620);
+    const bool compact = APPLICATION->settings()->get("AwakeCompactLibrary").toBool();
+    if (auto* delegate = dynamic_cast<Awake::LibraryDelegate*>(view->itemDelegate())) delegate->setCompact(compact);
+    view->setCompact(compact);
+    m_library->setViewMode(compact);
+    m_library->setSortMode(APPLICATION->settings()->get("InstSortMode").toString());
+    m_library->setReducedMotion(APPLICATION->settings()->get("AwakeReduceMotion").toBool());
+    proxymodel->invalidate();
+    proxymodel->sort(0);
+    m_library->show();
+    updateLibraryDetails();
+    statusBar()->show();
+    if (!reason.isEmpty()) {
+        qWarning() << reason;
+        statusBar()->showMessage(reason);
+    }
+    view->setFocus();
+}
+
+QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id)
+{
+    const auto ok = [] { return QVariantMap{{"ok", true}}; };
+    const auto fail = [](const QString& error) { return QVariantMap{{"ok", false}, {"error", error}}; };
+    const bool needsInstance = QStringList{"launch", "edit", "folder", "manage", "launchOptions"}.contains(action);
+    if (needsInstance) {
+        if (!APPLICATION->instances()->getInstanceById(id)) return fail(tr("This instance no longer exists."));
+        setSelectedInstanceById(id);
+        if (!m_selectedInstance || m_selectedInstance->id() != id) return fail(tr("The instance could not be selected."));
+    }
+    if (action == "launch") {
+        if (m_selectedInstance->isRunning() || !m_selectedInstance->canLaunch()) return fail(tr("This instance cannot be launched right now."));
+        ui->actionLaunchInstance->trigger();
+    } else if (action == "create") {
+        ui->actionAddInstance->trigger();
+    } else if (action == "import") {
+        addInstance({}, {}, "import");
+    } else if (action == "edit") {
+        ui->actionEditInstance->trigger();
+    } else if (action == "folder") {
+        ui->actionViewSelectedInstFolder->trigger();
+    } else if (action == "settings") {
+        ui->actionSettings->trigger();
+    } else if (action == "logs") {
+        APPLICATION->showLogWindow()->show();
+    } else if (action == "accounts") {
+        repopulateAccountsMenu();
+        ui->accountsMenu->exec(mapToGlobal(QPoint(24, 40)));
+    } else if (action == "application") {
+        auto* reduceMotion = findChild<QAction*>("awakeReduceMotion");
+        auto* applicationMenu = reduceMotion ? qobject_cast<QMenu*>(reduceMotion->parent()) : nullptr;
+        if (!applicationMenu) return fail(tr("The application menu is not available."));
+        applicationMenu->exec(mapToGlobal(QPoint(24, 40)));
+    } else if (action == "launchOptions") {
+        updateLaunchButton();
+        ui->actionLaunchInstance->menu()->exec(mapToGlobal(QPoint(width() - 280, height() - 170)));
+    } else if (action == "manage") {
+        QMenu menu(this);
+        menu.addActions({ui->actionRenameInstance, ui->actionChangeInstIcon, ui->actionChangeInstGroup, ui->actionCopyInstance,
+                         ui->actionExportInstance, ui->actionCreateInstanceShortcut, ui->actionKillInstance, ui->actionDeleteInstance});
+        menu.exec(mapToGlobal(QPoint(width() - 280, height() - 240)));
+    } else if (action == "legacy") {
+        showWidgetFrontend();
+    } else return fail(tr("This action is not available."));
+    return ok();
+}
+#endif
 
 // macOS always has a native menu bar, so these fixes are not applicable
 // Other systems may or may not have a native menu bar (most do not - it seems like only Ubuntu Unity does)
@@ -672,7 +783,7 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
 
 void MainWindow::updateMainToolBar()
 {
-    ui->menuBar->setVisible(APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
+    ui->menuBar->setVisible(!m_webMode && APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
     ui->mainToolBar->hide();
 }
 
@@ -987,7 +1098,7 @@ void MainWindow::on_actionCopyInstance_triggered()
     runModalTask(task.get());
 }
 
-void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& extra_info)
+void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& extra_info, const QString& initialPage)
 {
     QString groupName;
     do {
@@ -1008,6 +1119,8 @@ void MainWindow::addInstance(const QString& url, const QMap<QString, QString>& e
     }
 
     NewInstanceDialog newInstDlg(groupName, url, extra_info, this);
+    if (!initialPage.isEmpty())
+        if (auto* pages = newInstDlg.findChild<PageContainer*>()) pages->selectPage(initialPage);
     if (!newInstDlg.exec())
         return;
 
@@ -1675,6 +1788,18 @@ void MainWindow::on_actionExportInstanceFlamePack_triggered()
 void MainWindow::on_actionRenameInstance_triggered()
 {
     if (m_selectedInstance) {
+        if (m_webMode) {
+            const auto before = m_selectedInstance->name();
+            bool accepted = false;
+            auto name = QInputDialog::getText(this, tr("Rename Instance"), tr("Instance name:"), QLineEdit::Normal, before, &accepted);
+            name = name.trimmed();
+            name.truncate(128);
+            if (accepted && !name.trimmed().isEmpty() && name != before) {
+                view->model()->setData(view->currentIndex(), name, Qt::EditRole);
+                if (auto* delegate = qobject_cast<ListViewDelegate*>(view->itemDelegate())) delegate->textChanged(before, name);
+            }
+            return;
+        }
         view->edit(view->currentIndex());
     }
 }
@@ -1689,6 +1814,12 @@ void MainWindow::on_actionViewSelectedInstFolder_triggered()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+#ifdef AWAKE_WEB_ENABLED
+    if (m_webShell) {
+        m_webShell->shutdown();
+        m_webBridge = nullptr;
+    }
+#endif
     // Save the window state and geometry.
     APPLICATION->settings()->set("MainWindowState", QString::fromUtf8(saveState().toBase64()));
     APPLICATION->settings()->set("MainWindowGeometry", QString::fromUtf8(saveGeometry().toBase64()));
@@ -1698,6 +1829,10 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
 void MainWindow::changeEvent(QEvent* event)
 {
+#ifdef AWAKE_WEB_ENABLED
+    if (m_webMode && m_webShell && event->type() == QEvent::WindowStateChange)
+        m_webShell->setSuspended(isMinimized());
+#endif
     if (event->type() == QEvent::LanguageChange) {
         retranslateUi();
     }
@@ -1886,6 +2021,12 @@ void MainWindow::updateStatusCenter()
 
 void MainWindow::updateLibraryDetails()
 {
+#ifdef AWAKE_WEB_ENABLED
+    if (m_webMode) {
+        if (m_webBridge) m_webBridge->scheduleState();
+        return;
+    }
+#endif
     if (!m_library || !m_selectedInstance)
         return;
     auto* settings = m_selectedInstance->settings();

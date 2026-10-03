@@ -67,6 +67,10 @@ class MainWindow;
 }
 namespace Awake {
 class LibraryWidget;
+namespace Web {
+class Shell;
+class Bridge;
+}
 }
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -224,7 +228,7 @@ class MainWindow : public QMainWindow {
    private:
     void retranslateUi();
 
-    void addInstance(const QString& url = QString(), const QMap<QString, QString>& extra_info = {});
+    void addInstance(const QString& url = QString(), const QMap<QString, QString>& extra_info = {}, const QString& initialPage = {});
     void setCatBackground(bool enabled);
     void updateCatState();
     void updateInstanceToolIcon(QString new_icon);
@@ -232,6 +236,10 @@ class MainWindow : public QMainWindow {
     void updateStatusCenter();
     void updateLibraryDetails();
     void setInstanceActionsEnabled(bool enabled);
+#ifdef AWAKE_WEB_ENABLED
+    QVariantMap invokeWebAction(const QString& action, const QString& id);
+    void showWidgetFrontend(const QString& reason = {});
+#endif
 
     void runModalTask(Task* task);
     void instanceFromInstanceTask(InstanceTask* task);
@@ -242,6 +250,11 @@ class MainWindow : public QMainWindow {
     InstanceView* view = nullptr;
     InstanceProxyModel* proxymodel = nullptr;
     Awake::LibraryWidget* m_library = nullptr;
+    bool m_webMode = false;
+#ifdef AWAKE_WEB_ENABLED
+    Awake::Web::Shell* m_webShell = nullptr;
+    Awake::Web::Bridge* m_webBridge = nullptr;
+#endif
     QToolButton* newsLabel = nullptr;
     QLabel* m_statusLeft = nullptr;
     QLabel* m_statusCenter = nullptr;
