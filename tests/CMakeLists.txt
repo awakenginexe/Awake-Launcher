@@ -10,8 +10,11 @@ ecm_add_test(AwakeLibrary_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_
     TEST_NAME AwakeLibrary)
 target_compile_definitions(AwakeLibrary PRIVATE AWAKE_TEST_JAVA_PATH="${Java_JAVA_EXECUTABLE}")
 set_tests_properties(AwakeLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+add_test(NAME AwakeEmptyLibrary COMMAND AwakeLibrary emptyLibraryStartup -o -,txt)
+set_tests_properties(AwakeEmptyLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_TEST_EMPTY_LIBRARY=1" TIMEOUT 60)
 if(WIN32)
     set_property(TEST AwakeLibrary APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
+    set_property(TEST AwakeEmptyLibrary APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
 endif()
 
 ecm_add_test(FileSystem_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
