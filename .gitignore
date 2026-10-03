@@ -72,3 +72,6 @@ aqtinstall.log
 docs/ARCHITECTURE.md
 docs/IMPLEMENTATION.md
 DESIGN.md
+launcher/awake-web/node_modules/
+launcher/awake-web/dist/
+launcher/awake-web/.test-dist/
