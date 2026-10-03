@@ -8573,7 +8573,11 @@ Are you sure?</source>
       <source>%1 MiB</source>
       <translation>%1 MiB</translation>
     </message>
-  </context>
+      <message>
+        <source>Reduce motion</source>
+        <translation>ลดการเคลื่อนไหว</translation>
+    </message>
+</context>
   <context>
     <name>ManagedPackPage</name>
     <message>
@@ -16445,5 +16449,41 @@ Play time: %4</source>
 เล่นล่าสุด: %3
 เวลาเล่น: %4</translation>
     </message>
-  </context>
+      <message>
+        <source>Your library starts here. Create an instance to add your first world.</source>
+        <translation>เริ่มสร้างคลังของคุณด้วยอินสแตนซ์แรก</translation>
+    </message>
+    <message>
+        <source>No instances match your search.</source>
+        <translation>ไม่พบอินสแตนซ์ที่ตรงกับการค้นหา</translation>
+    </message>
+    <message>
+        <source>Your worlds, within reach.</source>
+        <translation>โลกของคุณ พร้อมให้เข้าเล่น</translation>
+    </message>
+    <message>
+        <source>Create your first instance to start playing.</source>
+        <translation>สร้างอินสแตนซ์แรกเพื่อเริ่มเล่น</translation>
+    </message>
+    <message>
+        <source>Choose a world from your library to play and manage it.</source>
+        <translation>เลือกโลกจากคลังเพื่อเล่นและจัดการ</translation>
+    </message>
+    <message>
+        <source>Loading screenshots…</source>
+        <translation>กำลังโหลดภาพหน้าจอ…</translation>
+    </message>
+    <message>
+        <source>No screenshot available</source>
+        <translation>ไม่มีภาพหน้าจอ</translation>
+    </message>
+    <message>
+        <source>Screenshots from this instance</source>
+        <translation>ภาพหน้าจอจากอินสแตนซ์นี้</translation>
+    </message>
+    <message>
+        <source>Launcher menu</source>
+        <translation>เมนูลอนเชอร์</translation>
+    </message>
+</context>
 </TS>

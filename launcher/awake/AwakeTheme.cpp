@@ -31,8 +31,22 @@ QString Theme::appStyleSheet()
         QPushButton, QToolButton { padding: 7px 10px; border: 1px solid transparent; border-radius: 5px; }
         QPushButton:hover, QToolButton:hover { background: %5; }
         QPushButton:focus, QToolButton:focus, QLineEdit:focus, QComboBox:focus { border: 1px solid %6; }
-        QLabel#awakeHeading { font-size: 23px; font-weight: 600; }
-        QLabel#awakeDetailName { font-size: 20px; font-weight: 600; }
+        QLabel { background: transparent; }
+        QLabel#awakeHeading { font-size: 20px; font-weight: 600; }
+        QLabel#awakeDetailName { font-size: 42px; font-weight: 700; }
+        QLabel#awakeWordmark { font-size: 18px; font-weight: 700; letter-spacing: 3px; }
+        QLabel#awakeMark { font-size: 25px; font-weight: 700; color: #102128; background: #a5e1ca; border-radius: 10px; }
+        QLabel#awakeWorldDescription { font-size: 15px; color: #d2dee7; }
+        QLabel#awakeRuntime, QLabel#awakeArtworkCaption { font-size: 11px; color: #c3d1de; }
+        QLabel#awakeEmptyHint { font-size: 13px; color: #bac9d7; padding-top: 18px; }
+        QWidget#awakeNavigation QAbstractItemView { background: transparent; border: none; }
+        QLineEdit#awakeSearch { background: rgba(255,255,255,12); border: 1px solid #7d8ea4; border-radius: 10px; padding: 7px; }
+        QWidget#awakeNavigation QComboBox { background: rgba(255,255,255,12); border: 1px solid #7d8ea4; border-radius: 8px; padding: 6px; }
+        QWidget#awakeNavigation QCheckBox, QWidget#awakeLaunchDock QCheckBox { color: #c3d1de; font-size: 11px; }
+        QScrollBar:vertical { background: transparent; width: 7px; }
+        QScrollBar::handle:vertical { background: #657584; border-radius: 3px; min-height: 30px; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
         QLabel#awakeMuted { color: %7; }
         QWidget#awakeDetails { background: %1; border-radius: 7px; }
         QToolButton#awakeLaunch { background: %6; color: %8; font-weight: 600; padding: 11px; }

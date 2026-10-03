@@ -63,7 +63,7 @@ QSize LibraryDelegate::sizeHint(const QStyleOptionViewItem& option, const QModel
     const auto height = QFontMetrics(option.font).height();
     if (m_compact) {
         auto* view = qobject_cast<const QAbstractItemView*>(option.widget);
-        return { view ? qMax(1, view->viewport()->width() - 20) : 400, qMax(62, height * 2 + 22) };
+        return { view ? qMax(1, view->viewport()->width() - 20) : 400, qMax(74, height * 2 + 26) };
     }
     return { 176, 90 + height * 3 };
 }
@@ -77,15 +77,14 @@ void LibraryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& optio
     const bool selected = opt.state.testFlag(QStyle::State_Selected);
     const bool enabled = opt.state.testFlag(QStyle::State_Enabled);
     const auto group = enabled ? QPalette::Active : QPalette::Disabled;
-    const auto background = selected ? QPalette::Highlight : QPalette::Base;
     const auto foreground = selected ? QPalette::HighlightedText : QPalette::Text;
     painter->setPen(Qt::NoPen);
-    painter->setBrush(opt.palette.color(group, background));
-    painter->drawRoundedRect(opt.rect.adjusted(2, 2, -2, -2), 6, 6);
+    painter->setBrush(QColor(255, 255, 255, selected ? 25 : opt.state.testFlag(QStyle::State_MouseOver) ? 14 : 5));
+    painter->drawRoundedRect(opt.rect.adjusted(2, 3, -2, -3), 12, 12);
     if (selected || opt.state.testFlag(QStyle::State_HasFocus)) {
         painter->setBrush(Qt::NoBrush);
         painter->setPen(QPen(opt.palette.color(QPalette::Link), 2));
-        painter->drawRoundedRect(opt.rect.adjusted(3, 3, -3, -3), 6, 6);
+        painter->drawRoundedRect(opt.rect.adjusted(3, 4, -3, -4), 11, 11);
     }
     const auto iconRect = m_compact ? QRect(opt.rect.left() + 12, opt.rect.center().y() - 20, 40, 40)
                                     : QRect(opt.rect.center().x() - 28, opt.rect.top() + 15, 56, 56);

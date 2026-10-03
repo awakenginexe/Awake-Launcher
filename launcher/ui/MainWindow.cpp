@@ -343,11 +343,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         view->setSourceOfGroupCollapseStatus(
             [](const QString& groupName) -> bool { return APPLICATION->instances()->isGroupCollapsed(groupName); });
         connect(view, &InstanceView::groupStateChanged, APPLICATION->instances(), &InstanceList::on_GroupStateChanged);
+        auto* applicationMenu = new QMenu(this);
+        applicationMenu->addMenu(ui->fileMenu);
+        applicationMenu->addMenu(ui->editMenu);
+        applicationMenu->addMenu(ui->viewMenu);
+        applicationMenu->addMenu(ui->foldersMenu);
+        applicationMenu->addMenu(ui->helpMenu);
+        applicationMenu->addSeparator();
+        auto* reduceMotion = applicationMenu->addAction(tr("Reduce motion"));
+        reduceMotion->setObjectName("awakeReduceMotion");
+        reduceMotion->setCheckable(true);
+        reduceMotion->setChecked(APPLICATION->settings()->get("AwakeReduceMotion").toBool());
         m_library = new Awake::LibraryWidget(
             view,
             { ui->actionRenameInstance, ui->actionChangeInstIcon, ui->actionChangeInstGroup, ui->actionCopyInstance,
               ui->actionExportInstance, ui->actionCreateInstanceShortcut, ui->actionKillInstance, ui->actionDeleteInstance },
-            ui->actionLaunchInstance, ui->actionAddInstance, ui->actionEditInstance, ui->actionViewSelectedInstFolder, ui->centralWidget);
+            ui->actionLaunchInstance, ui->actionAddInstance, ui->actionEditInstance, ui->actionViewSelectedInstFolder,
+            ui->actionSettings, ui->actionAccountsButton, applicationMenu, ui->centralWidget);
+        m_library->setReducedMotion(reduceMotion->isChecked());
+        connect(reduceMotion, &QAction::toggled, this, [this](bool reduced) {
+            APPLICATION->settings()->set("AwakeReduceMotion", reduced);
+            m_library->setReducedMotion(reduced);
+        });
         ui->horizontalLayout->addWidget(m_library);
         ui->mainToolBar->removeAction(ui->actionAddInstance);
         ui->instanceToolBar->hide();
@@ -489,6 +506,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     view->setFocus();
 
     retranslateUi();
+    ui->mainToolBar->hide();
+    ui->newsToolBar->hide();
+    ui->instanceToolBar->hide();
+    setMinimumSize(900, 620);
 }
 
 // macOS always has a native menu bar, so these fixes are not applicable
@@ -512,6 +533,8 @@ void MainWindow::retranslateUi()
     }
 
     ui->retranslateUi(this);
+    if (auto* reduceMotion = findChild<QAction*>("awakeReduceMotion"))
+        reduceMotion->setText(tr("Reduce motion"));
     if (m_library)
         updateLibraryDetails();
 
@@ -650,7 +673,7 @@ void MainWindow::showInstanceContextMenu(const QPoint& pos)
 void MainWindow::updateMainToolBar()
 {
     ui->menuBar->setVisible(APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
-    ui->mainToolBar->setVisible(ui->menuBar->isNativeMenuBar() || !APPLICATION->settings()->get("MenuBarInsteadOfToolBar").toBool());
+    ui->mainToolBar->hide();
 }
 
 void MainWindow::updateLaunchButton()
@@ -1872,10 +1895,13 @@ void MainWindow::updateLibraryDetails()
     const auto java = automaticJava ? tr("Automatic (selected at launch)") : javaPath;
     const auto last = m_selectedInstance->lastLaunch();
     const auto lastPlayed = last > 0 ? QLocale().toString(QDateTime::fromMSecsSinceEpoch(last), QLocale::ShortFormat) : tr("Never played");
-    m_library->setInstance(m_selectedInstance->name(), m_selectedInstance->getStatusbarDescription(),
+    const auto* delegate = dynamic_cast<Awake::LibraryDelegate*>(view->itemDelegate());
+    const auto metadata = delegate ? delegate->metadata(view->currentIndex()) : QString();
+    m_library->setInstance(m_selectedInstance->name(), metadata.isEmpty() ? m_selectedInstance->getStatusbarDescription() : metadata,
                            java.isEmpty() ? tr("Not configured") : java, tr("%1 MiB").arg(settings->get("MaxMemAlloc").toInt()), lastPlayed,
                            Time::prettifyDuration(m_selectedInstance->totalTimePlayed(), false),
                            APPLICATION->settings()->get("AwakePinnedInstances").toStringList().contains(m_selectedInstance->id()));
+    m_library->setArtworkSource(m_selectedInstance->id(), m_selectedInstance->gameRoot());
 }
 // "Instance actions" are actions that require an instance to be selected (i.e. "new instance" is not here)
 // Actions that also require other conditions (e.g. a running instance) won't be changed.
