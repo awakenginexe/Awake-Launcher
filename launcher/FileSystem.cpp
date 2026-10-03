@@ -1,0 +1,1868 @@
+// SPDX-License-Identifier: GPL-3.0-only
+/*
+ *  Prism Launcher - Minecraft Launcher
+ *  Copyright (C) 2022 Sefa Eyeoglu <contact@scrumplex.net>
+ *  Copyright (C) 2022 TheKodeToad <TheKodeToad@proton.me>
+ *  Copyright (C) 2022 Rachel Powers <508861+Ryex@users.noreply.github.com>
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, version 3.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * This file incorporates work covered by the following copyright and
+ * permission notice:
+ *
+ *      Copyright 2013-2021 MultiMC Contributors
+ *
+ *      Licensed under the Apache License, Version 2.0 (the "License");
+ *      you may not use this file except in compliance with the License.
+ *      You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *      Unless required by applicable law or agreed to in writing, software
+ *      distributed under the License is distributed on an "AS IS" BASIS,
+ *      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *      See the License for the specific language governing permissions and
+ *      limitations under the License.
+ */
+
+#include "FileSystem.h"
+#include <qcontainerfwd.h>
+#include <QPair>
+
+#include "BuildConfig.h"
+
+#include <QDebug>
+#include <QDir>
+#include <QDirListing>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QStorageInfo>
+#include <QTextStream>
+#include <QUrl>
+#include <QtNetwork>
+#include <algorithm>
+#include <system_error>
+
+#include "DesktopServices.h"
+#include "PSaveFile.h"
+#include "StringUtils.h"
+
+#if defined Q_OS_WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <objidl.h>
+#include <shlguid.h>
+#include <shobjidl.h>
+#include <sys/utime.h>
+#include <versionhelpers.h>
+#include <windows.h>
+#include <winnls.h>
+#include <string>
+// for ShellExecute
+#include <Shellapi.h>
+#include <objbase.h>
+#include <shlobj.h>
+#else
+#include <utime.h>
+#endif
+
+#include <filesystem>
+namespace fs = std::filesystem;
+
+// clone
+#if defined(Q_OS_LINUX)
+#include <errno.h>
+#include <fcntl.h> /* Definition of FICLONE* constants */
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
+#if defined(WITH_QTDBUS)
+#include <QDBusConnection>
+#include <QDBusReply>
+#include <QDBusUnixFileDescriptor>
+#include <utility>
+#endif
+
+#elif defined(Q_OS_MACOS)
+#include <sys/attr.h>
+#include <sys/clonefile.h>
+#elif defined(Q_OS_WIN)
+// winbtrfs clone vs rundll32 shellbtrfs.dll,ReflinkCopy
+#include <fileapi.h>
+#include <stdio.h>
+#include <tchar.h>
+#include <windows.h>
+// refs
+#include <winioctl.h>
+#if defined(__MINGW32__)
+#include <crtdbg.h>
+#endif
+#endif
+
+#if defined(Q_OS_WIN)
+
+#if defined(__MINGW32__)
+
+// Avoid re-defining structs retroactively added to MinGW
+// https://github.com/mingw-w64/mingw-w64/issues/90#issuecomment-2829284729
+#if __MINGW64_VERSION_MAJOR < 13
+
+struct _DUPLICATE_EXTENTS_DATA {
+    HANDLE FileHandle;
+    LARGE_INTEGER SourceFileOffset;
+    LARGE_INTEGER TargetFileOffset;
+    LARGE_INTEGER ByteCount;
+};
+
+using DUPLICATE_EXTENTS_DATA = _DUPLICATE_EXTENTS_DATA;
+using PDUPLICATE_EXTENTS_DATA = _DUPLICATE_EXTENTS_DATA*;
+#endif
+
+struct _FSCTL_GET_INTEGRITY_INFORMATION_BUFFER {
+    WORD ChecksumAlgorithm;  // Checksum algorithm. e.g. CHECKSUM_TYPE_UNCHANGED, CHECKSUM_TYPE_NONE, CHECKSUM_TYPE_CRC32
+    WORD Reserved;           // Must be 0
+    DWORD Flags;             // FSCTL_INTEGRITY_FLAG_xxx
+    DWORD ChecksumChunkSizeInBytes;
+    DWORD ClusterSizeInBytes;
+};
+
+using FSCTL_GET_INTEGRITY_INFORMATION_BUFFER = _FSCTL_GET_INTEGRITY_INFORMATION_BUFFER;
+using PFSCTL_GET_INTEGRITY_INFORMATION_BUFFER = _FSCTL_GET_INTEGRITY_INFORMATION_BUFFER*;
+
+struct _FSCTL_SET_INTEGRITY_INFORMATION_BUFFER {
+    WORD ChecksumAlgorithm;  // Checksum algorithm. e.g. CHECKSUM_TYPE_UNCHANGED, CHECKSUM_TYPE_NONE, CHECKSUM_TYPE_CRC32
+    WORD Reserved;           // Must be 0
+    DWORD Flags;             // FSCTL_INTEGRITY_FLAG_xxx
+};
+
+using FSCTL_SET_INTEGRITY_INFORMATION_BUFFER = _FSCTL_SET_INTEGRITY_INFORMATION_BUFFER;
+using PFSCTL_SET_INTEGRITY_INFORMATION_BUFFER = _FSCTL_SET_INTEGRITY_INFORMATION_BUFFER*;
+
+#endif
+
+#ifndef FSCTL_DUPLICATE_EXTENTS_TO_FILE
+#define FSCTL_DUPLICATE_EXTENTS_TO_FILE CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 209, METHOD_BUFFERED, FILE_WRITE_DATA)
+#endif
+
+#ifndef FSCTL_GET_INTEGRITY_INFORMATION
+#define FSCTL_GET_INTEGRITY_INFORMATION \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 159, METHOD_BUFFERED, FILE_ANY_ACCESS)  // FSCTL_GET_INTEGRITY_INFORMATION_BUFFER
+#endif
+
+#ifndef FSCTL_SET_INTEGRITY_INFORMATION
+#define FSCTL_SET_INTEGRITY_INFORMATION \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 160, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)  // FSCTL_SET_INTEGRITY_INFORMATION_BUFFER
+#endif
+
+#ifndef ERROR_NOT_CAPABLE
+#define ERROR_NOT_CAPABLE 775L
+#endif
+
+#ifndef ERROR_BLOCK_TOO_MANY_REFERENCES
+#define ERROR_BLOCK_TOO_MANY_REFERENCES 347L
+#endif
+
+#endif
+
+namespace {
+
+Result<> ensureExists(const QDir& dir)
+{
+    if (!QDir().mkpath(dir.absolutePath())) {
+        return std::unexpected("Unable to create folder " + dir.dirName() + " (" + dir.absolutePath() + ")");
+    }
+    return {};
+}
+
+#ifdef Q_OS_WIN32
+bool copyFileAttributes(const QString& src, const QString& dst)
+{
+    auto attrs = GetFileAttributesW(src.toStdWString().c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return false;
+    return SetFileAttributesW(dst.toStdWString().c_str(), attrs);
+}
+
+// needs folders to exists
+void copyFolderAttributes(const QString& src, const QString& dst, const QString& relative)
+{
+    auto path = FS::PathCombine(src, relative);
+    QDir dsrc(src);
+    while ((path = QFileInfo(path).path()).length() >= src.length()) {
+        auto dstPath = FS::PathCombine(dst, dsrc.relativeFilePath(path));
+        copyFileAttributes(path, dstPath);
+    }
+}
+#endif
+
+bool moveByCopy(const QString& source, const QString& dest)
+{
+    if (!FS::copy(source, dest)()) {  // copy
+        qDebug() << "Copy of" << source << "to" << dest << "failed!";
+        return false;
+    }
+    if (!FS::deletePath(source)) {  // remove original
+        qDebug() << "Deletion of" << source << "failed!";
+        return false;
+    };
+    return true;
+}
+
+QString quoteArgs(const QStringList& args, const QString& wrap, const QString& escapeChar, bool wrapOnlyIfNeeded = false)
+{
+    QString result;
+
+    auto size = args.size();
+    for (int i = 0; i < size; ++i) {
+        QString arg = args[i];
+        arg.replace(wrap, escapeChar);
+
+        bool needsWrapping = !wrapOnlyIfNeeded || arg.contains(' ') || arg.contains('\t') || arg.contains(wrap);
+
+        if (needsWrapping) {
+            result += wrap + arg + wrap;
+        } else {
+            result += arg;
+        }
+
+        if (i < size - 1) {
+            result += ' ';
+        }
+    }
+
+    return result;
+}
+}  // namespace
+namespace FS {
+
+Result<> write(const QString& filename, const QByteArray& data)
+{
+    auto res = ensureExists(QFileInfo(filename).dir());
+    if (!res) {
+        return res;
+    }
+    PSaveFile file(filename);
+    if (!file.open(PSaveFile::WriteOnly)) {
+        return std::unexpected("Couldn't open " + filename + " for writing: " + file.errorString());
+    }
+    if (data.size() != file.write(data)) {
+        return std::unexpected("Error writing data to " + filename + ": " + file.errorString());
+    }
+    if (!file.commit()) {
+        return std::unexpected("Error while committing data to " + filename + ": " + file.errorString());
+    }
+    return {};
+}
+
+Result<> appendSafe(const QString& filename, const QByteArray& data)
+{
+    auto res = ensureExists(QFileInfo(filename).dir());
+    if (!res) {
+        return res;
+    }
+
+    QByteArray buffer;
+    auto bRes = read(filename);
+    if (bRes) {
+        buffer = bRes.value();
+    }
+    buffer.append(data);
+    PSaveFile file(filename);
+    if (!file.open(PSaveFile::WriteOnly)) {
+        return std::unexpected("Couldn't open " + filename + " for writing: " + file.errorString());
+    }
+    if (buffer.size() != file.write(buffer)) {
+        return std::unexpected("Error writing data to " + filename + ": " + file.errorString());
+    }
+    if (!file.commit()) {
+        return std::unexpected("Error while committing data to " + filename + ": " + file.errorString());
+    }
+    return {};
+}
+
+Result<> append(const QString& filename, const QByteArray& data)
+{
+    auto res = ensureExists(QFileInfo(filename).dir());
+    if (!res) {
+        return res;
+    }
+    QFile file(filename);
+    if (!file.open(QFile::Append)) {
+        return std::unexpected("Couldn't open " + filename + " for writing: " + file.errorString());
+    }
+    if (data.size() != file.write(data)) {
+        return std::unexpected("Error writing data to " + filename + ": " + file.errorString());
+    }
+    return {};
+}
+
+Result<QByteArray> read(const QString& filename)
+{
+    QFile file(filename);
+    if (!file.open(QFile::ReadOnly)) {
+        return std::unexpected("Unable to open " + filename + " for reading: " + file.errorString());
+    }
+    const auto size = file.size();
+    QByteArray data(static_cast<int>(size), 0);
+    const qint64 ret = file.read(data.data(), size);
+    if (ret == -1 || ret != size) {
+        return std::unexpected("Error reading data from " + filename + ": " + file.errorString());
+    }
+    return data;
+}
+
+bool updateTimestamp(const QString& filename)
+{
+#ifdef Q_OS_WIN32
+    std::wstring filename_utf_16 = filename.toStdWString();
+    return (_wutime64(filename_utf_16.c_str(), nullptr) == 0);
+#else
+    QByteArray filenameBA = QFile::encodeName(filename);
+    return (utime(filenameBA.data(), nullptr) == 0);
+#endif
+}
+
+bool ensureFilePathExists(const QString& filenamepath)
+{
+    QFileInfo a(filenamepath);
+    QDir dir;
+    QString ensuredPath = a.path();
+    bool success = dir.mkpath(ensuredPath);
+    return success;
+}
+
+namespace {
+bool ensureFolderPathExistsImpl(const QFileInfo& folderPath)
+{
+    QDir dir;
+    QString ensuredPath = folderPath.filePath();
+    if (folderPath.exists()) {
+        return true;
+    }
+
+    return dir.mkpath(ensuredPath);
+}
+}  // namespace
+
+bool ensureFolderPathExists(const QFileInfo& folderPath)
+{
+    return ensureFolderPathExistsImpl(folderPath);
+}
+
+bool ensureFolderPathExists(const QString& folderPathName)
+{
+    return ensureFolderPathExistsImpl(QFileInfo(folderPathName));
+}
+
+/**
+ * @brief Copies a directory and it's contents from src to dest
+ * @param offset subdirectory form src to copy to dest
+ * @return if there was an error during the filecopy
+ */
+bool copy::operator()(const QString& offset, bool dryRun)
+{
+    using copy_opts = fs::copy_options;
+    m_copied = 0;  // reset counter
+    m_failedPaths.clear();
+    m_symlinksToCopy.clear();
+
+// NOTE always deep copy on windows. the alternatives are too messy.
+#if defined Q_OS_WIN32
+    m_followSymlinks = true;
+#endif
+
+    auto src = PathCombine(m_src.absolutePath(), offset);
+    auto dst = PathCombine(m_dst.absolutePath(), offset);
+
+    std::error_code err;
+
+    fs::copy_options opt = copy_opts::none;
+
+    // The default behavior is to follow symlinks
+    if (!m_followSymlinks) {
+        opt |= copy_opts::copy_symlinks;
+    }
+
+    if (m_overwrite) {
+        opt |= copy_opts::overwrite_existing;
+    }
+
+    // Function that'll do the actual copying
+    auto copyFile = [this, dryRun, src, dst, opt, &err](const QString& srcPath, const QString& relativeDstPath) {
+        if (m_matcher && (m_matcher(relativeDstPath) != m_whitelist)) {
+            return;
+        }
+
+        auto dstPath = PathCombine(dst, relativeDstPath);
+        if (!dryRun) {
+            auto srcStdPath = StringUtils::toStdString(srcPath);
+#ifdef Q_OS_WIN32
+            if (fs::is_symlink(srcStdPath)) {
+                auto symlinkTarget = QString(fs::read_symlink(srcStdPath).c_str());
+
+                LinkPair link = { .src = symlinkTarget, .dst = dstPath };
+                m_symlinksToCopy.append(link);
+            }
+#endif
+
+            if (fs::is_directory(srcStdPath) && !fs::is_symlink(srcStdPath)) {
+                ensureFolderPathExists(dstPath);
+            } else {
+                ensureFilePathExists(dstPath);
+            }
+#ifdef Q_OS_WIN32
+            copyFolderAttributes(src, dst, relativeDstPath);
+#endif
+
+            // don't copy directories as we loop over the individual files and copy them instead
+            // check is necessary as directories are still looped over to copy directory symlinks or empty directories
+            // and otherwise both the directories *and* the files in them will be copied which is messy and weird
+
+            // Behavior varies on OS, on windows symlink directories seem to get follow/deep copied regardless of copy_opts flags,
+            // so skip them now (don't copy them with fs::copy but with privileged FS::create_link later)
+            // On linux symlink directories get correctly copied as symlinks if the flag is set, so only skip non symlink dirs
+            bool skip = fs::is_directory(srcStdPath) && !fs::is_symlink(srcStdPath);
+#ifdef Q_OS_WIN32
+            skip = fs::is_directory(srcStdPath) || fs::is_symlink(srcStdPath);
+#endif
+            if (!skip) {
+                fs::copy(StringUtils::toStdString(srcPath), StringUtils::toStdString(dstPath), opt, err);
+            }
+        }
+        if (err) {
+            qWarning() << "Failed to copy files:" << QString::fromStdString(err.message());
+            qDebug() << "Source file:" << srcPath;
+            qDebug() << "Destination file:" << dstPath;
+            m_failedPaths.append(dstPath);
+            emit copyFailed(relativeDstPath);
+            return;
+        }
+        m_copied++;
+        emit fileCopied(relativeDstPath);
+    };
+
+    // We can't use copy_opts::recursive because we need to take into account the
+    // blacklisted paths, so we iterate over the source directory, and if there's no blacklist
+    // match, we copy the file.
+    QDir srcDir(src);
+    auto filters =
+        QDirListing::IteratorFlag::ResolveSymlinks | QDirListing::IteratorFlag::IncludeHidden | QDirListing::IteratorFlag::Recursive;
+
+    if (!m_copyDirectories) {
+        filters |= QDirListing::IteratorFlag::FilesOnly;
+    }
+
+    for (const auto& entry : QDirListing(src, filters)) {
+        auto srcPath = entry.absoluteFilePath();
+        auto relativePath = srcDir.relativeFilePath(srcPath);
+        copyFile(srcPath, relativePath);
+    }
+
+    // If the root src is not a directory, the previous iterator won't run.
+    if (!fs::is_directory(StringUtils::toStdString(src))) {
+        copyFile(src, "");
+    }
+
+    bool thereWereErrors = false;
+#ifdef Q_OS_WIN32
+    if (!m_symlinksToCopy.empty()) {
+        FS::create_link folderLink(m_symlinksToCopy);
+        folderLink.linkRecursively(false);
+
+        if (!folderLink()) {
+            qDebug() << "EXPECTED: Link failure, Windows requires permissions for symlinks";
+            qDebug() << "attempting to run symlinking with privilege";
+
+            QEventLoop loop;
+            bool gotPrivResults = false;
+
+            connect(&folderLink, &FS::create_link::finishedPrivileged, this, [&gotPrivResults, &loop](bool gotResults) {
+                if (!gotResults) {
+                    qDebug() << "Privileged run exited without results!";
+                }
+                gotPrivResults = gotResults;
+                loop.quit();
+            });
+            folderLink.runPrivileged();
+
+            loop.exec();  // wait for the finished signal
+
+            for (auto result : folderLink.getResults()) {
+                if (result.err_value != 0) {
+                    thereWereErrors = true;
+                }
+            }
+            if (thereWereErrors) {
+                qDebug() << "errors encountered while trying to link files";
+            }
+        }
+    }
+#endif
+
+    return err.value() == 0 && !thereWereErrors;
+}
+
+/// qDebug print support for the LinkPair struct
+QDebug operator<<(QDebug debug, const FS::LinkPair& lp)
+{
+    QDebugStateSaver saver(debug);
+
+    debug.nospace() << "LinkPair{ src: " << lp.src << " , dst: " << lp.dst << " }";
+    return debug;
+}
+
+bool create_link::operator()(const QString& offset, bool dryRun)
+{
+    m_linked = 0;  // reset counter
+    m_pathResults.clear();
+    m_linksToMake.clear();
+
+    m_pathResults.clear();
+
+    makeLinkList(offset);
+
+    if (!dryRun) {
+        return makeLinks();
+    }
+
+    return true;
+}
+
+/**
+ * @brief Make a list of all the links to make
+ * @param offset subdirectory of src to link to dest
+ */
+void create_link::makeLinkList(const QString& offset)
+{
+    for (const auto& pair : m_pathPairs) {
+        const QString& srcPath = pair.src;
+        const QString& dstPath = pair.dst;
+
+        auto src = PathCombine(QDir(srcPath).absolutePath(), offset);
+        auto dst = PathCombine(QDir(dstPath).absolutePath(), offset);
+
+        // you can't hard link a directory so make sure if we deal with a directory we do so recursively
+        if (m_useHardLinks) {
+            m_recursive = true;
+        }
+
+        // Function that'll do the actual linking
+        auto linkFile = [this, dst](const QString& srcPath, const QString& relativeDstPath) {
+            if (m_matcher && (m_matcher(relativeDstPath) != m_whitelist)) {
+                qDebug() << "path" << relativeDstPath << "in black list or not in whitelist";
+                return;
+            }
+
+            auto dstPath = PathCombine(dst, relativeDstPath);
+            LinkPair link = { .src = srcPath, .dst = dstPath };
+            m_linksToMake.append(link);
+        };
+
+        if ((!m_recursive) || !fs::is_directory(StringUtils::toStdString(src))) {
+            if (m_debug) {
+                qDebug() << "linking single file or dir:" << src << "to" << dst;
+            }
+            linkFile(src, "");
+        } else {
+            if (m_debug) {
+                qDebug().nospace() << "linking recursively: " << src << " to " << dst << ", max_depth: " << m_maxDepth;
+            }
+            QDir srcDir(src);
+
+            QStringList linkedPaths;
+            for (const auto& entry :
+                 QDirListing(src, QDirListing::IteratorFlag::FilesOnly | QDirListing::IteratorFlag::ResolveSymlinks |
+                                      QDirListing::IteratorFlag::IncludeHidden | QDirListing::IteratorFlag::Recursive)) {
+                auto entryPath = entry.absoluteFilePath();
+                auto relativePath = srcDir.relativeFilePath(entryPath);
+
+                if (m_maxDepth >= 0 && pathDepth(relativePath) > m_maxDepth) {
+                    relativePath = pathTruncate(relativePath, m_maxDepth);
+                    entryPath = srcDir.filePath(relativePath);
+                    if (linkedPaths.contains(entryPath)) {
+                        continue;
+                    }
+                }
+
+                linkedPaths.append(entryPath);
+
+                linkFile(entryPath, relativePath);
+            }
+        }
+    }
+}
+
+bool create_link::makeLinks()
+{
+    for (const auto& link : m_linksToMake) {
+        QString srcPath = link.src;
+        QString dstPath = link.dst;
+        auto srcPathStd = StringUtils::toStdString(link.src);
+        auto dstPathStd = StringUtils::toStdString(link.dst);
+
+        ensureFilePathExists(dstPath);
+        if (m_useHardLinks) {
+            if (m_debug) {
+                qDebug() << "making hard link:" << srcPath << "to" << dstPath;
+            }
+            fs::create_hard_link(srcPathStd, dstPathStd, m_osErr);
+        } else if (fs::is_directory(srcPathStd)) {
+            if (m_debug) {
+                qDebug() << "making directory_symlink:" << srcPath << "to" << dstPath;
+            }
+            fs::create_directory_symlink(srcPathStd, dstPathStd, m_osErr);
+        } else {
+            if (m_debug) {
+                qDebug() << "making symlink:" << srcPath << "to" << dstPath;
+            }
+            fs::create_symlink(srcPathStd, dstPathStd, m_osErr);
+        }
+
+        if (m_osErr) {
+            qWarning() << "Failed to link files:" << QString::fromStdString(m_osErr.message());
+            qDebug() << "Source file:" << srcPath;
+            qDebug() << "Destination file:" << dstPath;
+            qDebug() << "Error category:" << m_osErr.category().name();
+            qDebug() << "Error code:" << m_osErr.value();
+            emit linkFailed(srcPath, dstPath, QString::fromStdString(m_osErr.message()), m_osErr.value());
+        } else {
+            m_linked++;
+            emit fileLinked(srcPath, dstPath);
+        }
+        if (m_osErr) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void create_link::runPrivileged(const QString& offset)
+{
+    m_linked = 0;  // reset counter
+    m_pathResults.clear();
+    m_linksToMake.clear();
+
+    bool gotResults = false;
+
+    makeLinkList(offset);
+
+    QString serverName = BuildConfig.LAUNCHER_APP_BINARY_NAME + "_filelink_server" + StringUtils::getRandomAlphaNumeric();
+
+    connect(&m_linkServer, &QLocalServer::newConnection, this, [this, &gotResults]() {
+        qDebug() << "Client connected, sending out pairs";
+        // construct block of data to send
+        QByteArray block;
+        QDataStream out(&block, QIODevice::WriteOnly);
+
+        auto blocksize = static_cast<qint32>(sizeof(quint32));
+        for (const auto& link : m_linksToMake) {
+            blocksize += static_cast<qint32>(link.src.size());
+            blocksize += static_cast<qint32>(link.dst.size());
+        }
+        qDebug() << "About to write block of size:" << blocksize;
+        out << blocksize;
+
+        out << quint32(m_linksToMake.length());
+        for (const auto& link : m_linksToMake) {
+            out << link.src;
+            out << link.dst;
+        }
+
+        QLocalSocket* clientConnection = m_linkServer.nextPendingConnection();
+        connect(clientConnection, &QLocalSocket::disconnected, clientConnection, &QLocalSocket::deleteLater);
+
+        connect(clientConnection, &QLocalSocket::readyRead, this, [&, clientConnection]() {
+            QDataStream in;
+            quint32 blockSize = 0;
+            in.setDevice(clientConnection);
+
+            qDebug() << "Reading path results from client";
+            qDebug() << "bytes available" << clientConnection->bytesAvailable();
+
+            // Relies on the fact that QDataStream serializes a quint32 into
+            // sizeof(quint32) bytes
+            if (clientConnection->bytesAvailable() < (int)sizeof(quint32)) {
+                return;
+            }
+            qDebug() << "reading block size";
+            in >> blockSize;
+
+            qDebug() << "blocksize is" << blockSize;
+            qDebug() << "bytes available" << clientConnection->bytesAvailable();
+            if (clientConnection->bytesAvailable() < blockSize || in.atEnd()) {
+                return;
+            }
+
+            quint32 numResults = 0;
+            in >> numResults;
+            qDebug() << "numResults" << numResults;
+
+            for (quint32 i = 0; i < numResults; i++) {
+                FS::LinkResult result;
+                in >> result.src;
+                in >> result.dst;
+                in >> result.err_msg;
+                qint32 errValue = 0;
+                in >> errValue;
+                result.err_value = errValue;
+                if (result.err_value) {
+                    qDebug() << "privileged link fail" << result.src << "to" << result.dst << "code" << result.err_value << result.err_msg;
+                    emit linkFailed(result.src, result.dst, result.err_msg, result.err_value);
+                } else {
+                    qDebug() << "privileged link success" << result.src << "to" << result.dst;
+                    m_linked++;
+                    emit fileLinked(result.src, result.dst);
+                }
+                m_pathResults.append(result);
+            }
+            gotResults = true;
+            qDebug() << "results received, closing connection";
+            clientConnection->close();
+        });
+
+        qint64 byteswritten = clientConnection->write(block);
+        bool bytesflushed = clientConnection->flush();
+        qDebug() << "block flushed" << byteswritten << bytesflushed;
+    });
+
+    qDebug() << "Listening on pipe" << serverName;
+    if (!m_linkServer.listen(serverName)) {
+        qDebug() << "Unable to start local pipe server on" << serverName << ":" << m_linkServer.errorString();
+        return;
+    }
+
+    auto* linkFileProcess = new ExternalLinkFileProcess(serverName, m_useHardLinks, this);
+    connect(linkFileProcess, &ExternalLinkFileProcess::processExited, this, [this, &gotResults]() { emit finishedPrivileged(gotResults); });
+    connect(linkFileProcess, &ExternalLinkFileProcess::finished, linkFileProcess, &QObject::deleteLater);
+
+    linkFileProcess->start();
+}
+
+void ExternalLinkFileProcess::runLinkFile()
+{
+    QString fileLinkExe = PathCombine(QCoreApplication::applicationDirPath(), BuildConfig.LAUNCHER_APP_BINARY_NAME + "_filelink");
+    QString params = "-s " + m_server;
+
+    params += " -H " + QVariant(m_useHardLinks).toString();
+
+#if defined Q_OS_WIN32
+    SHELLEXECUTEINFO ShExecInfo;
+
+    fileLinkExe = fileLinkExe + ".exe";
+
+    qDebug() << "Running: runas" << fileLinkExe << params;
+
+    LPCWSTR programNameWin = (const wchar_t*)fileLinkExe.utf16();
+    LPCWSTR paramsWin = (const wchar_t*)params.utf16();
+
+    // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shellexecuteinfoa
+    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+    ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+    ShExecInfo.hwnd = NULL;  // Optional. A handle to the owner window, used to display and position any UI that the system might produce
+                             // while executing this function.
+    ShExecInfo.lpVerb = L"runas";  // elevate to admin, show UAC
+    ShExecInfo.lpFile = programNameWin;
+    ShExecInfo.lpParameters = paramsWin;
+    ShExecInfo.lpDirectory = NULL;
+    ShExecInfo.nShow = SW_HIDE;
+    ShExecInfo.hInstApp = NULL;
+
+    ShellExecuteEx(&ShExecInfo);
+
+    WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+    CloseHandle(ShExecInfo.hProcess);
+#endif
+
+    qDebug() << "Process exited";
+}
+
+bool move(const QString& source, const QString& dest)
+{
+    std::error_code err;
+
+    ensureFilePathExists(dest);
+    fs::rename(StringUtils::toStdString(source), StringUtils::toStdString(dest), err);
+
+    if (err.value() != 0) {
+        if (moveByCopy(source, dest)) {
+            return true;
+        }
+        qDebug() << "Move of" << source << "to" << dest << "failed!";
+        qWarning() << "Failed to move file:" << QString::fromStdString(err.message()) << QString::number(err.value());
+        return false;
+    }
+    return true;
+}
+
+bool deletePath(QString path)
+{
+    std::error_code err;
+
+    fs::remove_all(StringUtils::toStdString(std::move(path)), err);
+
+    if (err) {
+        qWarning() << "Failed to remove files:" << QString::fromStdString(err.message());
+    }
+
+    return err.value() == 0;
+}
+
+bool deleteContents(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.exists()) {
+        return true;
+    }
+    if (!info.isDir()) {
+        qWarning() << "Attempted to delete contents of non-directory path:" << path;
+        return false;
+    }
+
+    bool ret = true;
+
+    for (const auto& entry : fs::directory_iterator(StringUtils::toStdString(path))) {
+        std::error_code err;
+
+        fs::remove_all(entry.path(), err);
+        if (err.value() != 0) {
+            qWarning().nospace() << "Could not delete directory entry " << entry.path() << ": " << QString::fromStdString(err.message());
+            ret = false;
+        }
+    }
+
+    return ret;
+}
+
+bool trash(const QString& path, QString* pathInTrash)
+{
+#ifdef Q_OS_LINUX
+    if (DesktopServices::isFlatpak()) {
+#if defined(WITH_QTDBUS)
+        const int file = open(path.toUtf8().data(), O_PATH | O_CLOEXEC, 0);
+        if (file == -1) {
+            return false;
+        }
+        const QDBusUnixFileDescriptor fileDescriptor(file);
+        close(file);
+
+        QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                                                              "org.freedesktop.portal.Trash", "TrashFile");
+
+        message << QVariant::fromValue(fileDescriptor);
+
+        const QDBusReply<uint32_t> reply = QDBusConnection::sessionBus().call(message);
+        if (!reply.isValid()) {
+            qWarning() << "Error while trying to trash the file" << path << reply.error().name() << ":" << reply.error().message();
+            return false;
+        }
+        if (pathInTrash) {
+            *pathInTrash = QString();  // No info provided by the API, use the same semantics as QFile::moveToTrash
+        }
+
+        return reply.value() != 0;
+#else
+        return false;
+#endif
+    }
+#endif
+#if defined Q_OS_WIN32
+    if (IsWindowsServer())
+        return false;
+#endif
+    return QFile::moveToTrash(path, pathInTrash);
+}
+
+QString PathCombine(const QString& path1, const QString& path2)
+{
+    if (path1.isEmpty()) {
+        return path2;
+    }
+    if (path2.isEmpty()) {
+        return path1;
+    }
+    return QDir::cleanPath(path1 + QDir::separator() + path2);
+}
+
+QString PathCombine(const QString& path1, const QString& path2, const QString& path3)
+{
+    return PathCombine(PathCombine(path1, path2), path3);
+}
+
+QString PathCombine(const QString& path1, const QString& path2, const QString& path3, const QString& path4)
+{
+    return PathCombine(PathCombine(path1, path2, path3), path4);
+}
+
+QString AbsolutePath(const QString& path)
+{
+    return QFileInfo(path).absolutePath();
+}
+
+int pathDepth(const QString& path)
+{
+    if (path.isEmpty()) {
+        return 0;
+    }
+
+    QFileInfo info(path);
+
+    auto parts = QDir::toNativeSeparators(info.path()).split(QDir::separator(), Qt::SkipEmptyParts);
+
+    int numParts = static_cast<int>(parts.length());
+    numParts -= static_cast<int>(parts.count("."));
+    numParts -= static_cast<int>(parts.count("..")) * 2;
+
+    return numParts;
+}
+
+QString pathTruncate(const QString& path, int depth)
+{
+    if (path.isEmpty() || (depth < 0)) {
+        return "";
+    }
+
+    QString trunc = QFileInfo(path).path();
+
+    if (pathDepth(trunc) > depth) {
+        return pathTruncate(trunc, depth);
+    }
+
+    auto parts = QDir::toNativeSeparators(trunc).split(QDir::separator(), Qt::SkipEmptyParts);
+
+    if (parts.startsWith(".") && !path.startsWith(".")) {
+        parts.removeFirst();
+    }
+    if (QDir::toNativeSeparators(path).startsWith(QDir::separator())) {
+        parts.prepend("");
+    }
+
+    trunc = parts.join(QDir::separator());
+
+    return trunc;
+}
+
+QString ResolveExecutable(QString path)
+{
+    if (path.isEmpty()) {
+        return QString();
+    }
+    if (!path.contains('/')) {
+        path = QStandardPaths::findExecutable(path);
+    }
+    QFileInfo pathInfo(path);
+    if (!pathInfo.exists() || !pathInfo.isExecutable()) {
+        return QString();
+    }
+    return pathInfo.absoluteFilePath();
+}
+
+/**
+ * Normalize path
+ *
+ * Any paths inside the current folder will be normalized to relative paths (to current)
+ * Other paths will be made absolute
+ */
+QString NormalizePath(const QString& path)
+{
+    QDir a = QDir::currentPath();
+    QString currentAbsolute = a.absolutePath();
+
+    QDir b(path);
+    QString newAbsolute = b.absolutePath();
+
+    if (newAbsolute.startsWith(currentAbsolute)) {
+        return a.relativeFilePath(newAbsolute);
+    }
+    return newAbsolute;
+}
+
+namespace {
+const QString g_badChars = "<>:\"|?*\r\n!";
+QString removeChars(QString source, QChar replace, const QString& extraChars = "")
+{
+    auto badChars = g_badChars;
+    if (!extraChars.isEmpty()) {
+        badChars += extraChars;
+    }
+
+    for (auto& c : source) {
+        if (c.unicode() < 0x20 || !c.isPrint() || badChars.contains(c)) {
+            c = replace;
+        }
+    }
+
+    return source;
+}
+}  // namespace
+
+QString RemoveInvalidFilenameChars(QString string, QChar replaceWith)
+{
+    return removeChars(std::move(string), replaceWith, "\\/");
+}
+
+QString RemoveInvalidPathChars(QString string, QChar replaceWith)
+{
+    return removeChars(std::move(string), replaceWith);
+}
+
+QString DirNameFromString(const QString& string, const QStringList& inDirs)
+{
+    int num = 0;
+    QString baseName = RemoveInvalidFilenameChars(string, '-');
+    QString dirName;
+    do {
+        if (num == 0) {
+            dirName = baseName;
+        } else {
+            dirName = baseName + "(" + QString::number(num) + ")";
+        }
+
+        // If it's over 9000
+        if (num > 9000) {
+            return "";
+        }
+        num++;
+    } while (std::ranges::any_of(inDirs, [&dirName](const QString& dir) { return QFileInfo(PathCombine(dir, dirName)).exists(); }));
+    return dirName;
+}
+
+// Does the folder path contain any '!'? If yes, return true, otherwise false.
+// (This is a problem for Java)
+bool checkProblemticPathJava(const QDir& folder)
+{
+    QString pathfoldername = folder.absolutePath();
+    return pathfoldername.contains("!", Qt::CaseInsensitive);
+}
+
+QString getDesktopDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+}
+
+QString getApplicationsDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
+}
+
+// Cross-platform Shortcut creation
+QString createShortcut(QString destination, const QString& target, const QStringList& args, const QString& name, const QString& icon)
+{
+    if (destination.isEmpty()) {
+        destination = PathCombine(getDesktopDir(), RemoveInvalidFilenameChars(name));
+    }
+    if (!ensureFilePathExists(destination)) {
+        qWarning() << "Destination path can't be created!";
+        return QString();
+    }
+#if defined(Q_OS_MACOS)
+    QDir application = destination + ".app/";
+
+    if (application.exists()) {
+        qWarning() << "Application already exists!";
+        return QString();
+    }
+
+    if (!application.mkpath(".")) {
+        qWarning() << "Couldn't create application";
+        return QString();
+    }
+
+    QDir content = application.path() + "/Contents/";
+    QDir resources = content.path() + "/Resources/";
+    QDir binaryDir = content.path() + "/MacOS/";
+    QFile info(content.path() + "/Info.plist");
+
+    if (!(content.mkpath(".") && resources.mkpath(".") && binaryDir.mkpath("."))) {
+        qWarning() << "Couldn't create directories within application";
+        return QString();
+    }
+    if (!info.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open file" << info.fileName() << "for writing:" << info.errorString();
+        return QString();
+    }
+
+    QFile(icon).rename(resources.path() + "/Icon.icns");
+
+    // Create the Command file
+    QString exec = binaryDir.path() + "/Run.command";
+
+    QFile f(exec);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open file" << f.fileName() << "for writing:" << f.errorString();
+        return QString();
+    }
+    QTextStream stream(&f);
+
+    auto argstring = quoteArgs(args, "\"", "\\\"");
+
+    stream << "#!/bin/bash" << "\n";
+    stream << "\"" << target << "\" " << argstring << "\n";
+
+    stream.flush();
+    f.close();
+
+    f.setPermissions(f.permissions() | QFileDevice::ExeOwner | QFileDevice::ExeGroup | QFileDevice::ExeOther);
+
+    // Generate the Info.plist
+    QTextStream infoStream(&info);
+    infoStream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?> \n"
+                  "<!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" "
+                  "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">"
+                  "<plist version=\"1.0\">\n"
+                  "<dict>\n"
+                  "    <key>CFBundleExecutable</key>\n"
+                  "    <string>Run.command</string>\n"  // The path to the executable
+                  "    <key>CFBundleIconFile</key>\n"
+                  "    <string>Icon.icns</string>\n"
+                  "    <key>CFBundleName</key>\n"
+                  "    <string>"
+               << name
+               << "</string>\n"  // Name of the application
+                  "    <key>CFBundlePackageType</key>\n"
+                  "    <string>APPL</string>\n"
+                  "    <key>CFBundleShortVersionString</key>\n"
+                  "    <string>1.0</string>\n"
+                  "    <key>CFBundleVersion</key>\n"
+                  "    <string>1.0</string>\n"
+                  "</dict>\n"
+                  "</plist>";
+
+    return application.path();
+#elif defined(Q_OS_LINUX) || defined(Q_OS_FREEBSD) || defined(Q_OS_OPENBSD)
+    if (!destination.endsWith(".desktop")) {  // in case of isFlatpak destination is already populated
+        destination += ".desktop";
+    }
+    QFile f(destination);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open file" << f.fileName() << "for writing:" << f.errorString();
+        return QString();
+    }
+    QTextStream stream(&f);
+
+    auto argstring = quoteArgs(args, "'", "'\\''");
+
+    stream << "[Desktop Entry]" << "\n";
+    stream << "Type=Application" << "\n";
+    stream << "Categories=Game;ActionGame;AdventureGame;Simulation" << "\n";
+    stream << "Exec=\"" << target.toLocal8Bit() << "\" " << argstring.toLocal8Bit() << "\n";
+    stream << "Name=" << name.toLocal8Bit() << "\n";
+    if (!icon.isEmpty()) {
+        stream << "Icon=" << icon.toLocal8Bit() << "\n";
+    }
+
+    stream.flush();
+    f.close();
+
+    f.setPermissions(f.permissions() | QFileDevice::ExeOwner | QFileDevice::ExeGroup | QFileDevice::ExeOther);
+
+    return destination;
+#elif defined(Q_OS_WIN)
+    QFileInfo targetInfo(target);
+
+    if (!targetInfo.exists()) {
+        qWarning() << "Target file does not exist!";
+        return QString();
+    }
+
+    QString absoluteTarget = targetInfo.absoluteFilePath();
+
+    if (absoluteTarget.length() >= MAX_PATH) {
+        qWarning() << "Target file path is too long!";
+        return QString();
+    }
+
+    if (!icon.isEmpty() && icon.length() >= MAX_PATH) {
+        qWarning() << "Icon path is too long!";
+        return QString();
+    }
+
+    destination += ".lnk";
+
+    if (destination.length() >= MAX_PATH) {
+        qWarning() << "Destination path is too long!";
+        return QString();
+    }
+
+    auto argStr = quoteArgs(args, "\"", "\\\"", true);
+    if (argStr.length() >= MAX_PATH) {
+        qWarning() << "Arguments string is too long!";
+        return QString();
+    }
+
+    HRESULT hres;
+
+    // ...yes, you need to initialize the entire COM stack just to make a shortcut
+    hres = CoInitialize(nullptr);
+    if (FAILED(hres)) {
+        qWarning() << "Failed to initialize COM!";
+        return QString();
+    }
+
+    WCHAR wsz[MAX_PATH];
+
+    IShellLink* psl;
+
+    // create an IShellLink instance - this stores the shortcut's attributes
+    hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID*)&psl);
+    if (SUCCEEDED(hres)) {
+        wmemset(wsz, 0, MAX_PATH);
+        absoluteTarget.toWCharArray(wsz);
+        psl->SetPath(wsz);
+
+        wmemset(wsz, 0, MAX_PATH);
+        argStr.toWCharArray(wsz);
+        psl->SetArguments(wsz);
+
+        wmemset(wsz, 0, MAX_PATH);
+        targetInfo.absolutePath().toWCharArray(wsz);
+        psl->SetWorkingDirectory(wsz);  // "Starts in" attribute
+
+        if (!icon.isEmpty()) {
+            wmemset(wsz, 0, MAX_PATH);
+            icon.toWCharArray(wsz);
+            psl->SetIconLocation(wsz, 0);
+        }
+
+        // query an IPersistFile interface from our IShellLink instance
+        // this is the interface that will actually let us save the shortcut to disk!
+        IPersistFile* ppf;
+        hres = psl->QueryInterface(IID_IPersistFile, (LPVOID*)&ppf);
+        if (SUCCEEDED(hres)) {
+            wmemset(wsz, 0, MAX_PATH);
+            destination.toWCharArray(wsz);
+            hres = ppf->Save(wsz, TRUE);
+            if (FAILED(hres)) {
+                qWarning() << "IPresistFile->Save() failed";
+                qWarning() << "hres =" << hres;
+            }
+            ppf->Release();
+        } else {
+            qWarning() << "Failed to query IPersistFile interface from IShellLink instance";
+            qWarning() << "hres =" << hres;
+        }
+        psl->Release();
+    } else {
+        qWarning() << "Failed to create IShellLink instance";
+        qWarning() << "hres =" << hres;
+    }
+
+    // go away COM, nobody likes you
+    CoUninitialize();
+
+    if (SUCCEEDED(hres))
+        return destination;
+    return QString();
+#else
+    qWarning("Desktop Shortcuts not supported on your platform!");
+    return QString();
+#endif
+}
+
+bool overrideFolder(const QString& overwrittenPath, const QString& overridePath)
+{
+    using copy_opts = fs::copy_options;
+
+    if (!FS::ensureFolderPathExists(overwrittenPath)) {
+        return false;
+    }
+
+    std::error_code err;
+    fs::copy_options opt = copy_opts::recursive | copy_opts::overwrite_existing;
+
+    // FIXME: hello traveller! Apparently std::copy does NOT overwrite existing files on GNU libstdc++ on Windows?
+    fs::copy(StringUtils::toStdString(overridePath), StringUtils::toStdString(overwrittenPath), opt, err);
+
+    if (err) {
+        qCritical() << QString("Failed to apply override from %1 to %2").arg(overridePath, overwrittenPath);
+        qCritical() << "Reason:" << QString::fromStdString(err.message());
+    }
+
+    return err.value() == 0;
+}
+
+QString getFilesystemTypeName(FilesystemType type)
+{
+    auto iter = g_filesystem_type_names.constFind(type);
+    if (iter != g_filesystem_type_names.constEnd()) {
+        return iter.value().constFirst();
+    }
+    return getFilesystemTypeName(FilesystemType::UNKNOWN);
+}
+
+FilesystemType getFilesystemTypeFuzzy(const QString& name)
+{
+    for (auto iter = g_filesystem_type_names.constBegin(); iter != g_filesystem_type_names.constEnd(); ++iter) {
+        auto fsNames = iter.value();
+        for (const auto& fsName : fsNames) {
+            if (name.toUpper().contains(fsName.toUpper())) {
+                return iter.key();
+            }
+        }
+    }
+    return FilesystemType::UNKNOWN;
+}
+
+FilesystemType getFilesystemType(const QString& name)
+{
+    for (auto iter = g_filesystem_type_names.constBegin(); iter != g_filesystem_type_names.constEnd(); ++iter) {
+        const auto& fsNames = iter.value();
+        if (fsNames.contains(name.toUpper())) {
+            return iter.key();
+        }
+    }
+    return FilesystemType::UNKNOWN;
+}
+
+/**
+ * @brief path to the near ancestor that exists
+ *
+ */
+QString nearestExistentAncestor(const QString& path)
+{
+    if (QFileInfo::exists(path)) {
+        return path;
+    }
+
+    QDir dir(path);
+    if (!dir.makeAbsolute()) {
+        return {};
+    }
+    do {
+        dir.setPath(QDir::cleanPath(dir.filePath(QStringLiteral(".."))));
+    } while (!dir.exists() && !dir.isRoot());
+
+    return dir.exists() ? dir.path() : QString();
+}
+
+/**
+ * @brief colect information about the filesystem under a file
+ *
+ */
+FilesystemInfo statFS(const QString& path)
+{
+    FilesystemInfo info;
+
+    QStorageInfo storageInfo(nearestExistentAncestor(path));
+
+    info.fsTypeName = storageInfo.fileSystemType();
+
+    info.fsType = getFilesystemTypeFuzzy(info.fsTypeName);
+
+    info.blockSize = storageInfo.blockSize();
+    info.bytesAvailable = storageInfo.bytesAvailable();
+    info.bytesFree = storageInfo.bytesFree();
+    info.bytesTotal = storageInfo.bytesTotal();
+
+    info.name = storageInfo.name();
+    info.rootPath = storageInfo.rootPath();
+
+    return info;
+}
+
+/**
+ * @brief if the Filesystem is reflink/clone capable
+ *
+ */
+bool canCloneOnFS(const QString& path)
+{
+    FilesystemInfo info = statFS(path);
+    return canCloneOnFS(info);
+}
+bool canCloneOnFS(const FilesystemInfo& info)
+{
+    return canCloneOnFS(info.fsType);
+}
+bool canCloneOnFS(FilesystemType type)
+{
+    return g_clone_filesystems.contains(type);
+}
+
+/**
+ * @brief if the Filesystem is reflink/clone capable and both paths are on the same device
+ *
+ */
+bool canClone(const QString& src, const QString& dst)
+{
+    auto srcVInfo = statFS(src);
+    auto dstVInfo = statFS(dst);
+
+    bool sameDevice = srcVInfo.rootPath == dstVInfo.rootPath;
+
+    return sameDevice && canCloneOnFS(srcVInfo) && canCloneOnFS(dstVInfo);
+}
+
+/**
+ * @brief reflink/clones a directory and it's contents from src to dest
+ * @param offset subdirectory form src to copy to dest
+ * @return if there was an error during the filecopy
+ */
+bool clone::operator()(const QString& offset, bool dryRun)
+{
+    if (!canClone(m_src.absolutePath(), m_dst.absolutePath())) {
+        qWarning() << "Can not clone: not same device or not clone/reflink filesystem";
+        qDebug() << "Source path:" << m_src.absolutePath();
+        qDebug() << "Destination path:" << m_dst.absolutePath();
+        emit cloneFailed(m_src.absolutePath(), m_dst.absolutePath());
+        return false;
+    }
+
+    m_cloned = 0;  // reset counter
+    m_failedClones.clear();
+
+    auto src = PathCombine(m_src.absolutePath(), offset);
+    auto dst = PathCombine(m_dst.absolutePath(), offset);
+
+    std::error_code err;
+
+    // Function that'll do the actual cloneing
+    auto cloneFile = [this, dryRun, dst, &err](const QString& srcPath, const QString& relativeDstPath) {
+        if (m_matcher && (m_matcher(relativeDstPath) != m_whitelist)) {
+            return;
+        }
+
+        auto dstPath = PathCombine(dst, relativeDstPath);
+        if (!dryRun) {
+            ensureFilePathExists(dstPath);
+            clone_file(srcPath, dstPath, err);
+        }
+        if (err) {
+            qDebug() << "Failed to clone files: error" << err.value() << "message" << QString::fromStdString(err.message());
+            qDebug() << "Source file:" << srcPath;
+            qDebug() << "Destination file:" << dstPath;
+            m_failedClones.append(qMakePair(srcPath, dstPath));
+            emit cloneFailed(srcPath, dstPath);
+            return;
+        }
+        m_cloned++;
+        emit fileCloned(srcPath, dstPath);
+    };
+
+    // We can't use copy_opts::recursive because we need to take into account the
+    // blacklisted paths, so we iterate over the source directory, and if there's no blacklist
+    // match, we copy the file.
+    QDir srcDir(src);
+
+    for (const auto& entry : QDirListing(src, QDirListing::IteratorFlag::FilesOnly | QDirListing::IteratorFlag::ResolveSymlinks |
+                                                  QDirListing::IteratorFlag::IncludeHidden | QDirListing::IteratorFlag::Recursive)) {
+        auto srcPath = entry.absoluteFilePath();
+        auto relativePath = srcDir.relativeFilePath(srcPath);
+
+        cloneFile(srcPath, relativePath);
+    }
+
+    // If the root src is not a directory, the previous iterator won't run.
+    if (!fs::is_directory(StringUtils::toStdString(src))) {
+        cloneFile(src, "");
+    }
+
+    return err.value() == 0;
+}
+
+/**
+ * @brief clone/reflink file from src to dst
+ *
+ */
+bool clone_file(const QString& src, const QString& dst, std::error_code& ec)
+{
+    auto srcPath = StringUtils::toStdString(QDir::toNativeSeparators(QFileInfo(src).absoluteFilePath()));
+    auto dstPath = StringUtils::toStdString(QDir::toNativeSeparators(QFileInfo(dst).absoluteFilePath()));
+
+    FilesystemInfo srcinfo = statFS(src);
+    FilesystemInfo dstinfo = statFS(dst);
+
+    if ((srcinfo.rootPath != dstinfo.rootPath) || (srcinfo.fsType != dstinfo.fsType)) {
+        ec = std::make_error_code(std::errc::not_supported);
+        qWarning() << "reflink/clone must be to the same device and filesystem! src and dst root filesystems do not match.";
+        return false;
+    }
+
+#if defined(Q_OS_WIN)
+
+    if (!win_ioctl_clone(srcPath, dstPath, ec)) {
+        qDebug() << "failed win_ioctl_clone";
+        qWarning() << "clone/reflink not supported on windows outside of btrfs or ReFS!";
+        qWarning() << "check out https://github.com/maharmstone/btrfs for btrfs support!";
+        return false;
+    }
+
+#elif defined(Q_OS_LINUX)
+
+    if (!linux_ficlone(srcPath, dstPath, ec)) {
+        qDebug() << "failed linux_ficlone:";
+        return false;
+    }
+
+#elif defined(Q_OS_MACOS)
+
+    if (!macos_bsd_clonefile(srcPath, dstPath, ec)) {
+        qDebug() << "failed macos_bsd_clonefile:";
+        return false;
+    }
+
+#else
+
+    qWarning() << "clone/reflink not supported! unknown OS";
+    ec = std::make_error_code(std::errc::not_supported);
+    return false;
+
+#endif
+
+    return true;
+}
+
+#if defined(Q_OS_WIN)
+
+static long RoundUpToPowerOf2(long originalValue, long roundingMultiplePowerOf2)
+{
+    long mask = roundingMultiplePowerOf2 - 1;
+    return (originalValue + mask) & ~mask;
+}
+
+bool win_ioctl_clone(const std::wstring& src_path, const std::wstring& dst_path, std::error_code& ec)
+{
+    /**
+     * This algorithm inspired from https://github.com/0xbadfca11/reflink
+     * LICENSE MIT
+     *
+     *  Additional references
+     *  https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_duplicate_extents_to_file
+     *  https://github.com/microsoft/CopyOnWrite/blob/main/lib/Windows/WindowsCopyOnWriteFilesystem.cs#L94
+     */
+
+    HANDLE hSourceFile = CreateFileW(src_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hSourceFile == INVALID_HANDLE_VALUE) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to open source file" << src_path.c_str();
+        return false;
+    }
+
+    ULONG fs_flags;
+    if (!GetVolumeInformationByHandleW(hSourceFile, nullptr, 0, nullptr, nullptr, &fs_flags, nullptr, 0)) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to get Filesystem information for" << src_path.c_str();
+        CloseHandle(hSourceFile);
+        return false;
+    }
+    if (!(fs_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING)) {
+        SetLastError(ERROR_NOT_CAPABLE);
+        ec = std::error_code(GetLastError(), std::system_category());
+        qWarning() << "Filesystem at" << src_path.c_str() << "does not support reflink";
+        CloseHandle(hSourceFile);
+        return false;
+    }
+
+    FILE_END_OF_FILE_INFO sourceFileLength;
+    if (!GetFileSizeEx(hSourceFile, &sourceFileLength.EndOfFile)) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to size of source file" << src_path.c_str();
+        CloseHandle(hSourceFile);
+        return false;
+    }
+    FILE_BASIC_INFO sourceFileBasicInfo;
+    if (!GetFileInformationByHandleEx(hSourceFile, FileBasicInfo, &sourceFileBasicInfo, sizeof(sourceFileBasicInfo))) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to source file info" << src_path.c_str();
+        CloseHandle(hSourceFile);
+        return false;
+    }
+    ULONG junk;
+    FSCTL_GET_INTEGRITY_INFORMATION_BUFFER sourceFileIntegrity;
+    if (!DeviceIoControl(hSourceFile, FSCTL_GET_INTEGRITY_INFORMATION, nullptr, 0, &sourceFileIntegrity, sizeof(sourceFileIntegrity), &junk,
+                         nullptr)) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to source file integrity info" << src_path.c_str();
+        CloseHandle(hSourceFile);
+        return false;
+    }
+
+    HANDLE hDestFile = CreateFileW(dst_path.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, CREATE_NEW, 0, hSourceFile);
+
+    if (hDestFile == INVALID_HANDLE_VALUE) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to open dest file" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        return false;
+    }
+    FILE_DISPOSITION_INFO destFileDispose = { TRUE };
+    if (!SetFileInformationByHandle(hDestFile, FileDispositionInfo, &destFileDispose, sizeof(destFileDispose))) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to set dest file info" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        CloseHandle(hDestFile);
+        return false;
+    }
+
+    if (!DeviceIoControl(hDestFile, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &junk, nullptr)) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to set dest sparseness" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        CloseHandle(hDestFile);
+        return false;
+    }
+    FSCTL_SET_INTEGRITY_INFORMATION_BUFFER setDestFileintegrity = { sourceFileIntegrity.ChecksumAlgorithm, sourceFileIntegrity.Reserved,
+                                                                    sourceFileIntegrity.Flags };
+    if (!DeviceIoControl(hDestFile, FSCTL_SET_INTEGRITY_INFORMATION, &setDestFileintegrity, sizeof(setDestFileintegrity), nullptr, 0,
+                         nullptr, nullptr)) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to set dest file integrity info" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        CloseHandle(hDestFile);
+        return false;
+    }
+    if (!SetFileInformationByHandle(hDestFile, FileEndOfFileInfo, &sourceFileLength, sizeof(sourceFileLength))) {
+        ec = std::error_code(GetLastError(), std::system_category());
+        qDebug() << "Failed to set dest file size" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        CloseHandle(hDestFile);
+        return false;
+    }
+
+    const LONG64 splitThreshold = (1LL << 32) - sourceFileIntegrity.ClusterSizeInBytes;
+
+    DUPLICATE_EXTENTS_DATA dupExtent;
+    dupExtent.FileHandle = hSourceFile;
+    for (LONG64 offset = 0, remain = RoundUpToPowerOf2(sourceFileLength.EndOfFile.QuadPart, sourceFileIntegrity.ClusterSizeInBytes);
+         remain > 0; offset += splitThreshold, remain -= splitThreshold) {
+        dupExtent.SourceFileOffset.QuadPart = dupExtent.TargetFileOffset.QuadPart = offset;
+        dupExtent.ByteCount.QuadPart = std::min(splitThreshold, remain);
+
+        if (!DeviceIoControl(hDestFile, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dupExtent, sizeof(dupExtent), nullptr, 0, &junk, nullptr)) {
+            DWORD err = GetLastError();
+            QString additionalMessage;
+            if (err == ERROR_BLOCK_TOO_MANY_REFERENCES) {
+                static const int MaxClonesPerFile = 8175;
+                additionalMessage =
+                    QString(
+                        " This is ERROR_BLOCK_TOO_MANY_REFERENCES and may mean you have surpassed the maximum "
+                        "allowed %1 references for a single file. "
+                        "See "
+                        "https://docs.microsoft.com/en-us/windows-server/storage/refs/block-cloning#functionality-restrictions-and-remarks")
+                        .arg(MaxClonesPerFile);
+            }
+            ec = std::error_code(err, std::system_category());
+            qDebug() << "Failed copy-on-write cloning of" << src_path.c_str() << "to" << dst_path.c_str() << "with error" << err
+                     << additionalMessage;
+            CloseHandle(hSourceFile);
+            CloseHandle(hDestFile);
+            return false;
+        }
+    }
+
+    if (!(sourceFileBasicInfo.FileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)) {
+        FILE_SET_SPARSE_BUFFER setDestSparse = { FALSE };
+        if (!DeviceIoControl(hDestFile, FSCTL_SET_SPARSE, &setDestSparse, sizeof(setDestSparse), nullptr, 0, &junk, nullptr)) {
+            qDebug() << "Failed to set dest file sparseness" << dst_path.c_str();
+            CloseHandle(hSourceFile);
+            CloseHandle(hDestFile);
+            return false;
+        }
+    }
+
+    sourceFileBasicInfo.CreationTime.QuadPart = 0;
+    if (!SetFileInformationByHandle(hDestFile, FileBasicInfo, &sourceFileBasicInfo, sizeof(sourceFileBasicInfo))) {
+        qDebug() << "Failed to set dest file creation time" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        CloseHandle(hDestFile);
+        return false;
+    }
+    if (!FlushFileBuffers(hDestFile)) {
+        qDebug() << "Failed to flush dest file buffer" << dst_path.c_str();
+        CloseHandle(hSourceFile);
+        CloseHandle(hDestFile);
+        return false;
+    }
+    destFileDispose = { FALSE };
+    bool result = !!SetFileInformationByHandle(hDestFile, FileDispositionInfo, &destFileDispose, sizeof(destFileDispose));
+
+    CloseHandle(hSourceFile);
+    CloseHandle(hDestFile);
+
+    return result;
+}
+
+#elif defined(Q_OS_LINUX)
+
+bool linux_ficlone(const std::string& srcPath, const std::string& dstPath, std::error_code& ec)
+{
+    // https://man7.org/linux/man-pages/man2/ioctl_ficlone.2.html
+
+    int srcFd = open(srcPath.c_str(), O_RDONLY);
+    if (srcFd == -1) {
+        qDebug() << "Failed to open file:" << srcPath.c_str();
+        qDebug() << "Error:" << strerror(errno);
+        ec = std::make_error_code(static_cast<std::errc>(errno));
+        return false;
+    }
+    int dstFd = open(dstPath.c_str(), O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    if (dstFd == -1) {
+        qDebug() << "Failed to open file:" << dstPath.c_str();
+        qDebug() << "Error:" << strerror(errno);
+        ec = std::make_error_code(static_cast<std::errc>(errno));
+        close(srcFd);
+        return false;
+    }
+    // attempt to clone
+    if (ioctl(dstFd, FICLONE, srcFd) == -1) {
+        qDebug() << "Failed to clone file:" << srcPath.c_str() << "to" << dstPath.c_str();
+        qDebug() << "Error:" << strerror(errno);
+        ec = std::make_error_code(static_cast<std::errc>(errno));
+        close(srcFd);
+        close(dstFd);
+        return false;
+    }
+    if (close(srcFd)) {
+        qDebug() << "Failed to close file:" << srcPath.c_str();
+        qDebug() << "Error:" << strerror(errno);
+    }
+    if (close(dstFd)) {
+        qDebug() << "Failed to close file:" << dstPath.c_str();
+        qDebug() << "Error:" << strerror(errno);
+    }
+    return true;
+}
+
+#elif defined(Q_OS_MACOS)
+
+bool macos_bsd_clonefile(const std::string& src_path, const std::string& dst_path, std::error_code& ec)
+{
+    // clonefile(const char * src, const char * dst, int flags);
+    // https://www.manpagez.com/man/2/clonefile/
+
+    qDebug() << "attempting file clone via clonefile" << src_path.c_str() << "to" << dst_path.c_str();
+    if (clonefile(src_path.c_str(), dst_path.c_str(), 0) == -1) {
+        qDebug() << "Failed to clone file:" << src_path.c_str() << "to" << dst_path.c_str();
+        qDebug() << "Error:" << strerror(errno);
+        ec = std::make_error_code(static_cast<std::errc>(errno));
+        return false;
+    }
+    return true;
+}
+#endif
+
+/**
+ * @brief if the Filesystem is symlink capable
+ *
+ */
+bool canLinkOnFS(const QString& path)
+{
+    FilesystemInfo info = statFS(path);
+    return canLinkOnFS(info);
+}
+bool canLinkOnFS(const FilesystemInfo& info)
+{
+    return canLinkOnFS(info.fsType);
+}
+bool canLinkOnFS(FilesystemType type)
+{
+    return !g_non_link_filesystems.contains(type);
+}
+/**
+ * @brief if the Filesystem is symlink capable on both ends
+ *
+ */
+bool canLink(const QString& src, const QString& dst)
+{
+    return canLinkOnFS(src) && canLinkOnFS(dst);
+}
+
+uintmax_t hardLinkCount(const QString& path)
+{
+    std::error_code err;
+    uintmax_t count = fs::hard_link_count(StringUtils::toStdString(path), err);
+    if (err) {
+        qWarning() << "Failed to count hard links for" << path << ":" << QString::fromStdString(err.message());
+        count = 0;
+    }
+    return count;
+}
+
+#ifdef Q_OS_WIN
+// returns 8.3 file format from long path
+QString shortPathName(const QString& file)
+{
+    auto input = file.toStdWString();
+    std::wstring output;
+    long length = GetShortPathNameW(input.c_str(), NULL, 0);
+    if (length == 0)
+        return {};
+    // NOTE: this resizing might seem weird...
+    // when GetShortPathNameW fails, it returns length including null character
+    // when it succeeds, it returns length excluding null character
+    // See: https://msdn.microsoft.com/en-us/library/windows/desktop/aa364989(v=vs.85).aspx
+    output.resize(length);
+    if (GetShortPathNameW(input.c_str(), (LPWSTR)output.c_str(), length) == 0)
+        return {};
+    output.resize(length - 1);
+    QString ret = QString::fromStdWString(output);
+    return ret;
+}
+
+// if the string survives roundtrip through local 8bit encoding...
+bool fitsInLocal8bit(const QString& string)
+{
+    return string == QString::fromLocal8Bit(string.toLocal8Bit());
+}
+
+QString getPathNameInLocal8bit(const QString& file)
+{
+    if (!fitsInLocal8bit(file)) {
+        auto path = shortPathName(file);
+        if (!path.isEmpty()) {
+            return path;
+        }
+        // in case shortPathName fails just return the path as is
+    }
+    return file;
+}
+#endif
+
+QString getUniqueResourceName(const QString& filePath)
+{
+    auto newFileName = filePath;
+    if (!newFileName.endsWith(".disabled")) {
+        return newFileName;  // prioritize enabled mods
+    }
+    newFileName.chop(9);
+    if (!QFile::exists(newFileName)) {
+        return filePath;
+    }
+    QFileInfo fileInfo(filePath);
+    auto baseName = fileInfo.completeBaseName();
+    auto path = fileInfo.absolutePath();
+
+    int counter = 1;
+    do {
+        if (counter == 1) {
+            newFileName = FS::PathCombine(path, baseName + ".duplicate");
+        } else {
+            newFileName = FS::PathCombine(path, baseName + ".duplicate" + QString::number(counter));
+        }
+        counter++;
+    } while (QFile::exists(newFileName));
+
+    return newFileName;
+}
+
+bool removeFiles(const QStringList& listFile)
+{
+    bool ret = true;
+    // For each file
+    for (int i = 0; i < listFile.count(); i++) {
+        // Remove
+        ret = ret && QFile::remove(listFile.at(i));
+    }
+    return ret;
+}
+}  // namespace FS
