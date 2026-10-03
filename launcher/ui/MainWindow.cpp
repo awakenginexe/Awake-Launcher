@@ -1865,7 +1865,10 @@ void MainWindow::updateLibraryDetails()
     if (!m_library || !m_selectedInstance)
         return;
     auto* settings = m_selectedInstance->settings();
-    const auto java = settings->get("AutomaticJava").toBool() ? tr("Automatic (selected at launch)") : settings->get("JavaPath").toString();
+    const auto javaPath = settings->get("JavaPath").toString();
+    const bool automaticJava = APPLICATION->settings()->get("AutomaticJavaSwitch").toBool() &&
+                               !(settings->get("OverrideJavaLocation").toBool() && QFileInfo::exists(javaPath));
+    const auto java = automaticJava ? tr("Automatic (selected at launch)") : javaPath;
     const auto last = m_selectedInstance->lastLaunch();
     const auto lastPlayed = last > 0 ? QLocale().toString(QDateTime::fromMSecsSinceEpoch(last), QLocale::ShortFormat) : tr("Never played");
     m_library->setInstance(m_selectedInstance->name(), m_selectedInstance->getStatusbarDescription(),

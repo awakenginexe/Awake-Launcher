@@ -18,6 +18,7 @@
 #include "Application.h"
 #include "InstanceList.h"
 #include "awake/LibraryDelegate.h"
+#include "minecraft/MinecraftInstance.h"
 #include "settings/SettingsObject.h"
 #include "translations/TranslationsModel.h"
 #include "ui/MainWindow.h"
@@ -80,6 +81,42 @@ class AwakeLibraryTest : public QObject {
         QVERIFY(!window->findChild<QToolButton*>("awakeMore")->isEnabled());
         search->clear();
         QCOMPARE(view->model()->rowCount(), 2);
+    }
+    void javaDetailsFollowLaunchPolicy()
+    {
+        auto* window = APPLICATION->showMainWindow(false);
+        auto* view = window->findChild<InstanceView*>();
+        auto* settings = APPLICATION->instances()->getInstanceById("fabric")->settings();
+        const auto configuredPath = APPLICATION->settings()->get("JavaPath").toString();
+        QVERIFY(QFile::exists(configuredPath));
+        auto runtimeText = [&] {
+            view->setCurrentIndex(QModelIndex());
+            view->setCurrentIndex(view->model()->index(0, 0));
+            for (auto* label : window->findChildren<QLabel*>()) {
+                if (label->text().startsWith("Java: "))
+                    return label->text().section('\n', 0, 0);
+            }
+            return QString();
+        };
+        auto* search = window->findChild<QLineEdit*>("awakeSearch");
+        search->setText("fabric");
+        settings->set("OverrideJavaLocation", false);
+        settings->set("AutomaticJava", false);
+        QCOMPARE(runtimeText(), QString("Java: Automatic (selected at launch)"));
+        settings->set("OverrideJavaLocation", true);
+        settings->set("JavaPath", configuredPath);
+        settings->set("AutomaticJava", true);
+        QCOMPARE(runtimeText(), "Java: " + configuredPath);
+        settings->set("JavaPath", QDir::currentPath() + "/missing-java");
+        QCOMPARE(runtimeText(), QString("Java: Automatic (selected at launch)"));
+        APPLICATION->settings()->set("AutomaticJavaSwitch", false);
+        QCOMPARE(runtimeText(), "Java: " + settings->get("JavaPath").toString());
+        settings->set("OverrideJavaLocation", false);
+        settings->set("AutomaticJava", false);
+        QApplication::processEvents();
+        QCOMPARE(runtimeText(), "Java: " + configuredPath);
+        APPLICATION->settings()->set("AutomaticJavaSwitch", true);
+        search->clear();
     }
     void authenticationConfigurationRefreshes()
     {

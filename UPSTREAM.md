@@ -8,7 +8,7 @@ Awake Launcher is based on [Prism Launcher](https://github.com/PrismLauncher/Pri
 - vcpkg: `908da3a305a0a8028d9602ab241b433652b3df69`
 - libnbtplusplus: `3538933614059f0f44388a2b16f3db25ce42285b`
 
-The import is a merge retaining upstream history and the original Awake repository commit. `origin` points to Awake; `upstream` points to Prism. Develop work on `feature/awake-foundation`.
+The import is a merge retaining upstream history and the original Awake repository commit. `origin` points to Awake; `upstream` points to Prism. Develop work on `feature/awake-launcher`.
 
 ## Maintenance
 
