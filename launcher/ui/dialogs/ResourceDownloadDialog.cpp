@@ -44,6 +44,7 @@
 #include "ui/pages/modplatform/ResourcePage.h"
 
 #include "ui/pages/modplatform/flame/FlameResourcePages.h"
+#include "ui/pages/modplatform/flame/FlameKeyDiagnostic.h"
 #include "ui/pages/modplatform/modrinth/ModrinthResourcePages.h"
 
 #include "modplatform/flame/FlameAPI.h"
@@ -97,6 +98,9 @@ ResourceDownloadDialog::ResourceDownloadDialog(QWidget* parent,
     setWindowModality(Qt::WindowModal);
 
     setWindowTitle(dialogTitle());
+    if (!(APPLICATION->capabilities() & Application::SupportsFlame)) {
+        m_verticalLayout.addWidget(createFlameKeyDiagnostic(this));
+    }
 }
 
 void ResourceDownloadDialog::accept()

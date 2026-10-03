@@ -1003,6 +1003,8 @@ SET(LAUNCHER_SOURCES
     ui/pages/modplatform/flame/FlameModel.h
     ui/pages/modplatform/flame/FlamePage.cpp
     ui/pages/modplatform/flame/FlamePage.h
+    ui/pages/modplatform/flame/FlameKeyDiagnostic.cpp
+    ui/pages/modplatform/flame/FlameKeyDiagnostic.h
     ui/pages/modplatform/flame/FlameResourceModels.cpp
     ui/pages/modplatform/flame/FlameResourceModels.h
     ui/pages/modplatform/flame/FlameResourcePages.cpp

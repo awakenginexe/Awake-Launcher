@@ -42,6 +42,9 @@ class ListModel : public QAbstractListModel {
     bool hasActiveSearchJob() const { return m_jobPtr && m_jobPtr->isRunning(); }
     Task::Ptr activeSearchJob() { return hasActiveSearchJob() ? m_jobPtr : nullptr; }
 
+   signals:
+    void searchError(const QString& reason);
+
    private slots:
     void performPaginatedSearch();
 

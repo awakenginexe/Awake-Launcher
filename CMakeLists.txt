@@ -273,9 +273,13 @@ set(Launcher_MSA_CLIENT_ID "" CACHE STRING "Client ID you can get from Microsoft
 
 # By using this key in your builds you accept the terms and conditions laid down in
 # https://support.curseforge.com/en/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions
-# NOTE: CurseForge requires you to change this if you make any kind of derivative work.
-# This key was issued specifically for Prism Launcher
+# Awake builds must supply their own key; user settings can override it.
 set(Launcher_CURSEFORGE_API_KEY "" CACHE STRING "API key for the CurseForge platform")
+if(Launcher_CURSEFORGE_API_KEY STREQUAL "")
+    message(STATUS "CurseForge: no build-time API key; users must configure one in Settings > Services")
+else()
+    message(STATUS "CurseForge: build-time API key configured")
+endif()
 
 set(Launcher_COMPILER_NAME ${CMAKE_CXX_COMPILER_ID})
 set(Launcher_COMPILER_VERSION ${CMAKE_CXX_COMPILER_VERSION})

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "ManagedPackPage.h"
+#include "ui/pages/modplatform/flame/FlameKeyDiagnostic.h"
 #include <QDesktopServices>
 #include <QLineEdit>
 #include <QUrl>
@@ -42,6 +43,9 @@ ManagedPackPage::ManagedPackPage(BaseInstance* inst, InstanceWindow* instanceWin
     Q_ASSERT(inst);
 
     ui->setupUi(this);
+    if (m_inst->getManagedPackType() == "flame" && !(APPLICATION->capabilities() & Application::SupportsFlame)) {
+        layout()->addWidget(createFlameKeyDiagnostic(this));
+    }
 
     ui->versionsComboBox->view()->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     ui->versionsComboBox->view()->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -80,6 +84,13 @@ ManagedPackPage::~ManagedPackPage()
 
 void ManagedPackPage::openedImpl()
 {
+    if (m_inst->getManagedPackType() == "flame" && !(APPLICATION->capabilities() & Application::SupportsFlame)) {
+        ui->updateButton->setEnabled(false);
+        ui->versionsComboBox->setEnabled(false);
+        ui->packName->setText(m_inst->getManagedPackName());
+        ui->packVersion->setText(m_inst->getManagedPackVersionName());
+        return;
+    }
     if (m_inst->getManagedPackID().isEmpty()) {
         ui->packVersion->hide();
         ui->packVersionLabel->hide();

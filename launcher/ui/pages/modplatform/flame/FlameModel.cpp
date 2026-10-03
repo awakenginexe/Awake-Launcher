@@ -164,6 +164,7 @@ void ListModel::fetchMore(const QModelIndex& parent)
 
 void ListModel::performPaginatedSearch()
 {
+    emit searchError({});
     // activate search by id only for numerical values because all CurseForge ids are numerical
     static const QRegularExpression s_projectIdExpr("^\\#[0-9]+$");
     if (m_searchState != ResetRequested && s_projectIdExpr.match(m_currentSearchTerm).hasMatch()) {
@@ -277,6 +278,9 @@ void Flame::ListModel::searchRequestFailed(const QString& reason)
         performPaginatedSearch();
     } else {
         m_searchState = Finished;
+        if (reason != "Aborted") {
+            emit searchError(reason);
+        }
     }
 }
 
