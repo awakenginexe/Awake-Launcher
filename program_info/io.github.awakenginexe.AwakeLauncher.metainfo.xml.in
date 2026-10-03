@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@Launcher_AppID@</id>
+  <name>Awake Launcher</name>
+  <summary>Manage and play independent Minecraft installations</summary>
+  <developer id="io.github.awakenginexe"><name>Awake Launcher Contributors</name></developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <description><p>Awake Launcher is a general-purpose Minecraft launcher based on Prism Launcher. Create independent instances, manage mods and choose your own Java and runtime settings.</p></description>
+  <launchable type="desktop-id">@Launcher_AppID@.desktop</launchable>
+  <url type="homepage">https://github.com/awakenginexe/Awake-Launcher</url>
+  <url type="bugtracker">https://github.com/awakenginexe/Awake-Launcher/issues</url>
+  <url type="vcs-browser">https://github.com/awakenginexe/Awake-Launcher</url>
+  <categories><category>Game</category></categories>
+  <content_rating type="oars-1.1"/>
+</component>

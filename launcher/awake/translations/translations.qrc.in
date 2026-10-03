@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/awake/translations">
+    <file alias="index_v2.json">@CMAKE_CURRENT_SOURCE_DIR@/awake/translations/index_v2.json</file>
+    <file alias="th.qm">@CMAKE_CURRENT_BINARY_DIR@/th.qm</file>
+    <file alias="zh_CN.qm">@CMAKE_CURRENT_BINARY_DIR@/zh_CN.qm</file>
+    <file alias="zh_TW.qm">@CMAKE_CURRENT_BINARY_DIR@/zh_TW.qm</file>
+  </qresource>
+</RCC>

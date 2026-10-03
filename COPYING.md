@@ -1,3 +1,17 @@
+## Awake Launcher
+
+    Copyright (C) 2026 Awake Launcher Contributors
+    Launcher code is licensed under GPL-3.0-only. Corresponding source:
+    https://github.com/awakenginexe/Awake-Launcher
+    Upstream copyright and dependency notices follow unchanged.
+
+## Bundled translations
+
+    Derived from PrismLauncher/Translations, revision
+    86470aacf6f9b66315ab2ecf302b5b84a23b92da, under Apache-2.0.
+    Awake interface translations and product-name changes are included.
+    The full license is shipped in licenses/translations/LICENSE.
+
 ## Prism Launcher
 
      Prism Launcher - Minecraft Launcher

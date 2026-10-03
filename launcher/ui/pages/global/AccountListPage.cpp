@@ -49,13 +49,12 @@
 #include "ui/dialogs/MSALoginDialog.h"
 
 #include "Application.h"
+#include "settings/Setting.h"
+#include "settings/SettingsObject.h"
 
 AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new Ui::AccountListPage)
 {
     ui->setupUi(this);
-    ui->listView->setEmptyString(
-        tr("Welcome!\n"
-           "If you're new here, you can select the \"Add Microsoft\" button to link your Microsoft account."));
     ui->listView->setEmptyMode(VersionListView::String);
     ui->listView->setContextMenuPolicy(Qt::CustomContextMenu);
 
@@ -83,11 +82,14 @@ AccountListPage::AccountListPage(QWidget* parent) : QMainWindow(parent), ui(new 
 
     updateButtonStates();
 
-    // Xbox authentication won't work without a client identifier, so disable the button if it is missing
-    if (~APPLICATION->capabilities() & Application::SupportsMSA) {
-        ui->actionAddMicrosoft->setVisible(false);
-        ui->actionAddMicrosoft->setToolTip(tr("No Microsoft Authentication client ID was set."));
-    }
+    connect(APPLICATION->settings(), &SettingsObject::SettingChanged, this, [this](const Setting& setting, QVariant) {
+        if (setting.id() == "MSAClientIDOverride")
+            updateButtonStates();
+    });
+    connect(APPLICATION->settings(), &SettingsObject::settingReset, this, [this](const Setting& setting) {
+        if (setting.id() == "MSAClientIDOverride")
+            updateButtonStates();
+    });
 }
 
 AccountListPage::~AccountListPage()
@@ -98,6 +100,7 @@ AccountListPage::~AccountListPage()
 void AccountListPage::retranslate()
 {
     ui->retranslateUi(this);
+    updateButtonStates();
 }
 
 void AccountListPage::ShowContextMenu(const QPoint& pos)
@@ -111,6 +114,7 @@ void AccountListPage::changeEvent(QEvent* event)
 {
     if (event->type() == QEvent::LanguageChange) {
         ui->retranslateUi(this);
+        updateButtonStates();
     }
     QMainWindow::changeEvent(event);
 }
@@ -204,6 +208,14 @@ void AccountListPage::on_actionNoDefault_triggered()
 
 void AccountListPage::updateButtonStates()
 {
+    const bool canSignIn = !APPLICATION->getMSAClientID().isEmpty();
+    ui->listView->setEmptyString(
+        canSignIn ? tr("Welcome!\n"
+                       "If you're new here, you can select the \"Add Microsoft\" button to link your Microsoft account.")
+                  : tr("Microsoft sign-in is not configured.\nAdd an Awake Launcher application ID in Settings > APIs to enable it."));
+    ui->actionAddMicrosoft->setEnabled(canSignIn);
+    ui->actionAddMicrosoft->setToolTip(canSignIn ? QString()
+                                                 : tr("Configure an Awake Launcher Microsoft application ID in Settings > APIs."));
     // If there is no selection, disable buttons that require something selected.
     QModelIndexList selection = ui->listView->selectionModel()->selectedIndexes();
     bool hasSelection = !selection.empty();

@@ -45,6 +45,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QColor>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QSize>
@@ -243,6 +244,12 @@ void MSALoginDialog::onAuthFlowStatus(QString status)
 // Public interface
 MinecraftAccountPtr MSALoginDialog::newAccount(QWidget* parent)
 {
+    if (APPLICATION->getMSAClientID().isEmpty()) {
+        QMessageBox::information(parent, tr("Microsoft sign-in unavailable"),
+                                 tr("This build needs an Awake Launcher Microsoft application ID. "
+                                    "Configure it in Settings > APIs before signing in."));
+        return nullptr;
+    }
     MSALoginDialog dlg(parent);
     if (dlg.exec() == QDialog::Accepted) {
         return dlg.m_account;

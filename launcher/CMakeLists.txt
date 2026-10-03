@@ -1230,7 +1230,22 @@ endif()
 ####### Targets ########
 
 # Add executable
-add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES})
+find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
+qt_add_translation(AWAKE_QM_FILES
+    awake/translations/th.ts awake/translations/zh_CN.ts awake/translations/zh_TW.ts
+    OPTIONS -nounfinished)
+configure_file(awake/translations/translations.qrc.in awake-translations.qrc @ONLY)
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp
+    COMMAND Qt6::rcc -name awake_translations -o ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/awake-translations.qrc
+    DEPENDS ${AWAKE_QM_FILES} awake/translations/index_v2.json ${CMAKE_CURRENT_BINARY_DIR}/awake-translations.qrc
+    VERBATIM)
+add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES}
+    awake/LocalePolicy.cpp awake/LocalePolicy.h
+    awake/DesignTokens.cpp awake/DesignTokens.h awake/AwakeTheme.cpp awake/AwakeTheme.h
+    awake/InstanceSearch.cpp awake/InstanceSearch.h
+    awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h
+    ${AWAKE_QM_FILES} ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp)
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 
@@ -1543,7 +1558,7 @@ if(WIN32 OR (UNIX AND APPLE))
     # Add qtlogging.ini as a config file
     install(
         FILES "qtlogging.ini"
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/${RESOURCES_DEST_DIR}
+        DESTINATION ${RESOURCES_DEST_DIR}
         COMPONENT bundle
     )
 endif()

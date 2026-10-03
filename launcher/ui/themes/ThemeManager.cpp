@@ -17,6 +17,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ThemeManager.h"
+#include "awake/AwakeTheme.h"
 
 #include <QApplication>
 #include <QDir>
@@ -137,6 +138,7 @@ void ThemeManager::initializeIcons()
 
 void ThemeManager::initializeWidgets()
 {
+    addTheme(std::make_unique<Awake::Theme>());
     themeDebugLog() << "<> Initializing Widget Themes";
     themeDebugLog() << "Loading Built-in Theme:" << addTheme(std::make_unique<SystemTheme>(m_defaultStyle, m_defaultPalette, true));
     auto darkThemeId = addTheme(std::make_unique<DarkTheme>());
