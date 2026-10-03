@@ -1,15 +1,37 @@
+# Licenses and copyright notices
+
 ## Awake Launcher
 
     Copyright (C) 2026 Awake Launcher Contributors
-    Launcher code is licensed under GPL-3.0-only. Corresponding source:
-    https://github.com/awakenginexe/Awake-Launcher
-    Upstream copyright and dependency notices follow unchanged.
+
+Awake Launcher is an independently maintained fork of Prism Launcher. Its launcher
+code, including changes made for Awake Launcher, is released under the GNU General Public
+License, version 3 only (`GPL-3.0-only`), except where a component has a separate
+license notice. The complete GPL text is in [LICENSE](LICENSE).
+
+You may use, modify, and redistribute the covered code under the GPL. Distributions
+must retain required copyright and license notices and provide corresponding
+source as required by the license. This summary does not replace the license text.
+
+Corresponding source: <https://github.com/awakenginexe/Awake-Launcher>.
+Distributors of modified builds must also make their own corresponding source
+available in accordance with the GPL.
+
+Upstream copyright and dependency notices below are retained. Bundled web
+dependencies have additional [third-party notices](launcher/awake-web/THIRD-PARTY-NOTICES.txt).
+
+## Branding assets
+
+The logos and branding in `program_info/` retain the Creative Commons
+Attribution-ShareAlike 4.0 International license in [program_info/LICENSE](program_info/LICENSE).
+That asset license does not change the launcher code's GPL license or imply
+endorsement by any upstream project or trademark owner.
 
 ## Bundled translations
 
     Derived from PrismLauncher/Translations, revision
     86470aacf6f9b66315ab2ecf302b5b84a23b92da, under Apache-2.0.
-    Awake interface translations and product-name changes are included.
+    Awake Launcher interface translations and product-name changes are included.
     The full license is shipped in licenses/translations/LICENSE.
 
 ## Prism Launcher
