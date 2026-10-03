@@ -1,0 +1,33 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", "Leelawadee UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Noto Sans Thai", "Noto Sans CJK SC", system-ui, sans-serif;
+  font-size: 14px;
+  --background: #12161c;
+  --surface: #1a2028;
+  --surface-interactive: #222b35;
+  --surface-glass: rgba(18, 22, 28, .82);
+  --surface-glass-strong: rgba(18, 22, 28, .88);
+  --text-primary: #e7ecef;
+  --text-secondary: #aab6c3;
+  --text-muted: #87929f;
+  --border-subtle: rgba(170, 182, 195, .24);
+  --control-border: #6b7c90;
+  --accent: #efc17e;
+  --accent-hover: #f5d19c;
+  --error: #f59e9e;
+  --selection: #3b424b;
+  --focus: #efc17e;
+  --blur: 22px;
+  --radius-panel: 16px;
+  --radius-control: 7px;
+  --shadow-floating: 0 12px 40px rgba(0, 0, 0, .24);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --duration: 160ms;
+  --duration-artwork: 260ms;
+  --ease: cubic-bezier(.2, .7, .25, 1);
+}
