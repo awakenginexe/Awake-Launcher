@@ -1240,7 +1240,10 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/awake-translations.qrc
     DEPENDS ${AWAKE_QM_FILES} awake/translations/index_v2.json ${CMAKE_CURRENT_BINARY_DIR}/awake-translations.qrc
     VERBATIM)
-add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES}
+if(Launcher_ENABLE_AWAKE_WEB)
+    include(${CMAKE_SOURCE_DIR}/cmake/AwakeWeb.cmake)
+endif()
+add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES} ${AWAKE_WEB_SOURCES}
     awake/LocalePolicy.cpp awake/LocalePolicy.h
     awake/DesignTokens.cpp awake/DesignTokens.h awake/AwakeTheme.cpp awake/AwakeTheme.h
     awake/InstanceSearch.cpp awake/InstanceSearch.h
@@ -1249,6 +1252,10 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
     ${AWAKE_QM_FILES} ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp)
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
+if(Launcher_ENABLE_AWAKE_WEB)
+    target_compile_definitions(Launcher_logic PUBLIC AWAKE_WEB_ENABLED)
+    target_link_libraries(Launcher_logic Qt6::WebEngineWidgets Qt6::WebChannel)
+endif()
 
 if(${Launcher_USE_PCH})
     target_precompile_headers(Launcher_logic PRIVATE ${PRECOMPILED_HEADERS})
@@ -1506,6 +1513,12 @@ endif()
 if(WIN32 OR (UNIX AND APPLE))
     if(WIN32)
         set(QT_DEPLOY_TOOL_OPTIONS "--no-opengl-sw --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --skip-plugin-types generic,networkinformation")
+        if(Launcher_ENABLE_AWAKE_WEB)
+            foreach(AWAKE_CHROMIUM_LOCALE en-US th zh-CN zh-TW)
+                install(FILES "${QT6_INSTALL_PREFIX}/translations/qtwebengine_locales/${AWAKE_CHROMIUM_LOCALE}.pak"
+                    DESTINATION "${BINARY_DEST_DIR}/translations/qtwebengine_locales" COMPONENT bundle)
+            endforeach()
+        endif()
     endif()
 
     qt_generate_deploy_script(

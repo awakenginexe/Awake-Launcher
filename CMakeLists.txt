@@ -298,6 +298,7 @@ set(Launcher_BUILD_TIMESTAMP "${TODAY}")
 ################################ 3rd Party Libs ################################
 
 # Find the required Qt parts
+option(Launcher_ENABLE_AWAKE_WEB "Use the bundled Vue frontend with Qt WebEngine" ON)
 if(Launcher_QT_VERSION_MAJOR EQUAL 6)
     set(QT_VERSION_MAJOR 6)
     find_package(
@@ -320,6 +321,9 @@ if(Launcher_QT_VERSION_MAJOR EQUAL 6)
     )
     find_package(Qt6 COMPONENTS DBus HINTS /opt/qt/*/*/lib/cmake)
     list(APPEND Launcher_QT_DBUS Qt6::DBus)
+    if(Launcher_ENABLE_AWAKE_WEB)
+        find_package(Qt6 6.8 REQUIRED COMPONENTS WebEngineWidgets WebChannel)
+    endif()
 else()
     message(FATAL_ERROR "Qt version ${Launcher_QT_VERSION_MAJOR} is not supported")
 endif()
@@ -546,5 +550,9 @@ endif()
 install(FILES LICENSE COPYING.md UPSTREAM.md DESTINATION "${RESOURCES_DEST_DIR}/licenses")
 install(FILES launcher/awake/translations/LICENSE launcher/awake/translations/README.md
         DESTINATION "${RESOURCES_DEST_DIR}/licenses/translations")
+if(Launcher_ENABLE_AWAKE_WEB)
+    install(FILES launcher/awake-web/THIRD-PARTY-NOTICES.txt
+        DESTINATION "${RESOURCES_DEST_DIR}/licenses/awake-web")
+endif()
 
 add_subdirectory(launcher)
