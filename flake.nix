@@ -1,12 +1,5 @@
 {
-  description = "A custom launcher for Minecraft that allows you to easily manage multiple installations of Minecraft at once (Fork of MultiMC)";
-
-  nixConfig = {
-    extra-substituters = [ "https://prismlauncher.cachix.org" ];
-    extra-trusted-public-keys = [
-      "prismlauncher.cachix.org-1:9/n/FGyABA2jLUVfY+DEp4hKds/rwO+SCOtbOkDzd+c="
-    ];
-  };
+  description = "Awake Launcher, a general-purpose Minecraft launcher based on Prism Launcher";
 
   inputs = {
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
@@ -92,9 +85,7 @@
           packages' = self.packages.${system};
 
           welcomeMessage = ''
-            Welcome to the Prism Launcher repository! 🌈
-
-            We just set some things up for you. To get building, you can run:
+            Awake Launcher development shell. Build with:
 
             ```
             $ cd "$cmakeBuildDir"
@@ -102,21 +93,17 @@
             $ ninjaInstallPhase
             ```
 
-            Feel free to ask any questions in our Discord server or Matrix space:
-              - https://prismlauncher.org/discord
-              - https://matrix.to/#/#prismlauncher:matrix.org
-
-            And thanks for helping out :)
+            Build requirements: BUILDING.md
           '';
 
           # Re-use our package wrapper to wrap our development environment
-          qt-wrapper-env = packages'.prismlauncher.overrideAttrs (old: {
+          qt-wrapper-env = packages'.awakelauncher.overrideAttrs (old: {
             name = "qt-wrapper-env";
 
             # Required to use script-based makeWrapper below
             strictDeps = true;
 
-            # We don't need/want the unwrapped Prism package
+            # We don't need/want the unwrapped Awake package
             paths = [ ];
 
             nativeBuildInputs = old.nativeBuildInputs or [ ] ++ [
@@ -134,9 +121,9 @@
 
         {
           default = mkShell {
-            name = "prism-launcher";
+            name = "awake-launcher";
 
-            inputsFrom = [ packages'.prismlauncher-unwrapped ];
+            inputsFrom = [ packages'.awakelauncher-unwrapped ];
 
             packages = [
               pkgs.ccache
@@ -162,14 +149,14 @@
             ];
 
             cmakeBuildType = "Debug";
-            cmakeFlags = [ "-GNinja" ] ++ packages'.prismlauncher-unwrapped.cmakeFlags;
+            cmakeFlags = [ "-GNinja" ] ++ packages'.awakelauncher-unwrapped.cmakeFlags;
             dontFixCmake = true;
 
             shellHook = ''
               echo "Sourcing ${qt-wrapper-env}"
               source ${qt-wrapper-env}
 
-              git submodule update --init --force
+              git submodule update --init
 
               if [ ! -f compile_commands.json ]; then
                 cmakeConfigurePhase
@@ -193,7 +180,7 @@
         in
 
         {
-          prismlauncher-unwrapped = prev.callPackage ./nix/unwrapped.nix {
+          awakelauncher-unwrapped = prev.callPackage ./nix/unwrapped.nix {
             inherit (llvm) stdenv;
             inherit
               libnbtplusplus
@@ -201,7 +188,7 @@
               ;
           };
 
-          prismlauncher = final.callPackage ./nix/wrapper.nix { };
+          awakelauncher = final.callPackage ./nix/wrapper.nix { };
         };
 
       packages = forAllSystems (
@@ -211,12 +198,12 @@
           pkgs = nixpkgsFor.${system};
 
           # Build a scope from our overlay
-          prismPackages = lib.makeScope pkgs.newScope (final: self.overlays.default final pkgs);
+          awakePackages = lib.makeScope pkgs.newScope (final: self.overlays.default final pkgs);
 
           # Grab our packages from it and set the default
           packages = {
-            inherit (prismPackages) prismlauncher-unwrapped prismlauncher;
-            default = prismPackages.prismlauncher;
+            inherit (awakePackages) awakelauncher-unwrapped awakelauncher;
+            default = awakePackages.awakelauncher;
           };
         in
 
@@ -234,11 +221,11 @@
         in
 
         {
-          prismlauncher-debug = packages'.prismlauncher.override {
-            prismlauncher-unwrapped = legacyPackages'.prismlauncher-unwrapped-debug;
+          awakelauncher-debug = packages'.awakelauncher.override {
+            awakelauncher-unwrapped = legacyPackages'.awakelauncher-unwrapped-debug;
           };
 
-          prismlauncher-unwrapped-debug = packages'.prismlauncher-unwrapped.overrideAttrs {
+          awakelauncher-unwrapped-debug = packages'.awakelauncher-unwrapped.overrideAttrs {
             cmakeBuildType = "Debug";
             dontStrip = true;
           };

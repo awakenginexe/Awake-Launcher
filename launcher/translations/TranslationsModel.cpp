@@ -35,6 +35,7 @@
  */
 
 #include "TranslationsModel.h"
+#include "awake/LocalePolicy.h"
 
 #include <QDebug>
 #include <algorithm>
@@ -55,7 +56,7 @@
 static constexpr QLatin1String g_defaultLangCode("en_US");
 
 namespace {
-enum class FileType : std::uint8_t { None, Qm, Po };
+enum class FileType : std::uint8_t { None, BundledQm, Qm, Po };
 
 QString getSystemLocaleName()
 {
@@ -185,6 +186,10 @@ TranslationsModel::TranslationsModel(const QString& path, QObject* parent) : QAb
     d->m_selectedLanguage = APPLICATION->settings()->get("Language").toString();
     FS::ensureFolderPathExists(path);
     reloadLocalFiles();
+    if (d->m_selectedLanguage.isEmpty()) {
+        d->m_selectedLanguage = Awake::localeForSystem(QLocale::system().bcp47Name());
+        APPLICATION->settings()->set("Language", d->m_selectedLanguage);
+    }
 
     d->watcher = new QFileSystemWatcher(this);
     connect(d->watcher, &QFileSystemWatcher::directoryChanged, this, &TranslationsModel::translationDirChanged);
@@ -239,7 +244,7 @@ void readIndex(const QString& path, QMap<QString, Language>& languages)
         }
         TRY_INTO(const auto& langObjs, Json::requireObject(doc, "languages"))
         for (auto iter = langObjs.begin(); iter != langObjs.end(); ++iter) {
-            if (iter.key() == g_defaultLangCode) {
+            if (iter.key() == g_defaultLangCode || !Awake::isSupportedLocale(iter.key())) {
                 continue;
             }
             Language lang(iter.key());
@@ -265,12 +270,13 @@ void TranslationsModel::reloadLocalFiles()
 {
     QMap<QString, Language> languages = { { g_defaultLangCode, Language(g_defaultLangCode) } };
 
-    const auto indexPath = d->m_dir.absoluteFilePath("index_v2.json");
-    if (!QFileInfo::exists(indexPath)) {
-        downloadIndex();
-        return;
+    readIndex(":/awake/translations/index_v2.json", languages);
+    for (auto it = languages.begin(); it != languages.end(); ++it) {
+        if (it.key() != g_defaultLangCode) {
+            it->localFileType = FileType::BundledQm;
+            it->updated = true;
+        }
     }
-    readIndex(indexPath, languages);
     auto entries = d->m_dir.entryInfoList({ "mmc_*.qm", "*.po" }, QDir::Files | QDir::NoDotAndDotDot);
     for (auto& entry : entries) {
         auto completeSuffix = entry.completeSuffix();
@@ -286,6 +292,9 @@ void TranslationsModel::reloadLocalFiles()
             continue;
         }
 
+        if (!Awake::isSupportedLocale(langCode)) {
+            continue;
+        }
         auto langIter = languages.find(langCode);
         if (langIter != languages.end()) {
             auto& language = *langIter;
@@ -510,6 +519,14 @@ bool TranslationsModel::selectLanguage(QString key) const
             qCritical() << "Loading Application Language File failed.";
             d->m_appTranslator.reset();
         }
+    } else if (langPtr->localFileType == FileType::BundledQm) {
+        d->m_appTranslator = std::make_unique<QTranslator>();
+        if (d->m_appTranslator->load(":/awake/translations/" + langCode + ".qm")) {
+            successful = QCoreApplication::installTranslator(d->m_appTranslator.get());
+        }
+        if (!successful) {
+            d->m_appTranslator.reset();
+        }
     } else if (langPtr->localFileType == FileType::Qm) {
         d->m_appTranslator = std::make_unique<QTranslator>();
         if (d->m_appTranslator->load("mmc_" + langCode, d->m_dir.path())) {
@@ -546,6 +563,10 @@ QString TranslationsModel::selectedLanguage() const
 
 void TranslationsModel::downloadIndex()
 {
+    if (BuildConfig.TRANSLATION_FILES_URL.isEmpty()) {
+        reloadLocalFiles();
+        return;
+    }
     if (d->m_indexJob || d->m_downloadJob) {
         return;
     }
@@ -580,6 +601,9 @@ void TranslationsModel::updateLanguage(const QString& key)
 
 void TranslationsModel::downloadTranslation(const QString& key)
 {
+    if (BuildConfig.TRANSLATION_FILES_URL.isEmpty()) {
+        return;
+    }
     if (d->m_downloadJob) {
         d->m_nextDownload = key;
         return;

@@ -594,16 +594,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         qInfo() << "<> Log initialized.";
     }
 
-    {
-        auto migrated = handleDataMigration(
-            dataPath, FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../PolyMC"), "PolyMC",
-            "polymc.cfg");
-        if (!migrated) {
-            handleDataMigration(dataPath,
-                                FS::PathCombine(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), "../../multimc"),
-                                "MultiMC", "multimc.cfg");
-        }
-    }
 
     {
         qInfo() << qPrintable(BuildConfig.LAUNCHER_DISPLAYNAME + ", " + QString(BuildConfig.LAUNCHER_COPYRIGHT).replace("\n", ", "));
@@ -653,11 +643,13 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     // Initialize application settings
     {
         // Provide a fallback for migration from PolyMC
-        m_settings.reset(new INISettingsObject({ BuildConfig.LAUNCHER_CONFIGFILE, "polymc.cfg", "multimc.cfg" }, this));
+        m_settings.reset(new INISettingsObject({ BuildConfig.LAUNCHER_CONFIGFILE }, this));
 
         // Theming
-        m_settings->registerSetting("IconTheme", QString());
-        m_settings->registerSetting("ApplicationTheme", QString());
+        m_settings->registerSetting("IconTheme", "pe_light");
+        m_settings->registerSetting("ApplicationTheme", QString("awake-dark"));
+        m_settings->registerSetting("AwakeCompactLibrary", false);
+        m_settings->registerSetting("AwakePinnedInstances", QStringList());
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
 
         // Remembered state
@@ -1086,6 +1078,15 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     updateCapabilities();
 
+    connect(m_settings.get(), &SettingsObject::SettingChanged, this, [this](const Setting& setting, QVariant) {
+        if (setting.id() == "MSAClientIDOverride" || setting.id() == "FlameKeyOverride")
+            updateCapabilities();
+    });
+    connect(m_settings.get(), &SettingsObject::settingReset, this, [this](const Setting& setting) {
+        if (setting.id() == "MSAClientIDOverride" || setting.id() == "FlameKeyOverride")
+            updateCapabilities();
+    });
+
     detectLibraries();
 
     // check update locks
@@ -1104,7 +1105,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                               "\n"
                               "This likely means that a update attempt failed. Please ensure your installation is in working order before "
                               "proceeding.\n"
-                              "Check the Prism Launcher updater log at: \n"
+                              "Check the Awake Launcher updater log at: \n"
                               "%7\n"
                               "for details on the last update attempt.\n"
                               "\n"
@@ -1144,7 +1145,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                               "\n"
                               "Please ensure your installation is in working order before "
                               "proceeding.\n"
-                              "Check the Prism Launcher updater log at: \n"
+                              "Check the Awake Launcher updater log at: \n"
                               "%1\n"
                               "for details on the last update attempt.")
                                .arg(updateLogPath);
@@ -1179,7 +1180,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             auto infoMsg = tr("Update succeeded\n"
                               "\n"
                               "You are now running %1 .\n"
-                              "Check the Prism Launcher updater log at: \n"
+                              "Check the Awake Launcher updater log at: \n"
                               "%2\n"
                               "for details.")
                                .arg(BuildConfig.printableVersionString())

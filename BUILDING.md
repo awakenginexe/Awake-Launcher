@@ -29,3 +29,5 @@ Updaters, including macOS Sparkle, are disabled by default. Enable them only wit
 Awake has a separate application identity and `awakelauncher.cfg`. It does not automatically migrate other launchers' data. Import instances explicitly and back up data before migrations. Portable builds keep data beside the executable.
 
 Packages must include runtime dependencies, launcher JARs, required licenses and corresponding source availability. Development CI artifacts are unsigned and are not releases.
+
+Windows development packages require the Microsoft Visual C++ 2015-2022 x64 runtime. The retained installer template can install that prerequisite; the portable development artifact assumes it is already installed.

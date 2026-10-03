@@ -1,0 +1,30 @@
+{
+  "file_type": "MMC-TRANSLATION-INDEX",
+  "version": 2,
+  "languages": {
+    "th": {
+      "file": "th.qm",
+      "sha1": "850ea3f577e95c07b1fda1c09de7f00432e3a8d4",
+      "size": 177209,
+      "translated": 1126,
+      "fuzzy": 243,
+      "untranslated": 1155
+    },
+    "zh_CN": {
+      "file": "zh_CN.qm",
+      "sha1": "0bfc1a6c74c387ddb5aabf9de977c861a347d141",
+      "size": 259367,
+      "translated": 2520,
+      "fuzzy": 2,
+      "untranslated": 2
+    },
+    "zh_TW": {
+      "file": "zh_TW.qm",
+      "sha1": "f19a054ef9c82bb2e5c36bb9b866a3d190f2eaa3",
+      "size": 259624,
+      "translated": 2524,
+      "fuzzy": 0,
+      "untranslated": 0
+    }
+  }
+}

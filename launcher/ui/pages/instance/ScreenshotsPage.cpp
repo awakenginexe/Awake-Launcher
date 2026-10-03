@@ -394,6 +394,13 @@ void ScreenshotsPage::on_actionView_Folder_triggered() const
 
 void ScreenshotsPage::on_actionUpload_triggered()
 {
+    if (BuildConfig.IMGUR_CLIENT_ID.isEmpty()) {
+        CustomMessageBox::selectable(this, tr("Screenshot upload unavailable"),
+                                     tr("This build has no Imgur application ID. Screenshots remain available locally."),
+                                     QMessageBox::Information)
+            ->show();
+        return;
+    }
     auto selection = ui->listView->selectionModel()->selectedIndexes();
     if (selection.isEmpty()) {
         return;

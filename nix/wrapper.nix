@@ -24,7 +24,7 @@
   openal,
   pciutils,
   pipewire,
-  prismlauncher-unwrapped,
+  awakelauncher-unwrapped,
   sdl3,
   stdenv,
   symlinkJoin,
@@ -57,13 +57,13 @@ assert lib.assertMsg (
 ) "textToSpeechSupport only has an effect on Linux.";
 
 let
-  prismlauncher' = prismlauncher-unwrapped.override { inherit msaClientID; };
+  awakelauncher' = awakelauncher-unwrapped.override { inherit msaClientID; };
 in
 
 symlinkJoin {
-  name = "prismlauncher-${prismlauncher'.version}";
+  name = "awakelauncher-${awakelauncher'.version}";
 
-  paths = [ prismlauncher' ];
+  paths = [ awakelauncher' ];
 
   nativeBuildInputs = [
     kdePackages.wrapQtAppsHook
@@ -130,8 +130,8 @@ symlinkJoin {
 
     in
     [
-      "--set NIX_LAUNCHER_WRAPPER ${placeholder "out"}/bin/prismlauncher"
-      "--prefix PRISMLAUNCHER_JAVA_PATHS : ${lib.makeSearchPath "bin/java" jdks}"
+      "--set NIX_LAUNCHER_WRAPPER ${placeholder "out"}/bin/awakelauncher"
+      "--prefix AWAKELAUNCHER_JAVA_PATHS : ${lib.makeSearchPath "bin/java" jdks}"
     ]
     ++ lib.optionals stdenv.hostPlatform.isLinux [
       "--set LD_LIBRARY_PATH ${addDriverRunpath.driverLink}/lib:${lib.makeLibraryPath runtimeLibs}"
@@ -139,11 +139,10 @@ symlinkJoin {
     ];
 
   meta = {
-    inherit (prismlauncher'.meta)
+    inherit (awakelauncher'.meta)
       description
       longDescription
       homepage
-      changelog
       license
       maintainers
       mainProgram
