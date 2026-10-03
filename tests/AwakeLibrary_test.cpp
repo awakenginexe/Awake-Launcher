@@ -29,6 +29,20 @@ class AwakeLibraryTest : public QObject {
     Q_OBJECT
    private slots:
     void initTestCase() { QTRY_COMPARE_WITH_TIMEOUT(APPLICATION->status(), Application::Initialized, 15000); }
+    void emptyLibraryStartup()
+    {
+        if (!qEnvironmentVariableIsSet("AWAKE_TEST_EMPTY_LIBRARY"))
+            QSKIP("Covered by the isolated AwakeEmptyLibrary test");
+        auto* window = APPLICATION->showMainWindow(false);
+        auto* view = window->findChild<InstanceView*>();
+        QVERIFY(view);
+        QCOMPARE(view->model()->rowCount(), 0);
+        QVERIFY(window->isVisible());
+        QVERIFY(!window->findChild<QAction*>("actionLaunchInstance")->isEnabled());
+        QVERIFY(window->findChild<QAction*>("actionAddInstance")->isEnabled());
+        QVERIFY(!window->findChild<QCheckBox*>("awakePin")->isEnabled());
+        QVERIFY(!window->findChild<QToolButton*>("awakeMore")->isEnabled());
+    }
     void searchSelectionPinAndViewMode()
     {
         auto* window = APPLICATION->showMainWindow(false);
@@ -175,7 +189,8 @@ int main(int argc, char** argv)
                    "IgnoreJavaWizard=true\nAutomaticJavaDownload=true\nAutomaticJavaSwitch=true\nUserAskedAboutAutomaticJavaDownload=true\n"
                    "ProxyType=HTTP\nProxyAddr=127.0.0.1\nProxyPort=9\nJavaPath=") +
             QByteArray(AWAKE_TEST_JAVA_PATH) + "\n");
-    for (const auto& id : { QString("vanilla"), QString("fabric") }) {
+    const QStringList fixtureIds = qEnvironmentVariableIsSet("AWAKE_TEST_EMPTY_LIBRARY") ? QStringList{} : QStringList{ "vanilla", "fabric" };
+    for (const auto& id : fixtureIds) {
         const auto instance = path + "/instances/" + id;
         QDir().mkpath(instance);
         writeFile(instance + "/instance.cfg",

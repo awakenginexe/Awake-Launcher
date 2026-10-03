@@ -289,6 +289,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         updateNewsLabel();
     }
 
+    // Empty-library initialization can clear the selection immediately.
+    m_statusLeft = new QLabel(tr("No instance selected"), this);
+    m_statusCenter = new QLabel(tr("Total playtime: 0s"), this);
+    statusBar()->addPermanentWidget(m_statusLeft, 1);
+    statusBar()->addPermanentWidget(m_statusCenter, 0);
+
     // Create the instance list widget
     {
         view = new InstanceView(ui->centralWidget);
@@ -431,11 +437,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // When the global settings page closes, we want to know about it and update our state
     connect(APPLICATION, &Application::globalSettingsApplied, this, &MainWindow::globalSettingsClosed);
-
-    m_statusLeft = new QLabel(tr("No instance selected"), this);
-    m_statusCenter = new QLabel(tr("Total playtime: 0s"), this);
-    statusBar()->addPermanentWidget(m_statusLeft, 1);
-    statusBar()->addPermanentWidget(m_statusCenter, 0);
 
     // Add "manage accounts" button, right align
     QWidget* spacer = new QWidget();
