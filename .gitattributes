@@ -1,2 +1,4 @@
 *.pem -crlf
 **/testdata/** -text -diff
+# Translation source keys preserve significant upstream whitespace.
+launcher/awake/translations/*.ts whitespace=-blank-at-eol

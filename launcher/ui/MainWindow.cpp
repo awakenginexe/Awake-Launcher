@@ -128,6 +128,8 @@
 #include "modplatform/modrinth/ModrinthAPI.h"
 
 #include "KonamiCode.h"
+#include "awake/LibraryDelegate.h"
+#include "awake/LibraryWidget.h"
 
 #include "InstanceCopyTask.h"
 #include "InstanceDirUpdate.h"
@@ -241,6 +243,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     updateThemeMenu();
     updateMainToolBar();
+    ui->actionMATRIX->setVisible(!BuildConfig.MATRIX_URL.isEmpty());
+    ui->actionDISCORD->setVisible(!BuildConfig.DISCORD_URL.isEmpty());
+    ui->actionREDDIT->setVisible(!BuildConfig.SUBREDDIT_URL.isEmpty());
+    if (BuildConfig.NEWS_RSS_URL.isEmpty()) {
+        ui->newsToolBar->hide();
+        ui->newsToolBar->toggleViewAction()->setVisible(false);
+    }
     // OSX magic.
     setUnifiedTitleAndToolBarOnMac(true);
 
@@ -286,7 +295,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         view->setSelectionMode(QAbstractItemView::SingleSelection);
         // FIXME: leaks ListViewDelegate
-        auto delegate = new ListViewDelegate(this);
+        auto delegate = new Awake::LibraryDelegate(this);
+        delegate->bindMetadata(APPLICATION->instances());
         view->setItemDelegate(delegate);
         view->setFrameShape(QFrame::NoFrame);
         // do not show ugly blue border on the mac
@@ -295,6 +305,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
             if (auto newRoot = askToUpdateInstanceDirName(m_selectedInstance, before, after, this); !newRoot.isEmpty()) {
                 auto oldID = m_selectedInstance->id();
                 auto newID = QFileInfo(newRoot).fileName();
+                auto pinned = APPLICATION->settings()->get("AwakePinnedInstances").toStringList();
+                if (pinned.removeAll(oldID) > 0) {
+                    pinned.append(newID);
+                    APPLICATION->settings()->set("AwakePinnedInstances", pinned);
+                }
                 QString origGroup(APPLICATION->instances()->getInstanceGroup(oldID));
                 bool syncGroup = origGroup != GroupId() && oldID != newID;
                 if (syncGroup)
@@ -322,7 +337,58 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
         view->setSourceOfGroupCollapseStatus(
             [](const QString& groupName) -> bool { return APPLICATION->instances()->isGroupCollapsed(groupName); });
         connect(view, &InstanceView::groupStateChanged, APPLICATION->instances(), &InstanceList::on_GroupStateChanged);
-        ui->horizontalLayout->addWidget(view);
+        m_library = new Awake::LibraryWidget(
+            view,
+            { ui->actionRenameInstance, ui->actionChangeInstIcon, ui->actionChangeInstGroup, ui->actionCopyInstance,
+              ui->actionExportInstance, ui->actionCreateInstanceShortcut, ui->actionKillInstance, ui->actionDeleteInstance },
+            ui->actionLaunchInstance, ui->actionAddInstance, ui->actionEditInstance, ui->actionViewSelectedInstFolder, ui->centralWidget);
+        ui->horizontalLayout->addWidget(m_library);
+        ui->mainToolBar->removeAction(ui->actionAddInstance);
+        ui->instanceToolBar->hide();
+
+        const bool compact = APPLICATION->settings()->get("AwakeCompactLibrary").toBool();
+        delegate->setCompact(compact);
+        view->setCompact(compact);
+        m_library->setViewMode(compact);
+        m_library->setSortMode(APPLICATION->settings()->get("InstSortMode").toString());
+        connect(m_library, &Awake::LibraryWidget::compactChanged, this, [this, delegate](bool compact) {
+            delegate->setCompact(compact);
+            view->setCompact(compact);
+            APPLICATION->settings()->set("AwakeCompactLibrary", compact);
+        });
+        connect(m_library, &Awake::LibraryWidget::searchChanged, proxymodel, &InstanceProxyModel::setSearchQuery);
+        connect(m_library, &Awake::LibraryWidget::pinnedOnlyChanged, proxymodel, &InstanceProxyModel::setPinnedOnly);
+        connect(m_library, &Awake::LibraryWidget::sortChanged, this, [this](const QString& mode) {
+            APPLICATION->settings()->set("InstSortMode", mode);
+            proxymodel->invalidate();
+        });
+        connect(m_library, &Awake::LibraryWidget::pinChanged, this, [this](bool pinned) {
+            if (!m_selectedInstance)
+                return;
+            const auto id = m_selectedInstance->id();
+            auto ids = APPLICATION->settings()->get("AwakePinnedInstances").toStringList();
+            ids.removeAll(id);
+            if (pinned)
+                ids.append(id);
+            APPLICATION->settings()->set("AwakePinnedInstances", ids);
+            proxymodel->invalidate();
+            setSelectedInstanceById(id);
+        });
+        auto updateCount = [this] {
+            const auto visible = proxymodel->rowCount();
+            const auto total = APPLICATION->instances()->count();
+            m_library->setResultCount(visible, total);
+            view->setFilteredEmpty(total > 0);
+            if (visible == 0)
+                instanceChanged(QModelIndex(), QModelIndex());
+        };
+        connect(proxymodel, &QAbstractItemModel::rowsInserted, this, updateCount);
+        connect(proxymodel, &QAbstractItemModel::rowsRemoved, this, updateCount);
+        connect(proxymodel, &QAbstractItemModel::modelReset, this, updateCount);
+        connect(proxymodel, &QAbstractItemModel::layoutChanged, this, updateCount);
+        updateCount();
+        auto* find = new QShortcut(QKeySequence::Find, this);
+        connect(find, &QShortcut::activated, m_library, &Awake::LibraryWidget::focusSearch);
     }
     // The cat background
     {
@@ -445,6 +511,8 @@ void MainWindow::retranslateUi()
     }
 
     ui->retranslateUi(this);
+    if (m_library)
+        updateLibraryDetails();
 
     MinecraftAccountPtr defaultAccount = APPLICATION->accounts()->defaultAccount();
     if (defaultAccount) {
@@ -1388,6 +1456,8 @@ void MainWindow::on_actionSettings_triggered()
 
 void MainWindow::globalSettingsClosed()
 {
+    m_library->setSortMode(APPLICATION->settings()->get("InstSortMode").toString());
+    updateLibraryDetails();
     proxymodel->invalidate();
     proxymodel->sort(0);
     updateMainToolBar();
@@ -1700,6 +1770,7 @@ void MainWindow::instanceChanged(const QModelIndex& current, [[maybe_unused]] co
         updateInstanceToolIcon(m_selectedInstance->iconKey());
 
         updateLaunchButton();
+        updateLibraryDetails();
 
         APPLICATION->settings()->set("SelectedInstance", m_selectedInstance->id());
 
@@ -1730,6 +1801,8 @@ void MainWindow::selectionBad()
 {
     // start by reseting everything...
     m_selectedInstance = nullptr;
+    if (m_library)
+        m_library->clearInstance();
     m_statusLeft->setText(tr("No instance selected"));
 
     statusBar()->clearMessage();
@@ -1786,10 +1859,28 @@ void MainWindow::updateStatusCenter()
                 .arg(Time::prettifyDuration(timePlayed, APPLICATION->settings()->get("ShowGameTimeWithoutDays").toBool())));
     }
 }
+
+void MainWindow::updateLibraryDetails()
+{
+    if (!m_library || !m_selectedInstance)
+        return;
+    auto* settings = m_selectedInstance->settings();
+    const auto java = settings->get("AutomaticJava").toBool() ? tr("Automatic (selected at launch)") : settings->get("JavaPath").toString();
+    const auto last = m_selectedInstance->lastLaunch();
+    const auto lastPlayed = last > 0 ? QLocale().toString(QDateTime::fromMSecsSinceEpoch(last), QLocale::ShortFormat) : tr("Never played");
+    m_library->setInstance(m_selectedInstance->name(), m_selectedInstance->getStatusbarDescription(),
+                           java.isEmpty() ? tr("Not configured") : java, tr("%1 MiB").arg(settings->get("MaxMemAlloc").toInt()), lastPlayed,
+                           Time::prettifyDuration(m_selectedInstance->totalTimePlayed(), false),
+                           APPLICATION->settings()->get("AwakePinnedInstances").toStringList().contains(m_selectedInstance->id()));
+}
 // "Instance actions" are actions that require an instance to be selected (i.e. "new instance" is not here)
 // Actions that also require other conditions (e.g. a running instance) won't be changed.
 void MainWindow::setInstanceActionsEnabled(bool enabled)
 {
+    ui->actionLaunchInstance->setEnabled(enabled);
+    ui->actionKillInstance->setEnabled(enabled);
+    ui->actionRenameInstance->setEnabled(enabled);
+    ui->actionChangeInstIcon->setEnabled(enabled);
     ui->actionEditInstance->setEnabled(enabled);
     ui->actionChangeInstGroup->setEnabled(enabled);
     ui->actionViewSelectedInstFolder->setEnabled(enabled);

@@ -65,6 +65,9 @@ class LabeledToolButton;
 namespace Ui {
 class MainWindow;
 }
+namespace Awake {
+class LibraryWidget;
+}
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -227,6 +230,7 @@ class MainWindow : public QMainWindow {
     void updateInstanceToolIcon(QString new_icon);
     void setSelectedInstanceById(const QString& id);
     void updateStatusCenter();
+    void updateLibraryDetails();
     void setInstanceActionsEnabled(bool enabled);
 
     void runModalTask(Task* task);
@@ -237,6 +241,7 @@ class MainWindow : public QMainWindow {
     // these are managed by Qt's memory management model!
     InstanceView* view = nullptr;
     InstanceProxyModel* proxymodel = nullptr;
+    Awake::LibraryWidget* m_library = nullptr;
     QToolButton* newsLabel = nullptr;
     QLabel* m_statusLeft = nullptr;
     QLabel* m_statusCenter = nullptr;

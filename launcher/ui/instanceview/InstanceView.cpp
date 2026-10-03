@@ -258,7 +258,15 @@ QString InstanceView::groupNameAt(const QPoint& point)
 
 int InstanceView::calculateItemsPerRow() const
 {
-    return qFloor((qreal)(contentWidth()) / (qreal)(itemWidth() + m_spacing));
+    return m_compact ? 1 : qMax(1, qFloor((qreal)(contentWidth()) / (qreal)(itemWidth() + m_spacing)));
+}
+
+void InstanceView::setCompact(bool compact)
+{
+    m_compact = compact;
+    m_currentItemsPerRow = calculateItemsPerRow();
+    m_currentCursorColumn = -1;
+    updateGeometries();
 }
 
 int InstanceView::contentWidth() const
@@ -268,7 +276,7 @@ int InstanceView::contentWidth() const
 
 int InstanceView::itemWidth() const
 {
-    return m_itemWidth;
+    return m_compact ? qMax(1, contentWidth() - m_spacing) : m_itemWidth;
 }
 
 void InstanceView::mousePressEvent(QMouseEvent* event)
@@ -469,21 +477,20 @@ void InstanceView::paintEvent([[maybe_unused]] QPaintEvent* event)
 
     if (model()->rowCount() == 0) {
         painter.save();
-        QString emptyString = tr("Welcome!") + "\n" + tr("Click \"Add Instance\" to get started.");
+        const auto emptyString = m_filteredEmpty ? tr("No matching instances.\nClear the search or turn off Pinned only.")
+                                                 : tr("Welcome!") + "\n" + tr("Click \"Add Instance\" to get started.");
 
         // calculate the rect for the overlay
         painter.setRenderHint(QPainter::Antialiasing, true);
-        QFont font("sans", 20);
-        font.setBold(true);
+        QFont font = this->font();
+        font.setPointSize(14);
 
         QRect bounds = viewport()->geometry();
         bounds.moveTop(0);
         auto innerBounds = bounds;
         innerBounds.adjust(10, 10, -10, -10);
 
-        QColor background = QApplication::palette().color(QPalette::WindowText);
-        QColor foreground = QApplication::palette().color(QPalette::Base);
-        foreground.setAlpha(190);
+        QColor foreground = QApplication::palette().color(QPalette::PlaceholderText);
         painter.setFont(font);
         auto fontMetrics = painter.fontMetrics();
         auto textRect = fontMetrics.boundingRect(innerBounds, Qt::AlignHCenter | Qt::TextWordWrap, emptyString);
@@ -496,10 +503,6 @@ void InstanceView::paintEvent([[maybe_unused]] QPaintEvent* event)
         if (!event->rect().intersects(wrapRect)) {
             return;
         }
-
-        painter.setBrush(QBrush(background));
-        painter.setPen(foreground);
-        painter.drawRoundedRect(wrapRect, 5.0, 5.0);
 
         painter.setPen(foreground);
         painter.setFont(font);
@@ -537,7 +540,7 @@ void InstanceView::paintEvent([[maybe_unused]] QPaintEvent* event)
         } else {
             option.state &= ~QStyle::State_Selected;
         }
-        option.state |= (index == currentIndex()) ? QStyle::State_HasFocus : QStyle::State_None;
+        option.state.setFlag(QStyle::State_HasFocus, index == currentIndex() && hasFocus());
         if (!(flags & Qt::ItemIsEnabled)) {
             option.state &= ~QStyle::State_Enabled;
         }
@@ -579,7 +582,7 @@ void InstanceView::paintEvent([[maybe_unused]] QPaintEvent* event)
 void InstanceView::resizeEvent([[maybe_unused]] QResizeEvent* event)
 {
     int newItemsPerRow = calculateItemsPerRow();
-    if (newItemsPerRow != m_currentItemsPerRow) {
+    if (m_compact || newItemsPerRow != m_currentItemsPerRow) {
         m_currentCursorColumn = -1;
         m_currentItemsPerRow = newItemsPerRow;
         updateGeometries();
