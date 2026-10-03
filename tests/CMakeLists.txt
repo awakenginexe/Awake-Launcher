@@ -1,4 +1,7 @@
 project(tests)
+ecm_add_test(AwakeArtwork_test.cpp LINK_LIBRARIES Qt6::Core Qt6::Gui Qt6::Test TEST_NAME AwakeArtwork)
+target_include_directories(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+target_sources(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher/awake/InstanceArtwork.cpp)
 
 ecm_add_test(AwakeLocale_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME AwakeLocale)

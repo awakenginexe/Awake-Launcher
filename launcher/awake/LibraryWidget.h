@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include <QWidget>
-
+#include "VisualControls.h"
 class QAction;
 class QLabel;
 class QLineEdit;
 class QComboBox;
 class QCheckBox;
-
+class QMenu;
 namespace Awake {
-class LibraryWidget : public QWidget {
+class LibraryWidget : public ArtworkCanvas {
     Q_OBJECT
    public:
     LibraryWidget(QWidget* instanceView,
@@ -18,6 +17,9 @@ class LibraryWidget : public QWidget {
                   QAction* create,
                   QAction* edit,
                   QAction* folder,
+                  QAction* settings,
+                  QAction* accounts,
+                  QMenu* applicationMenu,
                   QWidget* parent = nullptr);
     void setInstance(const QString& name,
                      const QString& description,
@@ -40,19 +42,30 @@ class LibraryWidget : public QWidget {
 
    protected:
     void changeEvent(QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
    private:
     void retranslate();
+    void updateEmptyState();
+    void updateArtworkCaption();
+    QWidget* m_instanceView;
+    GlassSurface* m_navigation;
+    GlassSurface* m_dock;
     QLabel* m_heading;
     QLabel* m_count;
+    QLabel* m_emptyHint;
+    QLabel* m_name;
+    QLabel* m_description;
+    QLabel* m_runtime;
+    QLabel* m_artworkCaption;
     QLineEdit* m_search;
     QComboBox* m_viewMode;
     QComboBox* m_sort;
     QCheckBox* m_pinnedOnly;
-    QLabel* m_name;
-    QLabel* m_description;
-    QLabel* m_runtime;
     QCheckBox* m_pin;
+    MotionButton* m_createHero;
+    MotionButton* m_more;
+    MotionButton* m_menu;
     QStringList m_detailValues;
     int m_visible = 0;
     int m_total = 0;

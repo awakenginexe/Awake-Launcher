@@ -9764,7 +9764,11 @@ Are you sure?</source>
       <source>%1 MiB</source>
       <translation>%1 MiB</translation>
     </message>
-  </context>
+      <message>
+        <source>Reduce motion</source>
+        <translation>减少动态效果</translation>
+    </message>
+</context>
   <context>
     <name>ManagedPackPage</name>
     <message>
@@ -19591,5 +19595,41 @@ Play time: %4</source>
 上次游玩：%3
 游玩时长：%4</translation>
     </message>
-  </context>
+      <message>
+        <source>Your library starts here. Create an instance to add your first world.</source>
+        <translation>创建第一个实例，开始建立你的实例库。</translation>
+    </message>
+    <message>
+        <source>No instances match your search.</source>
+        <translation>没有符合搜索条件的实例。</translation>
+    </message>
+    <message>
+        <source>Your worlds, within reach.</source>
+        <translation>你的世界，触手可及。</translation>
+    </message>
+    <message>
+        <source>Create your first instance to start playing.</source>
+        <translation>创建第一个实例，开始游戏。</translation>
+    </message>
+    <message>
+        <source>Choose a world from your library to play and manage it.</source>
+        <translation>从实例库中选择一个世界来游玩和管理。</translation>
+    </message>
+    <message>
+        <source>Loading screenshots…</source>
+        <translation>正在加载截图…</translation>
+    </message>
+    <message>
+        <source>No screenshot available</source>
+        <translation>暂无截图</translation>
+    </message>
+    <message>
+        <source>Screenshots from this instance</source>
+        <translation>此实例的截图</translation>
+    </message>
+    <message>
+        <source>Launcher menu</source>
+        <translation>启动器菜单</translation>
+    </message>
+</context>
 </TS>

@@ -4,6 +4,8 @@
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
+#include <QFontDatabase>
+#include <QFontInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,10 +16,12 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 #include "Application.h"
 #include "InstanceList.h"
 #include "awake/LibraryDelegate.h"
+#include "awake/LibraryWidget.h"
 #include "minecraft/MinecraftInstance.h"
 #include "settings/SettingsObject.h"
 #include "translations/TranslationsModel.h"
@@ -42,6 +46,24 @@ class AwakeLibraryTest : public QObject {
         QVERIFY(window->findChild<QAction*>("actionAddInstance")->isEnabled());
         QVERIFY(!window->findChild<QCheckBox*>("awakePin")->isEnabled());
         QVERIFY(!window->findChild<QToolButton*>("awakeMore")->isEnabled());
+        const auto output = qEnvironmentVariable("AWAKE_UI_OUTPUT");
+        if (!output.isEmpty()) {
+            QDir().mkpath(output);
+            window->resize(1100, 740);
+            QCoreApplication::processEvents();
+            QVERIFY(window->grab().save(output + "/glass-empty.png"));
+        }
+    }
+    void settingsRefreshKeepsNewShell()
+    {
+        auto* window = APPLICATION->showMainWindow(false);
+        APPLICATION->settings()->set("MenuBarInsteadOfToolBar", false);
+        QVERIFY(QMetaObject::invokeMethod(window, "globalSettingsClosed", Qt::DirectConnection));
+        for (const auto& name : { "mainToolBar", "newsToolBar", "instanceToolBar" }) {
+            auto* toolbar = window->findChild<QToolBar*>(name);
+            QVERIFY(toolbar);
+            QVERIFY(!toolbar->isVisible());
+        }
     }
     void searchSelectionPinAndViewMode()
     {
@@ -146,6 +168,48 @@ class AwakeLibraryTest : public QObject {
         QVERIFY(!action->isEnabled());
         QVERIFY(!APPLICATION->capabilities().testFlag(Application::SupportsMSA));
     }
+    void screenshotSelectionAndReducedMotion()
+    {
+        auto* window = APPLICATION->showMainWindow(false);
+        auto* library = window->findChild<Awake::LibraryWidget*>();
+        auto* view = window->findChild<InstanceView*>();
+        auto* search = window->findChild<QLineEdit*>("awakeSearch");
+        auto* reduced = window->findChild<QAction*>("awakeReduceMotion");
+        QVERIFY(library && view && search && reduced);
+        reduced->setChecked(true);
+        QVERIFY(APPLICATION->settings()->get("AwakeReduceMotion").toBool());
+        search->setText("fabric");
+        view->setCurrentIndex(view->model()->index(0, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(library->artworkPath().contains("fabric"), 5000);
+        QVERIFY(!library->animationRunning());
+        const auto first = library->artworkPath();
+        search->setText("vanilla");
+        view->setCurrentIndex(view->model()->index(0, 0));
+        search->setText("fabric");
+        view->setCurrentIndex(view->model()->index(0, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(!library->artworkLoading(), 5000);
+        QVERIFY(library->artworkPath().contains("fabric"));
+        QVERIFY(library->artworkPath() != first);
+        const auto output = qEnvironmentVariable("AWAKE_UI_OUTPUT");
+        if (!output.isEmpty()) {
+            QDir().mkpath(output);
+            window->resize(1200, 760);
+            QCoreApplication::processEvents();
+            QVERIFY(window->grab().save(output + "/glass-world.png"));
+            window->resize(900, 640);
+            QCoreApplication::processEvents();
+            QVERIFY(window->grab().save(output + "/glass-compact.png"));
+        }
+        search->setText("no instance");
+        QCOMPARE(library->artworkPath(), QString());
+        QCOMPARE(library->artworkInstance(), QString());
+        reduced->setChecked(false);
+        search->clear();
+        view->setCurrentIndex(view->model()->index(0, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(!library->artworkLoading(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!library->animationRunning(), 1500);
+        QVERIFY(!APPLICATION->settings()->get("AwakeReduceMotion").toBool());
+    }
     void bundledLanguagesSwitchWithoutDownloads()
     {
         auto* translations = APPLICATION->translations();
@@ -189,7 +253,8 @@ int main(int argc, char** argv)
                    "IgnoreJavaWizard=true\nAutomaticJavaDownload=true\nAutomaticJavaSwitch=true\nUserAskedAboutAutomaticJavaDownload=true\n"
                    "ProxyType=HTTP\nProxyAddr=127.0.0.1\nProxyPort=9\nJavaPath=") +
             QByteArray(AWAKE_TEST_JAVA_PATH) + "\n");
-    const QStringList fixtureIds = qEnvironmentVariableIsSet("AWAKE_TEST_EMPTY_LIBRARY") ? QStringList{} : QStringList{ "vanilla", "fabric" };
+    const QStringList fixtureIds =
+        qEnvironmentVariableIsSet("AWAKE_TEST_EMPTY_LIBRARY") ? QStringList{} : QStringList{ "vanilla", "fabric" };
     for (const auto& id : fixtureIds) {
         const auto instance = path + "/instances/" + id;
         QDir().mkpath(instance);
@@ -200,6 +265,16 @@ int main(int argc, char** argv)
         if (id == "fabric")
             components.append(QJsonObject{ { "uid", "net.fabricmc.fabric-loader" }, { "version", "0.16.14" } });
         writeFile(instance + "/mmc-pack.json", QJsonDocument(QJsonObject{ { "formatVersion", 1 }, { "components", components } }).toJson());
+        const auto screenshots = instance + "/.minecraft/screenshots";
+        QDir().mkpath(screenshots);
+        // Synthetic color fixtures verify local artwork selection, not Minecraft rendering.
+        QImage image(1200, 760, QImage::Format_RGB32);
+        image.fill(id == "fabric" ? QColor("#58766e") : QColor("#8a6f4b"));
+        if (!image.save(screenshots + "/one.png"))
+            qFatal("Cannot write screenshot fixture");
+        image.fill(id == "fabric" ? QColor("#384c62") : QColor("#6f8757"));
+        if (!image.save(screenshots + "/two.png"))
+            qFatal("Cannot write screenshot fixture");
     }
     qputenv("AWAKELAUNCHER_DATA_DIR", path.toUtf8());
     // Application parses its own command line; QtTest arguments belong only to qExec.
@@ -208,8 +283,11 @@ int main(int argc, char** argv)
     {
         Application app(applicationArgc, argv);
 #ifdef Q_OS_WIN
-        if (QGuiApplication::platformName() == "offscreen")
+        if (QGuiApplication::platformName() == "offscreen") {
+            QFontDatabase::addApplicationFont(qEnvironmentVariable("WINDIR") + "/Fonts/segoeui.ttf");
+            QFontDatabase::addApplicationFont(qEnvironmentVariable("WINDIR") + "/Fonts/segoeuib.ttf");
             QApplication::setFont(QFont("Segoe UI", 9));
+        }
 #endif
         Q_INIT_RESOURCE(multimc);
         Q_INIT_RESOURCE(backgrounds);
