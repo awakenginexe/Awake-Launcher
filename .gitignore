@@ -62,3 +62,13 @@ flatbuild
 
 # Snap
 *.snap
+
+# Local development and workflow artifacts
+.tools/
+.baseline/
+.validation/
+.superpowers/
+docs/ARCHITECTURE.md
+docs/IMPLEMENTATION.md
+DESIGN.md
+
