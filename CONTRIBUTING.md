@@ -1,8 +1,8 @@
-# Contributions Guidelines
+# Contributing to Awake Launcher
 
-## Foreword on AI usage
+## Changes and validation
 
-Our team believes in **human contributions**. Any contribution - be it an issue report or a pull request - which is created by, documented by, or aided by AI/LLM usage will typically be **closed and locked without further discussion**.
+Contributors are responsible for the code they submit, including tool-assisted work. Explain the change, run relevant builds and tests, and state any runtime checks still needed. Preserve upstream licenses and copyright notices. Keep credentials, user data and generated development reports out of commits.
 
 ## Code style
 
@@ -117,6 +117,4 @@ As a bonus, you can also [cryptographically sign your commits][gh-signing-commit
 
 ## Backporting to Release Branches
 
-We use [automated backports](https://github.com/PrismLauncher/PrismLauncher/blob/develop/.github/workflows/backport.yml) to merge specific contributions from develop into `release` branches.
-
-This is done when pull requests are merged and have labels such as `backport release-7.x` - which should be added along with the milestone for the release.
+Awake does not use Prism's backport automation. Release branches and backports will be introduced when Awake has a tested release process.

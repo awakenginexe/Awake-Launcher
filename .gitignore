@@ -65,6 +65,7 @@ flatbuild
 
 # Local development and workflow artifacts
 .tools/
+aqtinstall.log
 .baseline/
 .validation/
 .superpowers/
