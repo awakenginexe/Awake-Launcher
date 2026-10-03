@@ -41,6 +41,7 @@
 #include "ui_FlamePage.h"
 
 #include <QKeyEvent>
+#include <QLabel>
 #include <memory>
 
 #include "FlameModel.h"
@@ -54,6 +55,18 @@ FlamePage::FlamePage(NewInstanceDialog* dialog, QWidget* parent)
     : QWidget(parent), m_ui(new Ui::FlamePage), m_dialog(dialog), m_listModel(new Flame::ListModel(this)), m_fetchProgress(this, false)
 {
     m_ui->setupUi(this);
+
+    auto* searchError = new QLabel(this);
+    searchError->setObjectName("curseforgeSearchError");
+    searchError->setTextFormat(Qt::PlainText);
+    searchError->setWordWrap(true);
+    searchError->hide();
+    m_ui->verticalLayout->insertWidget(0, searchError);
+    connect(m_listModel, &Flame::ListModel::searchError, this, [this, searchError](const QString& reason) {
+        searchError->setVisible(!reason.isEmpty());
+        searchError->setText(reason.isEmpty() ? QString() :
+            tr("CurseForge search failed. Check the API key in Settings → Services and your connection.\n%1").arg(reason));
+    });
 
     m_ui->packView->setModel(m_listModel);
 
