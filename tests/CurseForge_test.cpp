@@ -30,6 +30,7 @@
 #include "ui/dialogs/NewInstanceDialog.h"
 #include "ui/dialogs/ResourceDownloadDialog.h"
 #include "ui/pages/modplatform/flame/FlameModel.h"
+#include "ui/pages/modplatform/flame/FlamePage.h"
 #include "ui/pages/instance/ManagedPackPage.h"
 #include "ui/widgets/PageContainer.h"
 
@@ -104,6 +105,26 @@ private slots:
         }
         APPLICATION->settings()->reset("FlameKeyOverride");
         QVERIFY(APPLICATION->getFlameAPIKey() == BuildConfig.FLAME_API_KEY);
+    }
+    void buildKeyEnablesCurseForge()
+    {
+        if (BuildConfig.FLAME_API_KEY.isEmpty()) QSKIP("This test requires a keyed build");
+        APPLICATION->settings()->reset("FlameKeyOverride");
+        QVERIFY(APPLICATION->settings()->get("FlameKeyOverride").toString().isEmpty());
+        QVERIFY(APPLICATION->capabilities() & Application::SupportsFlame);
+        NewInstanceDialog dialog({});
+        auto* container = dialog.findChild<PageContainer*>();
+        QVERIFY(container);
+        QVERIFY(dynamic_cast<FlamePage*>(container->getPage("flame")));
+        QVERIFY(!dialog.findChild<QLabel*>("curseforgeKeyDiagnostic"));
+        if (qEnvironmentVariableIsEmpty("AWAKE_CF_TEST_KEY")) return;
+        APPLICATION->network()->setProxy(QNetworkProxy::NoProxy);
+        QList<ModPlatform::IndexedPack::Ptr> projects;
+        QString failure;
+        auto search = FlameAPI::get().searchProjects({.type = ModPlatform::ResourceType::Modpack, .search = "Minimalistic Stuff"},
+            {.onSucceed = [&](auto& result) { projects = result; }, .onFail = [&](const auto& reason, int) { failure = reason; }});
+        QVERIFY2(runTask(search.get()), qPrintable(failure));
+        QVERIFY(!projects.isEmpty());
     }
     void searchFailureIsVisible()
     {
