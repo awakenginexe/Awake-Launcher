@@ -1,0 +1,65 @@
+name: Awake Windows development build
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awake-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      VCPKG_MAX_CONCURRENCY: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install Qt
+        run: |
+          python -m pip install "git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O "$env:RUNNER_TEMP/Qt" -m qtnetworkauth qtimageformats
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "CMAKE_PREFIX_PATH=$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64" >> $env:GITHUB_ENV
+          "$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64/bin" >> $env:GITHUB_PATH
+      - name: Configure
+        run: cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=development -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF
+      - name: Build
+        run: cmake --build --preset windows_msvc --config Release --parallel 4
+      - name: Test
+        run: |
+          $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          ctest --preset windows_msvc --build-config Release
+      - name: Package portable build
+        run: |
+          $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          cmake --install build --config Release --prefix install
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --install build --config Release --prefix install --component portable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Awake-Launcher-Windows-development
+          path: install/
+          if-no-files-found: error
