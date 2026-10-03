@@ -20,7 +20,7 @@ void GetSkinStep::perform()
     m_request = request;
     m_request->enableAutoRetry(true);
 
-    m_task.reset(new NetJob("GetSkinStep", APPLICATION->network()));
+    m_task.reset(new NetJob("GetSkinStep", network()));
     m_task->setAskRetry(false);
     m_task->addNetAction(m_request);
 

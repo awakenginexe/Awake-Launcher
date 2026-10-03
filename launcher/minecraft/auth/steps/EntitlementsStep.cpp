@@ -30,12 +30,12 @@ void EntitlementsStep::perform()
                                            { "Accept", "application/json" },
                                            { "Authorization", QString("Bearer %1").arg(m_data->yggdrasilToken.token).toUtf8() } };
 
-    auto [request, response] = Net::Request::makeByteArray(url);
+    auto [request, response] = Net::Request::makeByteArray(url, Net::Request::Option::Sensitive);
     m_request = request;
     m_request->addHeaderProxy(std::make_unique<Net::RawHeaderProxy>(headers));
     m_request->enableAutoRetry(true);
 
-    m_task.reset(new NetJob("EntitlementsStep", APPLICATION->network()));
+    m_task.reset(new NetJob("EntitlementsStep", network()));
     m_task->setAskRetry(false);
     m_task->addNetAction(m_request);
 
@@ -47,7 +47,6 @@ void EntitlementsStep::perform()
 
 void EntitlementsStep::onRequestDone(QByteArray* response)
 {
-    qCDebug(authCredentials()) << *response;
 
     // TODO: check presence of same entitlementsRequestId?
     // TODO: validate JWTs?

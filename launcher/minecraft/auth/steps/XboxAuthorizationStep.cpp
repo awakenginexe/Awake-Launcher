@@ -41,12 +41,12 @@ void XboxAuthorizationStep::perform()
     auto headers = QList<Net::HeaderPair>{ { .headerName = "Content-Type", .headerValue = "application/json" },
                                            { .headerName = "Accept", .headerValue = "application/json" },
                                            { .headerName = "x-xbl-contract-version", .headerValue = "1" } };
-    auto [request, response] = Net::Request::makeByteArray(url, xboxAuthData.toUtf8());
+    auto [request, response] = Net::Request::makeByteArray(url, xboxAuthData.toUtf8(), Net::Request::Option::Sensitive);
     m_request = request;
     m_request->addHeaderProxy(std::make_unique<Net::RawHeaderProxy>(headers));
     m_request->enableAutoRetry(true);
 
-    m_task.reset(new NetJob("XboxAuthorizationStep", APPLICATION->network()));
+    m_task.reset(new NetJob("XboxAuthorizationStep", network()));
     m_task->setAskRetry(false);
     m_task->addNetAction(m_request);
 
@@ -58,9 +58,8 @@ void XboxAuthorizationStep::perform()
 
 void XboxAuthorizationStep::onRequestDone(QByteArray* response)
 {
-    qCDebug(authCredentials()) << *response;
     if (m_request->error() != QNetworkReply::NoError) {
-        qWarning() << "Reply error:" << m_request->error();
+        qWarning() << "[Auth] Stage: XSTS; HTTP:" << m_request->replyStatusCode();
         if (Net::isApplicationError(m_request->error()) && !Net::isServerError(m_request->error())) {
             if (processSTSError(*response)) {
                 return;
@@ -89,6 +88,7 @@ void XboxAuthorizationStep::onRequestDone(QByteArray* response)
     }
     auto& token = *m_token;
     token = temp;
+    qInfo() << "[Auth] XSTS authorization succeeded";
 
     emit finished(AccountTaskState::STATE_WORKING, tr("Got authorization to access %1").arg(m_relyingParty));
 }
@@ -111,6 +111,7 @@ bool XboxAuthorizationStep::processSTSError(const QByteArray& response)
                           tr("XErr element is missing from %1 authorization error response.").arg(m_authorizationKind));
             return true;
         }
+        qWarning() << "[Auth] XSTS error code:" << errorCode;
         switch (errorCode) {
             case 2148916233: {
                 emit finished(AccountTaskState::STATE_FAILED_SOFT,

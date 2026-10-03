@@ -37,12 +37,12 @@ void XboxUserStep::perform()
         // https://learn.microsoft.com/en-us/gaming/gdk/_content/gc/reference/live/rest/additional/httpstandardheaders
         { "x-xbl-contract-version", "1" }
     };
-    auto [request, response] = Net::Request::makeByteArray(url, xbox_auth_data.toUtf8());
+    auto [request, response] = Net::Request::makeByteArray(url, xbox_auth_data.toUtf8(), Net::Request::Option::Sensitive);
     m_request = request;
     m_request->addHeaderProxy(std::make_unique<Net::RawHeaderProxy>(headers));
     m_request->enableAutoRetry(true);
 
-    m_task.reset(new NetJob("XboxUserStep", APPLICATION->network()));
+    m_task.reset(new NetJob("XboxUserStep", network()));
     m_task->setAskRetry(false);
     m_task->addNetAction(m_request);
 
@@ -72,5 +72,6 @@ void XboxUserStep::onRequestDone(QByteArray* response)
         return;
     }
     m_data->userToken = temp;
+    qInfo() << "[Auth] Xbox Live authentication succeeded";
     emit finished(AccountTaskState::STATE_WORKING, tr("Got Xbox user token"));
 }

@@ -4,6 +4,7 @@
 
 #include "QObjectPtr.h"
 #include "minecraft/auth/AccountData.h"
+class QNetworkAccessManager;
 
 /**
  * Enum for describing the state of the current task.
@@ -30,6 +31,7 @@ class AuthStep : public QObject {
     virtual ~AuthStep() noexcept = default;
 
     virtual QString describe() = 0;
+    void setNetwork(QNetworkAccessManager* manager) { m_network = manager; }
 
    public slots:
     virtual void perform() = 0;
@@ -39,5 +41,7 @@ class AuthStep : public QObject {
     void finished(AccountTaskState resultingState, QString message);
 
    protected:
+    QNetworkAccessManager* network() const;
     AccountData* m_data;
+    QNetworkAccessManager* m_network = nullptr;
 };

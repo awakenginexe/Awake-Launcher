@@ -44,6 +44,7 @@ class MSALoginDialog : public QDialog {
     void onAuthFlowStatus(QString status);
     void authorizeWithBrowser(const QUrl& url);
     void authorizeWithBrowserWithExtra(QString url, QString code, int expiresIn);
+    void startDeviceCode();
 
    private:
     Ui::MSALoginDialog* ui;

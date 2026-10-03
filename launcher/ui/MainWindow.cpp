@@ -40,6 +40,7 @@
 
 #include "Application.h"
 #include "BuildConfig.h"
+#include "minecraft/auth/OAuthCallback.h"
 #include "FileSystem.h"
 
 #include "MainWindow.h"
@@ -1145,6 +1146,18 @@ void MainWindow::processURLs(QList<QUrl> urls)
         if (url.isEmpty() || url.toString().trimmed().isEmpty())
             continue;
 
+        const QUrlQuery parameters(url);
+        const bool hasAuthParameters = parameters.hasQueryItem("code") || parameters.hasQueryItem("state") ||
+                                       parameters.hasQueryItem("error") || parameters.hasQueryItem("access_token") ||
+                                       parameters.hasQueryItem("refresh_token");
+        if (url.scheme() == BuildConfig.LAUNCHER_APP_BINARY_NAME &&
+            (hasAuthParameters || (url.host() != "install" && url.host() != "import" &&
+                                   !url.path().startsWith("/import", Qt::CaseInsensitive)))) {
+            const auto callback = OAuthCallback::parse(url);
+            if (callback) emit APPLICATION->oauthReplyRecieved(*callback);
+            else qWarning() << "[Auth] Rejected malformed OAuth callback";
+            continue;
+        }
         qDebug() << "Processing" << url;
 
         // The isLocalFile() check below doesn't work as intended without an explicit scheme.
@@ -1241,14 +1254,6 @@ void MainWindow::processURLs(QList<QUrl> urls)
                     dlUrlDialod.execWithTask(job.get());
                 }
 
-            } else if (url.scheme() == BuildConfig.LAUNCHER_APP_BINARY_NAME && !isExternalURLImport) {
-                QVariantMap receivedData;
-                const QUrlQuery query(url.query());
-                const auto items = query.queryItems();
-                for (auto it = items.begin(), end = items.end(); it != end; ++it)
-                    receivedData.insert(it->first, it->second);
-                emit APPLICATION->oauthReplyRecieved(receivedData);
-                continue;
             } else if ((url.scheme() == "prismlauncher" || url.scheme() == BuildConfig.LAUNCHER_APP_BINARY_NAME) && isExternalURLImport) {
                 // PrismLauncher URL protocol modpack import
                 // works for any prism fork

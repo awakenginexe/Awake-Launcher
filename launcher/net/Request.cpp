@@ -255,7 +255,7 @@ void Request::downloadError(QNetworkReply::NetworkError error)
         if (m_reply) {
             qCCritical(m_logCat) << getUid().toString() << "HTTP status:" << replyStatusCode() << errorString();
         }
-        if (m_errorResponse.size() > 0) {
+        if (m_errorResponse.size() > 0 && !m_options.testFlag(Option::Sensitive)) {
             qCCritical(m_logCat) << getUid().toString() << "Response from server:" << m_errorResponse;
         }
         m_state = State::Failed;
@@ -377,6 +377,8 @@ void Request::downloadFinished()
         return;
     }
     if (m_state == State::Failed) {
+        if (m_options.testFlag(Option::Sensitive) && replyStatusCode() >= 400)
+            (void)m_sink->write(m_reply->readAll());
         qCDebug(m_logCat) << getUid().toString() << "Request failed in previous step:" << m_url.toString();
         m_sink->abort();
         m_failReason = m_reply->errorString();
@@ -420,7 +422,7 @@ void Request::downloadFinished()
 
 void Request::downloadReadyRead()
 {
-    if (m_state == State::Running) {
+    if (m_state == State::Running || (m_state == State::Failed && m_options.testFlag(Option::Sensitive) && replyStatusCode() >= 400)) {
         auto data = m_reply->readAll();
         auto result = m_sink->write(data);
         if (replyStatusCode() >= 400) {

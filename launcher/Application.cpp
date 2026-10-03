@@ -1437,7 +1437,7 @@ void Application::performMainStartupAction()
     }
 
     if (!m_urlsToImport.isEmpty()) {
-        qDebug() << "<> Importing from url:" << m_urlsToImport;
+        qDebug() << "<> Processing" << m_urlsToImport.size() << "startup URL(s)";
         m_mainWindow->processURLs(m_urlsToImport);
     }
 }
@@ -1473,7 +1473,7 @@ void Application::messageReceived(const QByteArray& message)
             isLoginAtempt = !url.isEmpty() && normalizeImportUrl(url).scheme() == BuildConfig.LAUNCHER_APP_BINARY_NAME;
         }
         if (!isLoginAtempt) {
-            qDebug() << "Received message" << message << "while still initializing. It will be ignored.";
+            qDebug() << "Received a message while still initializing. It will be ignored.";
             return;
         }
     }

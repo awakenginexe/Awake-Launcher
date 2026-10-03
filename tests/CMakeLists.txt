@@ -104,3 +104,6 @@ endif()
 
 ecm_add_test(CurseForge_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME CurseForge)
 set_tests_properties(CurseForge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 300)
+
+ecm_add_test(MicrosoftAuth_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME MicrosoftAuth)
+set_tests_properties(MicrosoftAuth PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 120)

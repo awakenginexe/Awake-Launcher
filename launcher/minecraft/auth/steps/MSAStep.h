@@ -35,6 +35,7 @@
 
 #pragma once
 #include <QObject>
+#include <QTimer>
 
 #include "minecraft/auth/AuthStep.h"
 
@@ -46,6 +47,7 @@ class MSAStep : public AuthStep {
     virtual ~MSAStep() noexcept = default;
 
     void perform() override;
+    void abort() override;
 
     QString describe() override;
 
@@ -56,4 +58,7 @@ class MSAStep : public AuthStep {
     bool m_silent;
     QString m_clientId;
     QOAuth2AuthorizationCodeFlow m_oauth2;
+    QTimer m_timeout;
+    bool m_complete = false;
+    void complete(AccountTaskState state, const QString& message);
 };
