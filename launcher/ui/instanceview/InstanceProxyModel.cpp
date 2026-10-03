@@ -18,7 +18,9 @@
 #include <BaseInstance.h>
 #include <icons/IconList.h>
 #include "Application.h"
+#include "InstanceList.h"
 #include "InstanceView.h"
+#include "awake/InstanceSearch.h"
 
 #include <QDebug>
 
@@ -59,6 +61,11 @@ bool InstanceProxyModel::subSortLessThan(const QModelIndex& left, const QModelIn
 {
     BaseInstance* pdataLeft = static_cast<BaseInstance*>(left.internalPointer());
     BaseInstance* pdataRight = static_cast<BaseInstance*>(right.internalPointer());
+    const auto pinned = APPLICATION->settings()->get("AwakePinnedInstances").toStringList();
+    const bool leftPinned = pinned.contains(pdataLeft->id());
+    const bool rightPinned = pinned.contains(pdataRight->id());
+    if (leftPinned != rightPinned)
+        return leftPinned;
     QString sortMode = APPLICATION->settings()->get("InstSortMode").toString();
     if (sortMode == "LastLaunch") {
         return pdataLeft->lastLaunch() > pdataRight->lastLaunch();
@@ -70,4 +77,25 @@ bool InstanceProxyModel::subSortLessThan(const QModelIndex& left, const QModelIn
     } else {
         return m_naturalSort.compare(pdataLeft->name(), pdataRight->name()) < 0;
     }
+}
+
+void InstanceProxyModel::setSearchQuery(const QString& query)
+{
+    m_searchQuery = query;
+    invalidate();
+}
+
+void InstanceProxyModel::setPinnedOnly(bool pinnedOnly)
+{
+    m_pinnedOnly = pinnedOnly;
+    invalidate();
+}
+
+bool InstanceProxyModel::filterAcceptsRow(int row, const QModelIndex& parent) const
+{
+    const auto item = sourceModel()->index(row, 0, parent);
+    if (m_pinnedOnly &&
+        !APPLICATION->settings()->get("AwakePinnedInstances").toStringList().contains(item.data(InstanceList::InstanceIDRole).toString()))
+        return false;
+    return Awake::matchesInstance(item.data(Qt::DisplayRole).toString(), item.data(InstanceViewRoles::GroupRole).toString(), m_searchQuery);
 }

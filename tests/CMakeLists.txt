@@ -1,5 +1,19 @@
 project(tests)
 
+ecm_add_test(AwakeLocale_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME AwakeLocale)
+ecm_add_test(AwakeTheme_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME AwakeTheme)
+ecm_add_test(AwakeSearch_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME AwakeSearch)
+ecm_add_test(AwakeLibrary_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
+    TEST_NAME AwakeLibrary)
+target_compile_definitions(AwakeLibrary PRIVATE AWAKE_TEST_JAVA_PATH="${Java_JAVA_EXECUTABLE}")
+set_tests_properties(AwakeLibrary PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+if(WIN32)
+    set_property(TEST AwakeLibrary APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
+endif()
+
 ecm_add_test(FileSystem_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME FileSystem)
 
@@ -69,10 +83,3 @@ ecm_add_test(XmlLogs_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR
 
 ecm_add_test(Commandline_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME Commandline)
-
-ecm_add_test(AwakeLocale_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
-    TEST_NAME AwakeLocale)
-ecm_add_test(AwakeTheme_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
-    TEST_NAME AwakeTheme)
-ecm_add_test(AwakeSearch_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
-    TEST_NAME AwakeSearch)

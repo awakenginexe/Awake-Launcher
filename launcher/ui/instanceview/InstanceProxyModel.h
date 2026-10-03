@@ -23,12 +23,17 @@ class InstanceProxyModel : public QSortFilterProxyModel {
 
    public:
     InstanceProxyModel(QObject* parent = 0);
+    void setSearchQuery(const QString& query);
+    void setPinnedOnly(bool pinnedOnly);
 
    protected:
     QVariant data(const QModelIndex& index, int role) const override;
     bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
+    bool filterAcceptsRow(int row, const QModelIndex& parent) const override;
     bool subSortLessThan(const QModelIndex& left, const QModelIndex& right) const;
 
    private:
     QCollator m_naturalSort;
+    QString m_searchQuery;
+    bool m_pinnedOnly = false;
 };

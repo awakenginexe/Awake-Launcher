@@ -78,6 +78,12 @@ class InstanceView : public QAbstractItemView {
     virtual QRegion visualRegionForSelection(const QItemSelection& selection) const override;
 
     int spacing() const { return m_spacing; };
+    void setCompact(bool compact);
+    void setFilteredEmpty(bool filtered)
+    {
+        m_filteredEmpty = filtered;
+        viewport()->update();
+    }
     void setPaintCat(bool visible);
 
    public slots:
@@ -115,6 +121,7 @@ class InstanceView : public QAbstractItemView {
 
    private:
     friend struct VisualGroup;
+    bool m_filteredEmpty = false;
     QList<VisualGroup*> m_groups;
 
     visibilityFunction m_fVisibility;
@@ -125,7 +132,8 @@ class InstanceView : public QAbstractItemView {
     int m_bottomMargin = 5;
     int m_categoryMargin = 5;
     int m_spacing = 5;
-    int m_itemWidth = 100;
+    int m_itemWidth = 176;
+    bool m_compact = false;
     int m_currentItemsPerRow = -1;
     int m_currentCursorColumn = -1;
     mutable QCache<int, QRect> m_geometryCache;
