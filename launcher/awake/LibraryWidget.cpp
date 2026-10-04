@@ -25,31 +25,39 @@ LibraryWidget::LibraryWidget(QWidget* instanceView,
     : ArtworkCanvas(parent), m_instanceView(instanceView)
 {
     setObjectName("awakeCanvas");
+
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(18, 18, 26, 24);
-    layout->setSpacing(30);
+    layout->setContentsMargins(16, 16, 18, 18);
+    layout->setSpacing(18);
+
     m_navigation = new GlassSurface(this, this);
     m_navigation->setObjectName("awakeNavigation");
-    m_navigation->setFixedWidth(280);
+    m_navigation->setFixedWidth(250);
+
     auto* navigation = new QVBoxLayout(m_navigation);
-    navigation->setContentsMargins(18, 22, 18, 18);
-    navigation->setSpacing(16);
+    navigation->setContentsMargins(16, 18, 16, 14);
+    navigation->setSpacing(12);
+
     auto* brand = new QHBoxLayout;
     auto* mark = new QLabel("A", m_navigation);
     mark->setObjectName("awakeMark");
     mark->setAlignment(Qt::AlignCenter);
-    mark->setFixedSize(38, 38);
+    mark->setFixedSize(36, 36);
+
     auto* wordmark = new QLabel("AWAKE", m_navigation);
     wordmark->setObjectName("awakeWordmark");
+
     brand->addWidget(mark);
     brand->addSpacing(8);
     brand->addWidget(wordmark);
     brand->addStretch();
-    auto* add = new MotionButton(Glyph::Add, m_navigation);
-    add->setDefaultAction(create);
-    add->setFixedWidth(42);
-    brand->addWidget(add);
+
+    m_add = new MotionButton(Glyph::Add, m_navigation);
+    m_add->setDefaultAction(create);
+    m_add->setFixedSize(40, 40);
+    brand->addWidget(m_add);
     navigation->addLayout(brand);
+
     auto* heading = new QHBoxLayout;
     m_heading = new QLabel(m_navigation);
     m_heading->setObjectName("awakeHeading");
@@ -57,16 +65,19 @@ LibraryWidget::LibraryWidget(QWidget* instanceView,
     m_count->setObjectName("awakeMuted");
     heading->addWidget(m_heading);
     heading->addStretch();
-    navigation->addSpacing(10);
+    heading->addWidget(m_count);
+    navigation->addSpacing(6);
     navigation->addLayout(heading);
-    navigation->addWidget(m_count);
+
     m_search = new QLineEdit(m_navigation);
     m_search->setObjectName("awakeSearch");
     m_search->setClearButtonEnabled(true);
     m_search->addAction(glyph(Glyph::Search), QLineEdit::LeadingPosition);
     m_search->setMinimumHeight(40);
     navigation->addWidget(m_search);
+
     auto* controls = new QHBoxLayout;
+    controls->setSpacing(8);
     m_sort = new QComboBox(m_navigation);
     m_sort->setObjectName("awakeSort");
     m_viewMode = new QComboBox(m_navigation);
@@ -74,111 +85,151 @@ LibraryWidget::LibraryWidget(QWidget* instanceView,
     controls->addWidget(m_sort, 1);
     controls->addWidget(m_viewMode);
     navigation->addLayout(controls);
+
     m_pinnedOnly = new QCheckBox(m_navigation);
     m_pinnedOnly->setObjectName("awakePinnedOnly");
     navigation->addWidget(m_pinnedOnly);
-    navigation->addWidget(instanceView, 1);
+
+    navigation->addWidget(instanceView, 10);
+
     m_emptyHint = new QLabel(m_navigation);
     m_emptyHint->setObjectName("awakeEmptyHint");
     m_emptyHint->setWordWrap(true);
-    m_emptyHint->setAlignment(Qt::AlignTop);
-    navigation->addWidget(m_emptyHint, 1);
+    m_emptyHint->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    navigation->addWidget(m_emptyHint);
+
+    navigation->addStretch(1);
+
     auto* settingsButton = new MotionButton(Glyph::Settings, m_navigation);
     settingsButton->setDefaultAction(settings);
     settingsButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    settingsButton->setMinimumWidth(150);
     settingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     navigation->addWidget(settingsButton);
+
     layout->addWidget(m_navigation);
+
     auto* hero = new QVBoxLayout;
-    hero->setContentsMargins(0, 5, 0, 0);
-    hero->setSpacing(22);
+    hero->setContentsMargins(4, 2, 0, 0);
+    hero->setSpacing(0);
+
     auto* top = new QHBoxLayout;
     m_artworkCaption = new QLabel(this);
     m_artworkCaption->setObjectName("awakeArtworkCaption");
     m_artworkCaption->setTextFormat(Qt::PlainText);
     top->addWidget(m_artworkCaption);
     top->addStretch();
+
     auto* accountButton = new MotionButton(Glyph::Accounts, this);
     accountButton->setDefaultAction(accounts);
     accountButton->setObjectName("awakeAccounts");
     accountButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     accountButton->setPopupMode(QToolButton::InstantPopup);
-    accountButton->setMinimumWidth(140);
+    accountButton->setMinimumWidth(136);
     accountButton->setMaximumWidth(210);
     top->addWidget(accountButton);
+
     m_menu = new MotionButton(Glyph::Menu, this);
     m_menu->setObjectName("awakeApplicationMenu");
     m_menu->setMenu(applicationMenu);
     m_menu->setPopupMode(QToolButton::InstantPopup);
-    m_menu->setFixedWidth(44);
+    m_menu->setFixedWidth(42);
     top->addWidget(m_menu);
+
     hero->addLayout(top);
-    hero->addSpacing(28);
+    hero->addStretch(1);
+
+    auto* bottom = new QHBoxLayout;
+    bottom->setSpacing(28);
+
+    auto* identity = new QVBoxLayout;
+    identity->setSpacing(8);
+
     m_name = new QLabel(this);
     m_name->setObjectName("awakeDetailName");
     m_name->setTextFormat(Qt::PlainText);
     m_name->setWordWrap(true);
-    hero->addWidget(m_name);
+    identity->addWidget(m_name);
+
     m_description = new QLabel(this);
     m_description->setObjectName("awakeWorldDescription");
     m_description->setTextFormat(Qt::PlainText);
     m_description->setWordWrap(true);
-    hero->addWidget(m_description);
-    hero->addStretch(1);
+    m_description->setMaximumWidth(560);
+    identity->addWidget(m_description);
+
     m_createHero = new MotionButton(Glyph::Add, this, true);
     m_createHero->setDefaultAction(create);
     m_createHero->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    m_createHero->setMinimumWidth(220);
+    m_createHero->setMinimumWidth(210);
+    m_createHero->setMaximumWidth(260);
     m_createHero->setObjectName("awakeCreateHero");
-    hero->addWidget(m_createHero, 0, Qt::AlignLeft);
+    identity->addSpacing(10);
+    identity->addWidget(m_createHero, 0, Qt::AlignLeft);
+
+    bottom->addLayout(identity, 1);
+
     m_dock = new GlassSurface(this, this);
     m_dock->setObjectName("awakeLaunchDock");
-    m_dock->setMaximumWidth(560);
+    m_dock->setMinimumWidth(360);
+    m_dock->setMaximumWidth(500);
+
     auto* dock = new QVBoxLayout(m_dock);
-    dock->setContentsMargins(20, 18, 20, 20);
-    dock->setSpacing(14);
+    dock->setContentsMargins(18, 16, 18, 18);
+    dock->setSpacing(12);
+
     m_runtime = new QLabel(m_dock);
     m_runtime->setObjectName("awakeRuntime");
     m_runtime->setTextFormat(Qt::PlainText);
     m_runtime->setWordWrap(true);
     m_runtime->setTextInteractionFlags(Qt::TextSelectableByMouse);
     dock->addWidget(m_runtime);
+
     m_pin = new QCheckBox(m_dock);
     m_pin->setObjectName("awakePin");
     dock->addWidget(m_pin);
+
     auto* actions = new QHBoxLayout;
-    actions->setSpacing(10);
+    actions->setSpacing(8);
+
     auto* play = new MotionButton(Glyph::Play, m_dock, true);
     play->setObjectName("awakeLaunch");
     play->setDefaultAction(launch);
     play->setPopupMode(QToolButton::MenuButtonPopup);
     play->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    play->setMinimumWidth(190);
+    play->setMinimumWidth(184);
     play->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     actions->addWidget(play, 1);
+
     auto* editButton = new MotionButton(Glyph::Edit, m_dock);
     editButton->setDefaultAction(edit);
-    editButton->setFixedWidth(44);
+    editButton->setFixedWidth(42);
     actions->addWidget(editButton);
+
     auto* folderButton = new MotionButton(Glyph::Folder, m_dock);
     folderButton->setDefaultAction(folder);
-    folderButton->setFixedWidth(44);
+    folderButton->setFixedWidth(42);
     actions->addWidget(folderButton);
+
     auto* menu = new QMenu(m_dock);
     for (auto* action : management)
         menu->addAction(action);
+
     m_more = new MotionButton(Glyph::More, m_dock);
     m_more->setObjectName("awakeMore");
     m_more->setMenu(menu);
     m_more->setPopupMode(QToolButton::InstantPopup);
-    m_more->setFixedWidth(44);
+    m_more->setFixedWidth(42);
     actions->addWidget(m_more);
+
     dock->addLayout(actions);
-    hero->addWidget(m_dock, 0, Qt::AlignRight);
+
+    bottom->addWidget(m_dock, 0, Qt::AlignBottom);
+    hero->addLayout(bottom);
     layout->addLayout(hero, 1);
+
     retranslate();
     clearInstance();
+
     connect(this, &ArtworkCanvas::artworkChanged, this, &LibraryWidget::updateArtworkCaption);
     connect(m_search, &QLineEdit::textChanged, this, &LibraryWidget::searchChanged);
     connect(m_pin, &QCheckBox::toggled, this, &LibraryWidget::pinChanged);
@@ -218,17 +269,28 @@ void LibraryWidget::clearInstance()
 }
 void LibraryWidget::updateEmptyState()
 {
-    m_instanceView->setVisible(m_visible > 0);
-    m_emptyHint->setVisible(m_visible == 0);
-    m_emptyHint->setText(m_total == 0 ? tr("Your library starts here. Create an instance to add your first world.")
-                                      : tr("No instances match your search."));
+    const bool hasInstances = m_total > 0;
+    const bool hasVisibleInstances = m_visible > 0;
+
+    m_add->setVisible(hasInstances);
+    m_search->setVisible(hasInstances);
+    m_sort->setVisible(hasInstances);
+    m_viewMode->setVisible(hasInstances);
+    m_pinnedOnly->setVisible(hasInstances);
+
+    m_instanceView->setVisible(hasVisibleInstances);
+    m_emptyHint->setVisible(hasInstances && !hasVisibleInstances);
+    if (hasInstances && !hasVisibleInstances)
+        m_emptyHint->setText(tr("No instances match your search."));
+
     if (!m_detailValues.isEmpty())
         return;
+
     m_dock->hide();
-    m_createHero->setVisible(m_total == 0);
-    m_name->setText(m_total == 0 ? tr("Your worlds, within reach.") : tr("Choose an instance"));
-    m_description->setText(m_total == 0 ? tr("Create your first instance to start playing.")
-                                        : tr("Choose a world from your library to play and manage it."));
+    m_createHero->setVisible(!hasInstances);
+    m_name->setText(hasInstances ? tr("Choose an instance") : tr("No instances yet."));
+    m_description->setText(hasInstances ? tr("Choose a world from your library to play and manage it.")
+                                        : tr("Create or import an instance to start playing."));
 }
 void LibraryWidget::updateArtworkCaption()
 {

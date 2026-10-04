@@ -43,6 +43,7 @@
 #include "net/NetUtils.h"
 #include "ui/InstanceWindow.h"
 #include "ui/dialogs/CustomMessageBox.h"
+#include "ui/dialogs/AwakePopupDialog.h"
 #include "ui/dialogs/MSALoginDialog.h"
 #include "ui/dialogs/ProfileSelectDialog.h"
 #include "ui/dialogs/ProfileSetupDialog.h"
@@ -77,10 +78,10 @@ void LaunchController::executeTask()
     login();
 }
 
-void LaunchController::decideAccount()
+bool LaunchController::decideAccount()
 {
     if (m_accountToUse) {
-        return;
+        return true;
     }
 
     // Select the account to use. If the instance has a specific account set, that will be used. Otherwise, the default account will be used
@@ -94,21 +95,11 @@ void LaunchController::decideAccount()
     }
 
     if (!accounts->anyAccountIsValid()) {
-        // Tell the user they need to log in at least one account in order to play.
-        auto reply = CustomMessageBox::selectable(m_parentWidget, tr("No Accounts"),
-                                                  tr("In order to play Minecraft, you must have at least one Microsoft "
-                                                     "account which owns Minecraft logged in. "
-                                                     "Would you like to open the account manager to add an account now?"),
-                                                  QMessageBox::Information, QMessageBox::Yes | QMessageBox::No)
-                         ->exec();
-
-        if (reply == QMessageBox::Yes) {
-            // Open the account manager.
+        if (m_wantedLaunchMode == LaunchMode::Demo) return true;
+        if (AwakePopupDialog::confirmAccountSetup(m_parentWidget)) {
             APPLICATION->ShowGlobalSettings(m_parentWidget, "accounts");
-        } else if (reply == QMessageBox::No) {
-            // Do not open "profile select" dialog.
-            return;
         }
+        return false;
     }
 
     if (!m_accountToUse && accounts->anyAccountIsValid()) {
@@ -126,6 +117,7 @@ void LaunchController::decideAccount()
             accounts->setDefaultAccount(m_accountToUse);
         }
     }
+    return true;
 }
 
 LaunchDecision LaunchController::decideLaunchMode()
@@ -278,7 +270,10 @@ QString LaunchController::askOfflineName(const QString& playerName, bool* ok)
 
 void LaunchController::login()
 {
-    decideAccount();
+    if (!decideAccount()) {
+        emitAborted();
+        return;
+    }
 
     LaunchDecision decision = decideLaunchMode();
     while (decision == LaunchDecision::Undecided) {

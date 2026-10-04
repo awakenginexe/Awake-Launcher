@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include <QDialog>
+#include "AwakePopupDialog.h"
 #include <QList>
 #include <QString>
 
@@ -34,6 +34,7 @@
 #include "tasks/ConcurrentTask.h"
 
 class QPushButton;
+class QLabel;
 
 struct BlockedMod {
     QString name;
@@ -46,13 +47,7 @@ struct BlockedMod {
     bool move = false;
 };
 
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class BlockedModsDialog;
-}
-QT_END_NAMESPACE
-
-class BlockedModsDialog : public QDialog {
+class BlockedModsDialog : public AwakePopupDialog {
     Q_OBJECT
 
    public:
@@ -68,7 +63,11 @@ class BlockedModsDialog : public QDialog {
     void done(int r) override;
 
    private:
-    Ui::BlockedModsDialog* m_ui;
+    QList<QLabel*> m_statusLabels;
+    QList<QPushButton*> m_downloadButtons;
+    QLabel* m_summary;
+    QLabel* m_folders;
+    QPushButton* m_openMissing;
     QList<BlockedMod>& m_mods;
     QFileSystemWatcher m_watcher;
     shared_qobject_ptr<ConcurrentTask> m_hashingTask;

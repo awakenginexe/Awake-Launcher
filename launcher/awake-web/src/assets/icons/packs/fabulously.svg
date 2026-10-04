@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="foCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#061824" stroke="#06b6d4" stroke-width="2"/>
+  <!-- Sparkle star -->
+  <path d="M32 10 L36 24 L50 28 L36 32 L32 46 L28 32 L14 28 L28 24 Z" fill="url(#foCyan)"/>
+  <!-- Speed lines -->
+  <path d="M12 48 H36 M18 53 H42 M24 58 H38" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

@@ -80,6 +80,7 @@
 #include "ui/pagedialog/PageDialog.h"
 
 #include "ui/themes/ThemeManager.h"
+#include "awake/AwakeTheme.h"
 
 #include "ApplicationMessage.h"
 
@@ -312,7 +313,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     setOrganizationName(BuildConfig.LAUNCHER_NAME);
     setOrganizationDomain(BuildConfig.LAUNCHER_DOMAIN);
     setApplicationName(BuildConfig.LAUNCHER_NAME);
-    setApplicationDisplayName(QString("%1 %2").arg(BuildConfig.LAUNCHER_DISPLAYNAME, BuildConfig.printableVersionString()));
+    setApplicationDisplayName(QString("%1 %2").arg(BuildConfig.LAUNCHER_DISPLAYNAME, BuildConfig.versionString()));
     setApplicationVersion(BuildConfig.printableVersionString() + "\n" + BuildConfig.GIT_COMMIT);
     setDesktopFileName(BuildConfig.LAUNCHER_APPID);
     m_startTime = QDateTime::currentDateTime();
@@ -648,7 +649,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         // Theming
         m_settings->registerSetting("IconTheme", "pe_light");
         m_settings->registerSetting("ApplicationTheme", QString("awake-dark"));
-        m_settings->registerSetting("AwakeCompactLibrary", true);
+        m_settings->registerSetting("AwakeCompactLibrary", false);
         m_settings->registerSetting("AwakePinnedInstances", QStringList());
         m_settings->registerSetting("AwakeReduceMotion", false);
         m_settings->registerSetting("BackgroundCat", QString("kitteh"));
@@ -761,6 +762,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         auto defaultEnableAutoJava = m_settings->get("JavaPath").toString().isEmpty();
         m_settings->registerSetting("AutomaticJavaSwitch", defaultEnableAutoJava);
         m_settings->registerSetting("AutomaticJavaDownload", defaultEnableAutoJava);
+        m_settings->registerSetting("AwakeJavaProfile", m_settings->get("AutomaticJavaSwitch").toBool() ? "awake" : "custom");
         m_settings->registerSetting("UserAskedAboutAutomaticJavaDownload", false);
 
         // Legacy settings
@@ -919,7 +921,6 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             m_globalSettingsProvider = std::make_unique<GenericPageProvider>(tr("Settings"));
             m_globalSettingsProvider->addPage<LauncherPage>();
             m_globalSettingsProvider->addPage<LanguagePage>();
-            m_globalSettingsProvider->addPage<AppearancePage>();
             m_globalSettingsProvider->addPage<MinecraftPage>();
             m_globalSettingsProvider->addPage<JavaPage>();
             m_globalSettingsProvider->addPage<AccountListPage>();
@@ -970,6 +971,10 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     // Themes
     m_themeManager = std::make_unique<ThemeManager>();
+    connect(m_settings.get(), &SettingsObject::SettingChanged, this, [this](const Setting& setting, QVariant) {
+        if (setting.id() == "Language" && m_settings->get("ApplicationTheme").toString() == "awake-dark")
+            setStyleSheet(Awake::Theme{}.appStyleSheet());
+    });
 
 #ifdef Q_OS_MACOS
     // for macOS: getting directory settings will generate URL security-scoped bookmarks if needed and not present
@@ -1693,6 +1698,9 @@ void Application::controllerFinished()
 
 void Application::ShowGlobalSettings(class QWidget* parent, QString openPage)
 {
+    if (openPage == "accounts" && showMainWindow(false)->openWebAccounts()) {
+        return;
+    }
     if (!m_globalSettingsProvider) {
         return;
     }
@@ -1714,7 +1722,12 @@ MainWindow* Application::showMainWindow(bool minimized)
     } else {
         m_mainWindow = new MainWindow();
         m_mainWindow->restoreState(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowState").toString().toUtf8()));
-        m_mainWindow->restoreGeometry(QByteArray::fromBase64(APPLICATION->settings()->get("MainWindowGeometry").toString().toUtf8()));
+        const auto savedGeometry = APPLICATION->settings()->get("MainWindowGeometry").toString();
+        if (!savedGeometry.isEmpty()) {
+            m_mainWindow->restoreGeometry(QByteArray::fromBase64(savedGeometry.toUtf8()));
+        } else {
+            m_mainWindow->resize(1024, 580);
+        }
 
         if (minimized) {
             m_mainWindow->showMinimized();

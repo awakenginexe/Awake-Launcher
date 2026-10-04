@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="monGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#84cc16" />
+      <stop offset="100%" stop-color="#4d7c0f" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0c1708" stroke="#84cc16" stroke-width="2"/>
+  <!-- Monster eyes -->
+  <polygon points="16,28 28,32 18,36" fill="url(#monGrad)"/>
+  <polygon points="48,28 36,32 46,36" fill="url(#monGrad)"/>
+  <!-- Claw slash marks -->
+  <path d="M22 14 L14 48 M34 10 L28 52 M46 14 L42 48" stroke="#a3e635" stroke-width="3" stroke-linecap="round"/>
+</svg>

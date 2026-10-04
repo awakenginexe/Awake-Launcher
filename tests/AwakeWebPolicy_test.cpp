@@ -23,12 +23,20 @@ private slots:
     }
     void commandBoundary()
     {
+        QVERIFY(preferenceAllowed("javaProfile", "awake"));
+        QVERIFY(preferenceAllowed("javaProfile", "graalvm"));
+        QVERIFY(!preferenceAllowed("javaProfile", "maximum-fps"));
+        QVERIFY(!preferenceAllowed("javaProfile", QVariantMap{{"path", "C:/anything.exe"}}));
         QVERIFY(actionAllowed("launchOptions"));
         QVERIFY(!actionAllowed("executeCommand"));
         QVERIFY(preferenceAllowed("reducedMotion", true));
         QVERIFY(!preferenceAllowed("reducedMotion", "true"));
         QVERIFY(preferenceAllowed("sortMode", "LastLaunch"));
         QVERIFY(!preferenceAllowed("sortMode", "unknown"));
+        QVERIFY(preferenceAllowed("language", "zh-CN"));
+        QVERIFY(preferenceAllowed("language", "zh-TW"));
+        QVERIFY(!preferenceAllowed("language", "zh-HK"));
+        QVERIFY(!preferenceAllowed("language", "zh_CN"));
         QVERIFY(preferenceAllowed("pin", QVariantMap{{"id", "real-instance"}, {"pinned", false}}));
         QVERIFY(!preferenceAllowed("pin", QVariantMap{{"id", "x"}, {"pinned", true}, {"path", "/secret"}}));
         QVERIFY(!preferenceAllowed("Language", "en"));
@@ -56,6 +64,11 @@ private slots:
         QCOMPARE(frontendLocale("th_TH"), QString("th"));
         QCOMPARE(frontendLocale("zh_CN"), QString("zh-CN"));
         QCOMPARE(frontendLocale("zh_TW"), QString("zh-TW"));
+        QCOMPARE(nativeLocale("en"), QString("en_US"));
+        QCOMPARE(nativeLocale("th"), QString("th"));
+        QCOMPARE(nativeLocale("zh-CN"), QString("zh_CN"));
+        QCOMPARE(nativeLocale("zh-TW"), QString("zh_TW"));
+        QVERIFY(nativeLocale("zh-HK").isEmpty());
     }
 };
 QTEST_GUILESS_MAIN(AwakeWebPolicyTest)

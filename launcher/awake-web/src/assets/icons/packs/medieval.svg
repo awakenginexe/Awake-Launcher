@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="medShield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#991b1b" />
+      <stop offset="100%" stop-color="#450a0a" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#180e0e" stroke="#78716c" stroke-width="2"/>
+  <!-- Heraldic Shield -->
+  <path d="M32 10 L48 18 V34 C48 45 32 54 32 54 C32 54 16 45 16 34 V18 Z" fill="url(#medShield)" stroke="#d6d3d1" stroke-width="2"/>
+  <!-- Knight Greathelm -->
+  <path d="M26 22 H38 V36 C38 40 32 42 32 42 C32 42 26 40 26 36 Z" fill="#44403c" stroke="#e7e5e4" stroke-width="1.5"/>
+  <!-- Visor Cross Slot -->
+  <line x1="28" y1="28" x2="36" y2="28" stroke="#facc15" stroke-width="2"/>
+  <line x1="32" y1="25" x2="32" y2="34" stroke="#facc15" stroke-width="2"/>
+</svg>

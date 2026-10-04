@@ -1424,6 +1424,10 @@ Minecraft บางเวอร์ชันอาจไม่สามารถ�
       <source>No compatible version of Java was found. Using the default one.</source>
       <translation>ไม่พบเวอร์ชัน Java ที่เข้ากันได้ กำลังใช้เวอร์ชันเริ่มต้น</translation>
     </message>
+      <message>
+      <source>Awake Optimized could not select a verified runtime. Falling back to Minecraft Default.</source>
+      <translation>Awake Optimized เลือก Java ที่ผ่านการตรวจสอบไม่สำเร็จ กำลังเปลี่ยนไปใช้ Minecraft Default</translation>
+    </message>
   </context>
   <context>
     <name>AutoJavaWizardPage</name>
@@ -1553,7 +1557,99 @@ Minecraft บางเวอร์ชันอาจไม่สามารถ�
       <source>Watched Folders:</source>
       <translation type="vanished">โฟลเดอร์ที่ดู:</translation>
     </message>
-  </context>
+      <message>
+      <source>Download required files</source>
+      <translation>ดาวน์โหลดไฟล์ที่จำเป็น</translation>
+    </message>
+    <message>
+      <source>Some creators require downloads from their website. Click Download for each missing file and save it to your Downloads folder. Keep this window open: installation continues automatically when all files are found.</source>
+      <translation>ผู้สร้างบางรายกำหนดให้ดาวน์โหลดจากเว็บไซต์ของตน คลิกดาวน์โหลดสำหรับแต่ละไฟล์ที่ขาด แล้วบันทึกไว้ในโฟลเดอร์ดาวน์โหลด เปิดหน้าต่างนี้ไว้ การติดตั้งจะดำเนินต่อโดยอัตโนมัติเมื่อพบไฟล์ครบ</translation>
+    </message>
+    <message>
+      <source>Checked by file name</source>
+      <translation>ตรวจสอบจากชื่อไฟล์</translation>
+    </message>
+    <message>
+      <source>%1: %2</source>
+      <translation>%1: %2</translation>
+    </message>
+    <message>
+      <source>This code checks that the downloaded file is the correct version.</source>
+      <translation>รหัสนี้ใช้ตรวจสอบว่าไฟล์ที่ดาวน์โหลดเป็นเวอร์ชันที่ถูกต้อง</translation>
+    </message>
+    <message>
+      <source>Download</source>
+      <translation>ดาวน์โหลด</translation>
+    </message>
+    <message>
+      <source>Download %1</source>
+      <translation>ดาวน์โหลด %1</translation>
+    </message>
+    <message>
+      <source>Open the creator's download page in your browser</source>
+      <translation>เปิดหน้าดาวน์โหลดของผู้สร้างในเบราว์เซอร์</translation>
+    </message>
+    <message>
+      <source>No download page is available for this file.</source>
+      <translation>ไม่มีหน้าดาวน์โหลดสำหรับไฟล์นี้</translation>
+    </message>
+    <message>
+      <source>Saved somewhere else? Drop the files here, or choose the folder where you saved them.</source>
+      <translation>บันทึกไว้ที่อื่นหรือไม่? วางไฟล์ที่นี่ หรือเลือกโฟลเดอร์ที่บันทึกไฟล์ไว้</translation>
+    </message>
+    <message>
+      <source>Choose download folder</source>
+      <translation>เลือกโฟลเดอร์ดาวน์โหลด</translation>
+    </message>
+    <message>
+      <source>Download all missing</source>
+      <translation>ดาวน์โหลดไฟล์ที่ขาดทั้งหมด</translation>
+    </message>
+    <message>
+      <source>Continue without missing files</source>
+      <translation>ดำเนินการต่อโดยไม่มีไฟล์ที่ขาด</translation>
+    </message>
+    <message>
+      <source>Missing files will not be installed.</source>
+      <translation>ไฟล์ที่ขาดจะไม่ถูกติดตั้ง</translation>
+    </message>
+    <message>
+      <source>Cancel installation</source>
+      <translation>ยกเลิกการติดตั้ง</translation>
+    </message>
+    <message>
+      <source>Choose the folder containing your downloaded files</source>
+      <translation>เลือกโฟลเดอร์ที่มีไฟล์ที่ดาวน์โหลด</translation>
+    </message>
+    <message>
+      <source>Ready to install</source>
+      <translation>พร้อมติดตั้ง</translation>
+    </message>
+    <message>
+      <source>Waiting for download</source>
+      <translation>กำลังรอดาวน์โหลด</translation>
+    </message>
+    <message>
+      <source>Download this file into one of the folders being checked.</source>
+      <translation>ดาวน์โหลดไฟล์นี้ลงในโฟลเดอร์ที่กำลังตรวจสอบ</translation>
+    </message>
+    <message>
+      <source>Downloaded</source>
+      <translation>ดาวน์โหลดแล้ว</translation>
+    </message>
+    <message>
+      <source>%1 of %2 files ready</source>
+      <translation>พร้อมแล้ว %1 จาก %2 ไฟล์</translation>
+    </message>
+    <message>
+      <source>Checking your download folders…</source>
+      <translation>กำลังตรวจสอบโฟลเดอร์ดาวน์โหลด…</translation>
+    </message>
+    <message>
+      <source>Checking %1 folder(s) automatically</source>
+      <translation>กำลังตรวจสอบโฟลเดอร์ %1 แห่งโดยอัตโนมัติ</translation>
+    </message>
+</context>
   <context>
     <name>CapeChange</name>
     <message>
@@ -8576,6 +8672,98 @@ Are you sure?</source>
       <message>
         <source>Reduce motion</source>
         <translation>ลดการเคลื่อนไหว</translation>
+    </message>
+    <message>
+      <source>This instance no longer exists.</source>
+      <translation>อินสแตนซ์นี้ไม่มีอยู่แล้ว</translation>
+    </message>
+    <message>
+      <source>The instance could not be selected.</source>
+      <translation>ไม่สามารถเลือกอินสแตนซ์นี้ได้</translation>
+    </message>
+    <message>
+      <source>This instance cannot be launched right now.</source>
+      <translation>ยังไม่สามารถเปิดอินสแตนซ์นี้ได้</translation>
+    </message>
+    <message>
+      <source>Username cannot be empty.</source>
+      <translation>ชื่อผู้ใช้ต้องไม่เว้นว่าง</translation>
+    </message>
+    <message>
+      <source>You must add a valid Microsoft account before adding an offline account.</source>
+      <translation>เพิ่มบัญชี Microsoft ที่ถูกต้องก่อนเพิ่มบัญชีออฟไลน์</translation>
+    </message>
+    <message>
+      <source>Failed to create offline account.</source>
+      <translation>สร้างบัญชีออฟไลน์ไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>The application menu is not available.</source>
+      <translation>เมนูแอปพลิเคชันไม่พร้อมใช้งาน</translation>
+    </message>
+    <message>
+      <source>Invalid installation request.</source>
+      <translation>คำขอติดตั้งไม่ถูกต้อง</translation>
+    </message>
+    <message>
+      <source>Enter an instance name.</source>
+      <translation>ป้อนชื่ออินสแตนซ์</translation>
+    </message>
+    <message>
+      <source>Choose an archive file or a valid download URL.</source>
+      <translation>เลือกไฟล์ archive หรือ URL ดาวน์โหลดที่ถูกต้อง</translation>
+    </message>
+    <message>
+      <source>Choose a Minecraft version.</source>
+      <translation>เลือกเวอร์ชัน Minecraft</translation>
+    </message>
+    <message>
+      <source>Metadata index is not available.</source>
+      <translation>ดัชนีข้อมูลเมตาไม่พร้อมใช้งาน</translation>
+    </message>
+    <message>
+      <source>The selected Minecraft version could not be loaded.</source>
+      <translation>โหลดเวอร์ชัน Minecraft ที่เลือกไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>Unsupported mod loader.</source>
+      <translation>ไม่รองรับตัวโหลดม็อดนี้</translation>
+    </message>
+    <message>
+      <source>No compatible version of the selected mod loader is available for this Minecraft version.</source>
+      <translation>ไม่มีเวอร์ชันของตัวโหลดม็อดที่เลือกซึ่งใช้ได้กับ Minecraft เวอร์ชันนี้</translation>
+    </message>
+    <message>
+      <source>This action is not available.</source>
+      <translation>การดำเนินการนี้ไม่พร้อมใช้งาน</translation>
+    </message>
+    <message>
+      <source>Unsupported Modrinth link.
+      
+      Prism Launcher currently only supports modpack links such as modrinth://modpack/fabulously-optimized.</source>
+      <translation>ลิงก์ Modrinth นี้ไม่รองรับ
+      
+      ขณะนี้ Prism Launcher รองรับเฉพาะลิงก์ม็อดแพ็ก เช่น modrinth://modpack/fabulously-optimized</translation>
+    </message>
+    <message>
+      <source>Delete instance</source>
+      <translation>ลบอินสแตนซ์</translation>
+    </message>
+    <message>
+      <source>Delete this instance?</source>
+      <translation>ต้องการลบอินสแตนซ์นี้หรือไม่?</translation>
+    </message>
+    <message>
+      <source>This removes the instance%1, including its worlds, mods and settings. Copy any worlds you want to keep before continuing.</source>
+      <translation>การดำเนินการนี้จะลบอินสแตนซ์%1 รวมถึงโลก ม็อด และการตั้งค่า คัดลอกโลกที่ต้องการเก็บไว้ก่อนดำเนินการต่อ</translation>
+    </message>
+    <message>
+      <source>Keep instance</source>
+      <translation>เก็บอินสแตนซ์ไว้</translation>
+    </message>
+    <message>
+      <source>Instance name:</source>
+      <translation>ชื่ออินสแตนซ์:</translation>
     </message>
 </context>
   <context>
@@ -16458,12 +16646,12 @@ Play time: %4</source>
         <translation>ไม่พบอินสแตนซ์ที่ตรงกับการค้นหา</translation>
     </message>
     <message>
-        <source>Your worlds, within reach.</source>
-        <translation>โลกของคุณ พร้อมให้เข้าเล่น</translation>
+        <source>No instances yet.</source>
+        <translation>ยังไม่มีอินสแตนซ์</translation>
     </message>
     <message>
-        <source>Create your first instance to start playing.</source>
-        <translation>สร้างอินสแตนซ์แรกเพื่อเริ่มเล่น</translation>
+        <source>Create or import an instance to start playing.</source>
+        <translation>สร้างหรือนำเข้าอินสแตนซ์เพื่อเริ่มเล่น</translation>
     </message>
     <message>
         <source>Choose a world from your library to play and manage it.</source>
@@ -16486,4 +16674,256 @@ Play time: %4</source>
         <translation>เมนูลอนเชอร์</translation>
     </message>
 </context>
+  <context>
+    <name>AwakePopupDialog</name>
+    <message>
+      <source>Close dialog</source>
+      <translation>ปิดกล่องโต้ตอบ</translation>
+    </message>
+    <message>
+      <source>Close (Esc)</source>
+      <translation>ปิด (Esc)</translation>
+    </message>
+      <message><source>Add an account to play</source><translation>เพิ่มบัญชีเพื่อเล่น</translation></message>
+    <message><source>Sign in with the Microsoft account that owns Minecraft. You can add it in the Accounts menu, then come back and press Play.</source><translation>ลงชื่อเข้าใช้ด้วยบัญชี Microsoft ที่เป็นเจ้าของ Minecraft เพิ่มบัญชีได้ในเมนูบัญชี จากนั้นกลับมาแล้วกดเล่น</translation></message>
+    <message><source>Not now</source><translation>ไว้ภายหลัง</translation></message>
+    <message><source>Add account</source><translation>เพิ่มบัญชี</translation></message>
+</context>
+  <context>
+    <name>Awake::Web::InstanceEditor</name>
+    <message>
+      <source>This instance no longer exists.</source>
+      <translation>อินสแตนซ์นี้ไม่มีอยู่แล้ว</translation>
+    </message>
+    <message>
+      <source>This editor page is not available.</source>
+      <translation>หน้าเครื่องมือนี้ไม่พร้อมใช้งาน</translation>
+    </message>
+    <message>
+      <source>Enabled</source>
+      <translation>เปิดใช้งาน</translation>
+    </message>
+    <message>
+      <source>Disabled</source>
+      <translation>ปิดใช้งาน</translation>
+    </message>
+    <message>
+      <source>Notes must be text shorter than one megabyte.</source>
+      <translation>บันทึกต้องเป็นข้อความที่มีขนาดไม่เกินหนึ่งเมกะไบต์</translation>
+    </message>
+    <message>
+      <source>Stop the game before changing its settings.</source>
+      <translation>หยุดเกมก่อนเปลี่ยนการตั้งค่า</translation>
+    </message>
+    <message>
+      <source>Invalid game settings.</source>
+      <translation>การตั้งค่าเกมไม่ถูกต้อง</translation>
+    </message>
+    <message>
+      <source>Memory or window size is outside the supported range.</source>
+      <translation>หน่วยความจำหรือขนาดหน้าต่างอยู่นอกช่วงที่รองรับ</translation>
+    </message>
+    <message>
+      <source>Invalid game setting switches.</source>
+      <translation>ตัวเลือกการตั้งค่าเกมไม่ถูกต้อง</translation>
+    </message>
+    <message>
+      <source>Minimum memory cannot exceed maximum memory.</source>
+      <translation>หน่วยความจำขั้นต่ำต้องไม่เกินหน่วยความจำสูงสุด</translation>
+    </message>
+    <message>
+      <source>There is no active console to clear. Saved log files are kept.</source>
+      <translation>ไม่มีคอนโซลที่กำลังทำงานให้ล้าง ไฟล์บันทึกที่บันทึกไว้จะยังคงอยู่</translation>
+    </message>
+    <message>
+      <source>Unknown content folder.</source>
+      <translation>ไม่รู้จักโฟลเดอร์เนื้อหานี้</translation>
+    </message>
+    <message>
+      <source>This page does not have a content folder.</source>
+      <translation>หน้านี้ไม่มีโฟลเดอร์เนื้อหา</translation>
+    </message>
+    <message>
+      <source>The folder could not be opened.</source>
+      <translation>เปิดโฟลเดอร์ไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>This page does not contain editable files.</source>
+      <translation>หน้านี้ไม่มีไฟล์ที่แก้ไขได้</translation>
+    </message>
+    <message>
+      <source>Stop the game before changing its files.</source>
+      <translation>หยุดเกมก่อนเปลี่ยนไฟล์</translation>
+    </message>
+    <message>
+      <source>Invalid content selection.</source>
+      <translation>เลือกรายการเนื้อหาไม่ถูกต้อง</translation>
+    </message>
+    <message>
+      <source>This file is no longer in the instance.</source>
+      <translation>ไม่มีไฟล์นี้ในอินสแตนซ์แล้ว</translation>
+    </message>
+    <message>
+      <source>Choose whether the mod should be enabled.</source>
+      <translation>เลือกว่าเปิดใช้งานม็อดหรือไม่</translation>
+    </message>
+    <message>
+      <source>The mod could not be changed.</source>
+      <translation>เปลี่ยนม็อดไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>The selected file could not be removed.</source>
+      <translation>นำไฟล์ที่เลือกออกไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>Stop the game before adding files.</source>
+      <translation>หยุดเกมก่อนเพิ่มไฟล์</translation>
+    </message>
+    <message>
+      <source>Finish the current file selection first.</source>
+      <translation>ดำเนินการเลือกไฟล์ปัจจุบันให้เสร็จก่อน</translation>
+    </message>
+    <message>
+      <source>Add files to the instance</source>
+      <translation>เพิ่มไฟล์ลงในอินสแตนซ์</translation>
+    </message>
+    <message>
+      <source>Mods (*.jar *.zip)</source>
+      <translation>ม็อด (*.jar *.zip)</translation>
+    </message>
+    <message>
+      <source>Packs (*.zip)</source>
+      <translation>แพ็ก (*.zip)</translation>
+    </message>
+    <message>
+      <source>Some files could not be added. Files already in this instance were kept. Check the file names and try again.</source>
+      <translation>เพิ่มไฟล์บางรายการไม่สำเร็จ ไฟล์ที่มีอยู่ในอินสแตนซ์แล้วจะยังคงอยู่ ตรวจสอบชื่อไฟล์แล้วลองอีกครั้ง</translation>
+    </message>
+    <message>
+      <source>Unknown advanced page.</source>
+      <translation>ไม่รู้จักหน้าเครื่องมือขั้นสูงนี้</translation>
+    </message>
+    <message>
+      <source>This editor action is not available.</source>
+      <translation>การดำเนินการนี้ในเครื่องมือแก้ไขไม่พร้อมใช้งาน</translation>
+    </message>
+  </context>
+  <context>
+    <name>Java::RuntimeDownloadTask</name>
+    <message>
+      <source>This Java provider is unavailable for this system. Choose Minecraft Default or Custom Java.</source>
+      <translation>ผู้ให้บริการ Java นี้ไม่รองรับระบบนี้ โปรดเลือก Minecraft Default หรือ Java ที่กำหนดเอง</translation>
+    </message>
+    <message>
+      <source>This provider has no compatible Java build for this instance. Choose Awake Optimized, Minecraft Default or Custom Java.</source>
+      <translation>ผู้ให้บริการนี้ไม่มี Java ที่เข้ากันกับอินสแตนซ์ โปรดเลือก Awake Optimized, Minecraft Default หรือ Java ที่กำหนดเอง</translation>
+    </message>
+    <message>
+      <source>Finding a compatible Java runtime</source>
+      <translation>กำลังค้นหา Java ที่เข้ากันได้</translation>
+    </message>
+    <message>
+      <source>Java download information could not be read. Please try again.</source>
+      <translation>อ่านข้อมูลการดาวน์โหลด Java ไม่สำเร็จ โปรดลองอีกครั้ง</translation>
+    </message>
+    <message>
+      <source>The Java provider could not be reached. Check your connection and try again.</source>
+      <translation>ติดต่อผู้ให้บริการ Java ไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง</translation>
+    </message>
+    <message>
+      <source>The Java provider response was too large.</source>
+      <translation>ข้อมูลตอบกลับจากผู้ให้บริการ Java มีขนาดใหญ่เกินไป</translation>
+    </message>
+    <message>
+      <source>This Java download could not be verified. Choose another provider.</source>
+      <translation>ตรวจสอบความถูกต้องของไฟล์ Java ไม่สำเร็จ โปรดเลือกผู้ให้บริการอื่น</translation>
+    </message>
+    <message>
+      <source>This Java download does not include a trusted checksum. Choose another provider.</source>
+      <translation>ไฟล์ Java นี้ไม่มีข้อมูลตรวจสอบความถูกต้องที่เชื่อถือได้ โปรดเลือกผู้ให้บริการอื่น</translation>
+    </message>
+    <message>
+      <source>The Java download checksum could not be read.</source>
+      <translation>อ่านข้อมูลตรวจสอบความถูกต้องของ Java ไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>The Java runtime folder could not be created.</source>
+      <translation>สร้างโฟลเดอร์ Java ไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>Checking the Java runtime</source>
+      <translation>กำลังตรวจสอบ Java</translation>
+    </message>
+    <message>
+      <source>The downloaded Java runtime could not be checked. Choose another provider.</source>
+      <translation>ตรวจสอบ Java ที่ดาวน์โหลดไม่สำเร็จ โปรดเลือกผู้ให้บริการอื่น</translation>
+    </message>
+    <message>
+      <source>The downloaded Java runtime is not compatible. Choose another provider.</source>
+      <translation>Java ที่ดาวน์โหลดไม่เข้ากัน โปรดเลือกผู้ให้บริการอื่น</translation>
+    </message>
+    <message>
+      <source>The Java runtime settings could not be saved.</source>
+      <translation>บันทึกการตั้งค่า Java ไม่สำเร็จ</translation>
+    </message>
+    <message>
+      <source>The Java runtime could not be installed. Please try again.</source>
+      <translation>ติดตั้ง Java ไม่สำเร็จ โปรดลองอีกครั้ง</translation>
+    </message>
+  </context>
+  <context>
+    <name>Awake::Web::Bridge</name>
+    <message>
+      <source>The instance editor is paused.</source>
+      <translation>ตัวแก้ไขอินสแตนซ์หยุดทำงานชั่วคราว</translation>
+    </message>
+    <message>
+      <source>This instance no longer exists.</source>
+      <translation>อินสแตนซ์นี้ไม่มีอยู่แล้ว</translation>
+    </message>
+    <message>
+      <source>Finish the current native action first.</source>
+      <translation>ทำรายการปัจจุบันให้เสร็จก่อน</translation>
+    </message>
+    <message>
+      <source>Stop the game before changing its settings.</source>
+      <translation>หยุดเกมก่อนเปลี่ยนการตั้งค่า</translation>
+    </message>
+    <message>
+      <source>Choose a supported Java runtime.</source>
+      <translation>เลือก Java ที่รองรับ</translation>
+    </message>
+    <message>
+      <source>Choose a Java executable using Browse before selecting Custom Java.</source>
+      <translation>เลือกโปรแกรม Java ด้วยปุ่มเลือกไฟล์ก่อนใช้ Java ที่กำหนดเอง</translation>
+    </message>
+    <message>
+      <source>Choose your Java executable</source>
+      <translation>เลือกโปรแกรม Java ของคุณ</translation>
+    </message>
+    <message>
+      <source>Java executable (javaw.exe java.exe)</source>
+      <translation>โปรแกรม Java (javaw.exe java.exe)</translation>
+    </message>
+    <message>
+      <source>Java executable (java)</source>
+      <translation>โปรแกรม Java (java)</translation>
+    </message>
+    <message>
+      <source>Choose the java or javaw program inside your Java installation's bin folder.</source>
+      <translation>เลือกโปรแกรม java หรือ javaw ในโฟลเดอร์ bin ของ Java ที่ติดตั้ง</translation>
+    </message>
+    <message>
+      <source>The Java selection could not be saved. Stop the game and try again.</source>
+      <translation>บันทึก Java ที่เลือกไม่สำเร็จ หยุดเกมแล้วลองอีกครั้ง</translation>
+    </message>
+    <message>
+      <source>This Java installation did not pass its check. Choose another Java installation.</source>
+      <translation>Java ที่เลือกไม่ผ่านการตรวจสอบ โปรดเลือก Java ที่ติดตั้งไว้อื่น</translation>
+    </message>
+    <message>
+      <source>This Java version is not compatible with the instance. Choose a supported Java version.</source>
+      <translation>Java รุ่นนี้ไม่เข้ากันกับอินสแตนซ์ โปรดเลือกรุ่นที่รองรับ</translation>
+    </message>
+  </context>
 </TS>

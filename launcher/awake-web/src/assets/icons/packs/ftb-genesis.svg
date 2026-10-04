@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="genGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#180a24" stroke="#c084fc" stroke-width="2"/>
+  <!-- Genesis Crystal Star -->
+  <polygon points="32,8 39,25 56,32 39,39 32,56 25,39 8,32 25,25" fill="url(#genGrad)"/>
+  <circle cx="32" cy="32" r="6" fill="#fdf4ff"/>
+</svg>

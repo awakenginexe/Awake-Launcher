@@ -75,7 +75,7 @@ class LaunchController : public Task {
    private:
     void login();
     void launchInstance();
-    void decideAccount();
+    bool decideAccount();
     LaunchDecision decideLaunchMode();
     bool askPlayDemo() const;
     QString askOfflineName(const QString& playerName, bool* ok = nullptr);

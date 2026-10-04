@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="rlBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b91c1c" />
+      <stop offset="100%" stop-color="#450a0a" />
+    </linearGradient>
+    <linearGradient id="rlFire" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="50%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#fef08a" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#180505" stroke="#dc2626" stroke-width="2"/>
+  <!-- Fiery Dragon head silhouette -->
+  <path d="M14 50 C18 42 22 36 28 30 C24 24 22 16 28 10 C32 14 34 20 36 24 C40 18 46 14 52 12 C50 20 46 26 42 30 C48 34 52 42 50 50 C42 46 36 44 32 46 C28 44 22 46 14 50 Z" fill="url(#rlBg)" stroke="#f97316" stroke-width="1.5"/>
+  <!-- Glowing dragon eye and fangs -->
+  <circle cx="36" cy="28" r="3" fill="#fef08a"/>
+  <circle cx="36.5" cy="28" r="1.5" fill="#450a0a"/>
+  <path d="M26 38 L30 32 L34 38 L38 32 L42 38" stroke="url(#rlFire)" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>

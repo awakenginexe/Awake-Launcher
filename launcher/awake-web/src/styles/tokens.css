@@ -1,33 +1,187 @@
+@font-face {
+  font-family: 'K2D';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/K2D-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'K2D';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/K2D-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'K2D';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/K2D-SemiBold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'K2D';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/K2D-Bold.ttf') format('truetype');
+}
+
 :root {
   color-scheme: dark;
-  font-family: "Segoe UI", "Leelawadee UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Noto Sans Thai", "Noto Sans CJK SC", system-ui, sans-serif;
+  font-family:
+    'K2D',
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Leelawadee UI",
+    "Noto Sans Thai",
+    "Microsoft YaHei UI",
+    "Noto Sans CJK SC",
+    "PingFang SC",
+    "Microsoft JhengHei UI",
+    "Noto Sans CJK TC",
+    "PingFang TC",
+    sans-serif;
   font-size: 14px;
-  --background: #12161c;
-  --surface: #1a2028;
-  --surface-interactive: #222b35;
-  --surface-glass: rgba(18, 22, 28, .82);
-  --surface-glass-strong: rgba(18, 22, 28, .88);
-  --text-primary: #e7ecef;
-  --text-secondary: #aab6c3;
-  --text-muted: #87929f;
-  --border-subtle: rgba(170, 182, 195, .24);
-  --control-border: #6b7c90;
-  --accent: #efc17e;
-  --accent-hover: #f5d19c;
-  --error: #f59e9e;
-  --selection: #3b424b;
-  --focus: #efc17e;
-  --blur: 22px;
-  --radius-panel: 16px;
-  --radius-control: 7px;
-  --shadow-floating: 0 12px 40px rgba(0, 0, 0, .24);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Global Scrollbar Theming */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+
+  /* Color Palette - Deep Atmospheric Gradient Blue Tone */
+  --background: #060b13;
+  --background-fallback: radial-gradient(ellipse 95% 85% at 75% 25%, #0d1e38 0%, #071120 50%, #030810 100%);
+
+  /* Glass Surfaces - Layered, modern with subtle Sapphire reflection */
+  --glass: rgba(10, 18, 30, 0.70);
+  --glass-strong: rgba(7, 13, 23, 0.88);
+  --glass-subtle: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(96, 165, 250, 0.14);
+  --glass-border-focus: rgba(96, 165, 250, 0.65);
+  --glass-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --surface-glass: var(--glass);
+  --surface-glass-strong: var(--glass-strong);
+
+  /* Surfaces & Controls */
+  --surface: #0e192a;
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --surface-active: rgba(59, 130, 246, 0.16);
+  --surface-selected: rgba(59, 130, 246, 0.18);
+  --surface-interactive: rgba(14, 25, 42, 0.75);
+
+  /* Typography Colors - High Legibility Contrast */
+  --text: #f8fafc;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-bright: #ffffff;
+
+  /* Accent - Vibrant Gradient Blue Tone */
+  --accent: #2563eb;
+  --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 55%, #0284c7 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #60a5fa 0%, #2563eb 55%, #0ea5e9 100%);
+  --accent-gradient-active: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  --accent-hover: #3b82f6;
+  --accent-active: #1d4ed8;
+  --accent-subtle: rgba(59, 130, 246, 0.16);
+  --accent-glow: rgba(59, 130, 246, 0.42);
+  --accent-contrast: #ffffff;
+
+  /* Borders & Dividers - Subtle and purposeful */
+  --border: rgba(96, 165, 250, 0.12);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --control-border: rgba(255, 255, 255, 0.14);
+
+  /* Functional Status */
+  --success: #38bdf8;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --focus: #60a5fa;
+  --selection: rgba(59, 130, 246, 0.22);
+
+  /* Radii */
+  --radius-small: 6px;
+  --radius-medium: 12px;
+  --radius-large: 20px;
+  --radius-pill: 9999px;
+  --radius-panel: 20px;
+  --radius-control: 8px;
+
+  /* Blur Radii */
+  --blur-small: 12px;
+  --blur-medium: 24px;
+  --blur-large: 40px;
+  --blur: 28px;
+
+  /* Shadows - Layered, soft, deep */
+  --shadow-small: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --shadow-medium: 0 8px 24px rgba(0, 0, 0, 0.38);
+  --shadow-large: 0 20px 50px rgba(0, 0, 0, 0.52);
+  --shadow-floating: var(--shadow-large);
+
+  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --duration: 160ms;
-  --duration-artwork: 260ms;
-  --ease: cubic-bezier(.2, .7, .25, 1);
+  --space-7: 48px;
+
+  /* Animation & Motion Timings (Smooth Interactive Curves) */
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --duration-slow: 320ms;
+  --duration: 200ms;
+  --duration-artwork: 280ms;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+:root:lang(en) body, :root:lang(en) body *,
+:root:lang(th) body, :root:lang(th) body * {
+  font-family: 'K2D', sans-serif !important;
+  font-synthesis: none;
+}
+
+/* Global WebKit / Chromium Scrollbar Styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.50);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+
+:root:is(:lang(en), :lang(th)) body { font-weight: 400; }
+:root:is(:lang(en), :lang(th)) :is(h1, h2, h3, h4, .instance-name, .account-player-name, .pack-name) { font-weight: 600; }
+:root:is(:lang(en), :lang(th)) :is(.btn-primary, #play, .create-button, .editor-primary-action) { font-weight: 600; }

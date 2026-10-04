@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="advGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#17120a" stroke="#f59e0b" stroke-width="2"/>
+  <!-- Mountain Silhouette -->
+  <polygon points="12,50 28,26 38,38 48,22 56,50" fill="#2d210f"/>
+  <polygon points="28,26 32,32 25,32" fill="#fef3c7"/>
+  <polygon points="48,22 52,28 44,28" fill="#fef3c7"/>
+  <!-- Adventurer Compass Needle -->
+  <circle cx="32" cy="30" r="14" fill="none" stroke="url(#advGold)" stroke-width="2"/>
+  <polygon points="32,18 36,30 32,28" fill="#ef4444"/>
+  <polygon points="32,42 28,30 32,32" fill="#cbd5e1"/>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="anvilGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#475569" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0f172a" stroke="#64748b" stroke-width="2"/>
+  <!-- Classic Anvil -->
+  <path d="M14 22 H50 L46 30 H38 V40 H44 L46 50 H18 L20 40 H26 V30 H18 Z" fill="url(#anvilGrad)" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="32" y="28" font-family="Arial, sans-serif" font-size="7" font-weight="900" fill="#f8fafc" text-anchor="middle">1.7.10</text>
+</svg>

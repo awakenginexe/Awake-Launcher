@@ -8,6 +8,7 @@
 LoginWizardPage::LoginWizardPage(QWidget* parent) : BaseWizardPage(parent), ui(new Ui::LoginWizardPage)
 {
     ui->setupUi(this);
+    ui->loginBadge->setPixmap(APPLICATION->logo().pixmap(48, 48));
 }
 
 LoginWizardPage::~LoginWizardPage()

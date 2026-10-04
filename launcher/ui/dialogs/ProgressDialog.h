@@ -48,6 +48,8 @@
 class Task;
 class SequentialTask;
 
+class ModalHeaderBar;
+
 namespace Ui {
 class ProgressDialog;
 }
@@ -84,8 +86,10 @@ class ProgressDialog : public QDialog {
     void on_skipButton_clicked(bool checked);
 
    protected:
-    virtual void keyPressEvent(QKeyEvent* e);
-    virtual void closeEvent(QCloseEvent* e);
+    virtual void keyPressEvent(QKeyEvent* e) override;
+    virtual void closeEvent(QCloseEvent* e) override;
+    virtual void showEvent(QShowEvent* e) override;
+    virtual void hideEvent(QHideEvent* e) override;
 
    private:
     bool handleImmediateResult(QDialog::DialogCode& result);
@@ -93,6 +97,7 @@ class ProgressDialog : public QDialog {
 
    private:
     Ui::ProgressDialog* ui;
+    ModalHeaderBar* m_headerBar = nullptr;
 
     Task* m_task;
 

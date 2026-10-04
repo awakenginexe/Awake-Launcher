@@ -1,7 +1,7 @@
 project(tests)
 ecm_add_test(AwakeArtwork_test.cpp LINK_LIBRARIES Qt6::Core Qt6::Gui Qt6::Test TEST_NAME AwakeArtwork)
 target_include_directories(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
-target_sources(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher/awake/InstanceArtwork.cpp)
+target_sources(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher/awake/InstanceArtwork.cpp ${CMAKE_SOURCE_DIR}/launcher/resources/backgrounds/backgrounds.qrc)
 
 ecm_add_test(AwakeLocale_test.cpp LINK_LIBRARIES Launcher_logic Qt${QT_VERSION_MAJOR}::Test
     TEST_NAME AwakeLocale)
@@ -97,6 +97,7 @@ if(Launcher_ENABLE_AWAKE_WEB)
     ecm_add_test(AwakeWebBridge_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME AwakeWebBridge)
     set_tests_properties(AwakeWebBridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 60)
     if(WIN32)
+        set_property(TEST AwakeWebBridge APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
         ecm_add_test(AwakeWebShell_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME AwakeWebShell)
         set_tests_properties(AwakeWebShell PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
     endif()

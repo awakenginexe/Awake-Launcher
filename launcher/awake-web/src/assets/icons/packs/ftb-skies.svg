@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#08182b" stroke="#38bdf8" stroke-width="2"/>
+  <!-- Floating clouds -->
+  <path d="M16 42 Q20 30 28 34 Q34 26 42 30 Q48 32 48 42 Z" fill="#bae6fd"/>
+  <!-- Sky Spire -->
+  <polygon points="32,12 36,36 28,36" fill="url(#skyGrad)"/>
+  <circle cx="32" cy="12" r="3" fill="#fef08a"/>
+  <!-- Star sparkles -->
+  <circle cx="18" cy="20" r="1.5" fill="#ffffff"/>
+  <circle cx="46" cy="18" r="2" fill="#ffffff"/>
+</svg>

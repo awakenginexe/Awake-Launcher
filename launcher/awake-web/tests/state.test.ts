@@ -23,7 +23,7 @@ function environment(overrides: Record<string, unknown> = {}) {
     selectInstance: (_id: string, callback: (value: unknown) => void) => callback({ ok: true }),
     launchInstance: (_id: string, callback: (value: unknown) => void) => callback({ ok: true }),
     setPreference: (_key: string, _value: unknown, callback: (value: unknown) => void) => callback({ ok: true }),
-    stateChanged, artworkChanged, operationFailed, ...overrides,
+    stateChanged, artworkChanged, operationFailed, catalogFinished: new Signal(), editorChanged: new Signal(), accountsRequested: new Signal(), ...overrides,
   };
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { qt: { webChannelTransport: {} }, QWebChannel: class { constructor(_transport: unknown, callback: (channel: unknown) => void) { callback({ objects: { awake: native } }); } } } });
   Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
@@ -108,4 +108,14 @@ test('switching instances cancels a pending image decode and displays only the c
   assert.equal(fixture.launcher.artwork.value, '');
   fixture.scope.stop();
   Reflect.deleteProperty(globalThis, 'Image');
+});
+
+test('native account requests open once per signal and disconnect on disposal', async () => {
+  const fixture = environment();
+  await fixture.launcher.connect();
+  fixture.native.accountsRequested.emit();
+  assert.equal(fixture.launcher.accountsRequest.value, 1);
+  fixture.scope.stop();
+  fixture.native.accountsRequested.emit();
+  assert.equal(fixture.launcher.accountsRequest.value, 1);
 });

@@ -2,6 +2,8 @@
 
 Requirements: CMake >= 3.28, Ninja, C++23 compiler, Qt >= 6.8 (development uses 6.11.2), JDK 17+, and Git. Qt modules: Core, CoreTools, Concurrent, Widgets, Network, NetworkAuth, OpenGL, XML, Test and LinguistTools. Image format plugins are recommended.
 
+The primary Awake Launcher shell uses Qt WebEngineWidgets and WebChannel in addition to the modules above. Install matching modules for the same Qt/compiler kit. Node.js 24 and npm are build-time requirements for the isolated Vue 3 + TypeScript + Vite frontend in `launcher/awake-web`; end users need neither. CMake runs `npm ci` against the lockfile, builds production assets, and embeds them in the executable. No development server, CDN or remote fonts are used by the shipped shell.
+
 Run `git submodule update --init --recursive`. vcpkg provides the dependencies in vcpkg.json. On Windows, use a Visual Studio 2022 x64 developer shell and set `CMAKE_PREFIX_PATH` to the matching MSVC Qt installation.
 
 If the checkout path contains an apostrophe, vcpkg's pkgconf/Meson build can fail on its generated machine file. Use an unused drive letter as a path alias: `subst W: $PWD.Path`, then build from `W:\`. Keep the alias while using that build cache; remove it with `subst W: /D` when finished.
@@ -15,6 +17,10 @@ cmake --install build --config Release --prefix install --component portable
 ```
 
 Linux and macOS retain their CMake presets and platform abstractions. They need native compiler/Qt/JDK dependencies and validation before binary distribution.
+
+For frontend development, run `npm ci` and `npm run dev` inside `launcher/awake-web`. A standalone browser honestly reports that the native bridge is disconnected. `npm test` verifies frontend bridge and library behavior. The native app always loads the embedded production build. Set `AWAKE_FRONTEND=widgets` to use the retained Widgets fallback, or configure `-DLauncher_ENABLE_AWAKE_WEB=OFF` to build without Chromium/Node. Do not use that option for the primary Awake Launcher release.
+
+Windows deployment must include `QtWebEngineProcess.exe`, Chromium resources and `qtwebengine_locales`, as well as Qt DLLs and plugins. The CMake Qt deployment step handles the renderer and resources; verify these are present in packaged builds. Keep Chromium's sandbox enabled. Runtime remote debugging is only for explicit local developer testing.
 
 ## Service configuration
 

@@ -24,9 +24,9 @@
  */
 
 #include "BlockedModsDialog.h"
-#include "ui_BlockedModsDialog.h"
 
 #include "Application.h"
+#include "awake/AwakeTheme.h"
 #include "modplatform/helpers/HashUtils.h"
 #include "settings/SettingsObject.h"
 
@@ -38,52 +38,129 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMimeData>
+#include <QLabel>
+#include <QScrollArea>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFrame>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QTimer>
 #include <utility>
 
 BlockedModsDialog::BlockedModsDialog(QWidget* parent, const QString& title, const QString& text, QList<BlockedMod>& mods, QString hashType)
-    : QDialog(parent), m_ui(new Ui::BlockedModsDialog), m_mods(mods), m_hashType(std::move(hashType))
+    : AwakePopupDialog(parent), m_mods(mods), m_hashType(std::move(hashType))
 {
+    Q_UNUSED(text);
+    setWindowTitle(title);
+    setPanelSize(QSize(800, 660));
     m_hashingTask = shared_qobject_ptr<ConcurrentTask>(
         new ConcurrentTask("MakeHashesTask", APPLICATION->settings()->get("NumberOfConcurrentTasks").toInt()));
     connect(m_hashingTask.get(), &Task::finished, this, &BlockedModsDialog::hashTaskFinished);
-
-    m_ui->setupUi(this);
-
-    m_ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("Cancel"));
-    m_ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("OK"));
-    connect(m_ui->openMissingButton, &QPushButton::clicked, this, [this]() { openAll(true); });
-    connect(m_ui->downloadFolderButton, &QPushButton::clicked, this, &BlockedModsDialog::addDownloadFolder);
-
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &BlockedModsDialog::directoryChanged);
 
-    qDebug() << "[Blocked Mods Dialog] Mods List:" << mods;
+    auto* heading = new QLabel(tr("Download required files"), panel());
+    heading->setProperty("role", "title");
+    panelLayout()->addWidget(heading);
+    auto* instructions = new QLabel(
+        tr("Some creators require downloads from their website. Click Download for each missing file and save it to your Downloads folder. "
+           "Keep this window open: installation continues automatically when all files are found."), panel());
+    instructions->setWordWrap(true);
+    panelLayout()->addWidget(instructions);
 
-    // defer setup of file system watchers until after the dialog is shown
-    // this allows OS (namely macOS) permission prompts to show after the relevant dialog appears
+    auto* scroll = new QScrollArea(panel());
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* rows = new QWidget(scroll);
+    rows->setObjectName("downloadRows");
+    auto* rowList = new QVBoxLayout(rows);
+    rowList->setContentsMargins(0, 0, 0, 0);
+    rowList->setSpacing(10);
+    for (const auto& mod : m_mods) {
+        auto* row = new QFrame(rows);
+        row->setObjectName("downloadRow");
+        auto* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(16, 13, 16, 13);
+        auto* details = new QVBoxLayout;
+        auto* name = new QLabel(mod.name, row);
+        name->setTextFormat(Qt::PlainText);
+        name->setWordWrap(true);
+        name->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px;"));
+        details->addWidget(name);
+        auto* status = new QLabel(row);
+        status->setWordWrap(true);
+        status->setTextFormat(Qt::PlainText);
+        details->addWidget(status);
+        m_statusLabels.append(status);
+        auto* hash = new QLabel(mod.hash.isEmpty() ? tr("Checked by file name") : tr("%1: %2").arg(m_hashType.toUpper(), mod.hash), row);
+        hash->setProperty("role", "muted");
+        hash->setTextFormat(Qt::PlainText);
+        hash->setWordWrap(true);
+        hash->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        hash->setToolTip(tr("This code checks that the downloaded file is the correct version."));
+        details->addWidget(hash);
+        layout->addLayout(details, 1);
+        auto* download = new QPushButton(tr("Download"), row);
+        download->setProperty("primary", true);
+        download->setAutoDefault(false);
+        download->setAccessibleName(tr("Download %1").arg(mod.name));
+        download->setToolTip(tr("Open the creator's download page in your browser"));
+        const QUrl url(mod.websiteUrl);
+        const bool hasWebsite = url.isValid() && (url.scheme() == "https" || url.scheme() == "http");
+        download->setEnabled(hasWebsite);
+        if (!hasWebsite)
+            download->setToolTip(tr("No download page is available for this file."));
+        connect(download, &QPushButton::clicked, this, [url] { QDesktopServices::openUrl(url); });
+        layout->addWidget(download, 0, Qt::AlignVCenter);
+        m_downloadButtons.append(download);
+        rowList->addWidget(row);
+    }
+    rowList->addStretch();
+    scroll->setWidget(rows);
+    panelLayout()->addWidget(scroll, 1);
+
+    auto* dropHint = new QLabel(tr("Saved somewhere else? Drop the files here, or choose the folder where you saved them."), panel());
+    dropHint->setWordWrap(true);
+    panelLayout()->addWidget(dropHint);
+    auto* actions = new QHBoxLayout;
+    auto* folder = new QPushButton(tr("Choose download folder"), panel());
+    folder->setAutoDefault(false);
+    connect(folder, &QPushButton::clicked, this, &BlockedModsDialog::addDownloadFolder);
+    actions->addWidget(folder);
+    m_openMissing = new QPushButton(tr("Download all missing"), panel());
+    m_openMissing->setAutoDefault(false);
+    connect(m_openMissing, &QPushButton::clicked, this, [this] { openAll(true); });
+    actions->addWidget(m_openMissing);
+    actions->addStretch();
+    panelLayout()->addLayout(actions);
+    m_folders = new QLabel(panel());
+    m_folders->setProperty("role", "muted");
+    m_folders->setWordWrap(true);
+    m_folders->setTextFormat(Qt::PlainText);
+    panelLayout()->addWidget(m_folders);
+    auto* footer = new QHBoxLayout;
+    m_summary = new QLabel(panel());
+    footer->addWidget(m_summary, 1);
+    auto* buttons = new QDialogButtonBox(panel());
+    auto* proceed = buttons->addButton(tr("Continue without missing files"), QDialogButtonBox::AcceptRole);
+    proceed->setToolTip(tr("Missing files will not be installed."));
+    auto* cancel = buttons->addButton(tr("Cancel installation"), QDialogButtonBox::RejectRole);
+    proceed->setAutoDefault(false);
+    cancel->setAutoDefault(false);
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    footer->addWidget(buttons);
+    panelLayout()->addLayout(footer);
+    setAcceptDrops(true);
     QTimer::singleShot(0, this, [this] {
         setupWatch();
         scanPaths();
         update();
     });
-
-    this->setWindowTitle(title);
-    m_ui->labelDescription->setText(text);
-
-    // force all URL handling as external
-    connect(m_ui->textBrowserWatched, &QTextBrowser::anchorClicked, this, [](const QUrl& url) { QDesktopServices::openUrl(url); });
-
-    setAcceptDrops(true);
-
     update();
 }
 
-BlockedModsDialog::~BlockedModsDialog()
-{
-    delete m_ui;
-}
+BlockedModsDialog::~BlockedModsDialog() = default;
 
 void BlockedModsDialog::dragEnterEvent(QDragEnterEvent* e)
 {
@@ -127,7 +204,9 @@ void BlockedModsDialog::openAll(bool missingOnly)
 {
     for (auto& mod : m_mods) {
         if (!missingOnly || !mod.matched) {
-            QDesktopServices::openUrl(mod.websiteUrl);
+            const QUrl url(mod.websiteUrl);
+            if (url.isValid() && (url.scheme() == "https" || url.scheme() == "http"))
+                QDesktopServices::openUrl(url);
         }
     }
 }
@@ -135,8 +214,10 @@ void BlockedModsDialog::openAll(bool missingOnly)
 void BlockedModsDialog::addDownloadFolder()
 {
     QString dir =
-        QFileDialog::getExistingDirectory(this, tr("Select directory where you downloaded the mods"),
+        QFileDialog::getExistingDirectory(this, tr("Choose the folder containing your downloaded files"),
                                           QStandardPaths::writableLocation(QStandardPaths::DownloadLocation), QFileDialog::ShowDirsOnly);
+    if (dir.isEmpty())
+        return;
     qDebug() << "[Blocked Mods Dialog] Adding watch path:" << dir;
     m_watcher.addPath(dir);
     scanPath(dir, true);
@@ -146,37 +227,30 @@ void BlockedModsDialog::addDownloadFolder()
 /// @brief update UI with current status of the blocked mod detection
 void BlockedModsDialog::update()
 {
-    QString text;
-    QString span;
-
-    for (auto& mod : m_mods) {
-        if (mod.matched) {
-            // &#x2714; -> html for HEAVY CHECK MARK : ✔
-            span = QString(tr("<span style=\"color:green\"> &#x2714; Found at %1 </span>")).arg(mod.localPath);
-        } else {
-            // &#x2718; -> html for HEAVY BALLOT X : ✘
-            span = QString(tr("<span style=\"color:red\"> &#x2718; Not Found </span>"));
-        }
-        text += QString(tr("%1: <a href='%2'>%2</a> <p>Hash: %3 %4</p> <br/>")).arg(mod.name, mod.websiteUrl, mod.hash, span);
+    int found = 0;
+    bool downloadableMissing = false;
+    for (int index = 0; index < m_mods.size(); ++index) {
+        const auto& mod = m_mods.at(index);
+        auto* status = m_statusLabels.at(index);
+        status->setText(mod.matched ? tr("Ready to install") : tr("Waiting for download"));
+        status->setStyleSheet(mod.matched ? QStringLiteral("color: #9ee4bc;") : QStringLiteral("color: #f0cb8c;"));
+        status->setToolTip(mod.matched ? mod.localPath : tr("Download this file into one of the folders being checked."));
+        auto* button = m_downloadButtons.at(index);
+        const QUrl url(mod.websiteUrl);
+        const bool hasWebsite = url.isValid() && (url.scheme() == "https" || url.scheme() == "http");
+        button->setEnabled(!mod.matched && hasWebsite);
+        button->setText(mod.matched ? tr("Downloaded") : tr("Download"));
+        downloadableMissing |= !mod.matched && hasWebsite;
+        found += mod.matched ? 1 : 0;
     }
-
-    m_ui->textBrowserModsListing->setText(text);
-
-    QString watching;
-    for (auto& dir : m_watcher.directories()) {
-        QUrl fileURL = QUrl::fromLocalFile(dir);
-        watching += QString("<a href=\"%1\">%2</a><br/>").arg(fileURL.toString(), dir);
-    }
-
-    m_ui->textBrowserWatched->setText(watching);
-
-    if (std::ranges::all_of(m_mods, [](const auto& mod) { return mod.matched; })) {
+    m_summary->setText(tr("%1 of %2 files ready").arg(found).arg(m_mods.size()));
+    m_openMissing->setEnabled(downloadableMissing);
+    const QStringList folders = m_watcher.directories();
+    m_folders->setText(folders.isEmpty() ? tr("Checking your download folders…") :
+                      tr("Checking %1 folder(s) automatically").arg(folders.size()));
+    m_folders->setToolTip(folders.join(QStringLiteral("\n")));
+    if (found == m_mods.size())
         accept();
-    } else {
-        m_ui->labelModsFound->setText(tr("Please download the missing mods."));
-        m_ui->openMissingButton->setDisabled(false);
-        m_ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Skip"));
-    }
 }
 
 /// @brief Signal fired when a watched directory has changed

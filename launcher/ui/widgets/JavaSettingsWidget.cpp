@@ -172,6 +172,13 @@ void JavaSettingsWidget::saveSettings()
 
     // Java Install Settings
     bool javaInstall = m_instance == nullptr || m_ui->javaInstallationGroupBox->isChecked();
+    const auto pathChanged = settings->get("JavaPath").toString() != m_ui->javaPathTextBox->text();
+    if (m_instance && !javaInstall) settings->set("OverrideJavaProfile", false);
+    if (m_instance && javaInstall && pathChanged) {
+        settings->set("OverrideJavaProfile", true);
+        settings->set("AwakeJavaProfile", "custom");
+        settings->set("AutomaticJava", false);
+    }
 
     if (m_instance != nullptr) {
         settings->set("OverrideJavaLocation", javaInstall);
@@ -189,6 +196,8 @@ void JavaSettingsWidget::saveSettings()
         settings->set("IgnoreJavaWizard", m_ui->skipWizardCheckBox->isChecked());
         settings->set("AutomaticJavaSwitch", m_ui->autodetectJavaCheckBox->isChecked());
         settings->set("AutomaticJavaDownload", m_ui->autodownloadJavaCheckBox->isChecked());
+        if (!m_ui->autodetectJavaCheckBox->isChecked()) settings->set("AwakeJavaProfile", "custom");
+        else if (settings->get("AwakeJavaProfile").toString() == "custom") settings->set("AwakeJavaProfile", "awake");
     }
 
     // Memory

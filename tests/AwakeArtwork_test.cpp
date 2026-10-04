@@ -14,6 +14,22 @@ class AwakeArtworkTest : public QObject {
         QVERIFY(Awake::loadRandomScreenshot(root.path()).image.isNull());
         QVERIFY(!QDir(root.path() + "/screenshots").exists());
     }
+    void fallbackForMissingOrCorruptScreenshots()
+    {
+        Q_INIT_RESOURCE(backgrounds);
+        QTemporaryDir root;
+        const auto missing = Awake::loadArtwork(root.path());
+        QVERIFY(missing.path.startsWith(":/backgrounds/"));
+        QVERIFY(!missing.image.isNull());
+        QDir().mkpath(root.path() + "/screenshots");
+        QFile corrupt(root.path() + "/screenshots/broken.png");
+        QVERIFY(corrupt.open(QIODevice::WriteOnly));
+        corrupt.write("invalid image");
+        corrupt.close();
+        const auto broken = Awake::loadArtwork(root.path());
+        QVERIFY(broken.path.startsWith(":/backgrounds/"));
+        QCOMPARE(broken.image.size(), missing.image.size());
+    }
     void onlySelectedInstancesScreenshots()
     {
         QTemporaryDir root;

@@ -61,6 +61,7 @@ class InstanceView;
 class KonamiCode;
 class InstanceTask;
 class LabeledToolButton;
+class AwakeTitleBar;
 
 namespace Ui {
 class MainWindow;
@@ -88,6 +89,8 @@ class MainWindow : public QMainWindow {
     void updatesAllowedChanged(bool allowed);
 
     void processURLs(QList<QUrl> urls);
+    void setModalBackdrop(bool active);
+    bool openWebAccounts();
    signals:
     void isClosing();
 
@@ -223,6 +226,10 @@ class MainWindow : public QMainWindow {
     void keyReleaseEvent(QKeyEvent* event) override;
 #endif
 
+#if defined(Q_OS_WIN)
+    bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
+#endif
+
     void refreshCurrentInstance();
 
    private:
@@ -270,4 +277,7 @@ class MainWindow : public QMainWindow {
 
     // managed by the application object
     Task* m_versionLoadTask = nullptr;
+
+    AwakeTitleBar* m_titleBar = nullptr;
+    bool m_frameless = false;
 };

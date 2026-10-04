@@ -64,4 +64,5 @@ class AutoInstallJava : public LaunchStep {
 
     qsizetype m_majorJavaVersionIndex = 0;
     const QString m_supported_arch;
+    bool m_vendorAttempted = false;
 };

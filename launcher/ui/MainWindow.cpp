@@ -71,6 +71,10 @@
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
+#include <QPushButton>
+#include <QVBoxLayout>
+#include "ui/dialogs/AwakePopupDialog.h"
+#include "awake/AwakeTheme.h"
 #include <QWidget>
 #include <QWidgetAction>
 #include <memory>
@@ -103,7 +107,14 @@
 #include "ui/dialogs/ExportPackDialog.h"
 #include "ui/dialogs/IconPickerDialog.h"
 #include "ui/dialogs/ImportResourceDialog.h"
+#include "ui/dialogs/MSALoginDialog.h"
 #include "ui/dialogs/NewInstanceDialog.h"
+#include "minecraft/auth/MinecraftAccount.h"
+#include "minecraft/VanillaInstanceCreationTask.h"
+#include "meta/Index.h"
+#include "meta/VersionList.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "ui/dialogs/NewsDialog.h"
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/dialogs/skins/SkinManageDialog.h"
@@ -134,7 +145,20 @@
 #include "awake/LibraryWidget.h"
 #ifdef AWAKE_WEB_ENABLED
 #include "awake/web/AwakeWebBridge.h"
+#include "awake/web/AwakePackCatalog.h"
+#include "awake/web/AwakeWebPolicy.h"
+#include "InstanceImportTask.h"
 #include "awake/web/AwakeWebShell.h"
+#endif
+
+#include "ui/widgets/AwakeTitleBar.h"
+#if defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <windowsx.h>
+#include <dwmapi.h>
 #endif
 
 #include "InstanceCopyTask.h"
@@ -528,7 +552,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->mainToolBar->hide();
     ui->newsToolBar->hide();
     ui->instanceToolBar->hide();
-    setMinimumSize(m_webMode ? QSize(760, 480) : QSize(900, 620));
+    setMinimumSize(m_webMode ? QSize(880, 520) : QSize(900, 620));
+    resize(1024, 580);
+
+#if defined(Q_OS_WIN)
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+    m_frameless = true;
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    DWORD cornerPref = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &cornerPref, sizeof(cornerPref));
+#endif
+
+    // Wrap centralWidget with custom Discord-style title bar
+    ui->centralWidget->setParent(nullptr);
+    auto* outerWidget = new QWidget(this);
+    outerWidget->setObjectName("awakeOuterContainer");
+    auto* outerLayout = new QVBoxLayout(outerWidget);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->setSpacing(0);
+    m_titleBar = new AwakeTitleBar(this, outerWidget);
+    outerLayout->addWidget(m_titleBar);
+    outerLayout->addWidget(ui->centralWidget);
+    setCentralWidget(outerWidget);
 #ifdef AWAKE_WEB_ENABLED
     if (m_webMode) {
         m_webShell = new Awake::Web::Shell(ui->centralWidget);
@@ -576,11 +621,26 @@ void MainWindow::showWidgetFrontend(const QString& reason)
     view->setFocus();
 }
 
+bool MainWindow::openWebAccounts()
+{
+#ifdef AWAKE_WEB_ENABLED
+    if (!m_webMode || !m_webBridge) return false;
+    const auto request = [bridge = m_webBridge] {
+        QTimer::singleShot(0, bridge, [bridge] { emit bridge->accountsRequested(); });
+    };
+    if (m_webShell->isReady()) request();
+    else connect(m_webBridge, &Awake::Web::Bridge::ready, m_webBridge, request, Qt::SingleShotConnection);
+    return true;
+#else
+    return false;
+#endif
+}
+
 QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id)
 {
     const auto ok = [] { return QVariantMap{{"ok", true}}; };
     const auto fail = [](const QString& error) { return QVariantMap{{"ok", false}, {"error", error}}; };
-    const bool needsInstance = QStringList{"launch", "edit", "folder", "manage", "launchOptions"}.contains(action);
+    const bool needsInstance = QStringList{"launch", "edit", "folder", "manage", "launchOptions", "rename", "changeGroup", "copy", "export", "delete", "kill"}.contains(action);
     if (needsInstance) {
         if (!APPLICATION->instances()->getInstanceById(id)) return fail(tr("This instance no longer exists."));
         setSelectedInstanceById(id);
@@ -597,13 +657,115 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
         ui->actionEditInstance->trigger();
     } else if (action == "folder") {
         ui->actionViewSelectedInstFolder->trigger();
+    } else if (action == "rename") {
+        ui->actionRenameInstance->trigger();
+    } else if (action == "changeGroup") {
+        ui->actionChangeInstGroup->trigger();
+    } else if (action == "copy") {
+        ui->actionCopyInstance->trigger();
+    } else if (action == "export") {
+        if (auto* exportMenu = ui->actionExportInstance->menu()) exportMenu->exec(mapToGlobal(QPoint(width() - 280, height() - 240)));
+        else ui->actionExportInstance->trigger();
+    } else if (action == "delete") {
+        ui->actionDeleteInstance->trigger();
+    } else if (action == "kill") {
+        ui->actionKillInstance->trigger();
     } else if (action == "settings") {
         ui->actionSettings->trigger();
     } else if (action == "logs") {
         APPLICATION->showLogWindow()->show();
     } else if (action == "accounts") {
-        repopulateAccountsMenu();
-        ui->accountsMenu->exec(mapToGlobal(QPoint(24, 40)));
+        on_actionManageAccounts_triggered();
+    } else if (action == "addMicrosoft") {
+        auto account = MSALoginDialog::newAccount(this);
+        if (account) {
+            APPLICATION->accounts()->addAccount(account);
+            if (APPLICATION->accounts()->count() == 1) {
+                APPLICATION->accounts()->setDefaultAccount(account);
+            }
+        }
+    } else if (action == "addOffline") {
+        const QString username = id.trimmed();
+        if (username.isEmpty()) return fail(tr("Username cannot be empty."));
+        if (!APPLICATION->accounts()->anyAccountIsValid()) {
+            return fail(tr("You must add a valid Microsoft account before adding an offline account."));
+        }
+        if (const MinecraftAccountPtr account = MinecraftAccount::createOffline(username)) {
+            account->login()->start();
+            APPLICATION->accounts()->addAccount(account);
+            if (APPLICATION->accounts()->count() == 1) {
+                APPLICATION->accounts()->setDefaultAccount(account);
+            }
+        } else {
+            return fail(tr("Failed to create offline account."));
+        }
+    } else if (action == "removeAccount") {
+        auto accounts = APPLICATION->accounts();
+        for (int i = 0; i < accounts->count(); ++i) {
+            if (accounts->at(i)->internalId() == id) {
+                accounts->removeAccount(accounts->index(i, 0));
+                break;
+            }
+        }
+    } else if (action == "setDefaultAccount") {
+        auto accounts = APPLICATION->accounts();
+        for (int i = 0; i < accounts->count(); ++i) {
+            if (accounts->at(i)->internalId() == id) {
+                accounts->setDefaultAccount(accounts->at(i));
+                break;
+            }
+        }
+    } else if (action == "refreshAccount") {
+        APPLICATION->accounts()->requestRefresh(id);
+    } else if (action == "windowMinimize") {
+        showMinimized();
+        return ok();
+    } else if (action == "windowMaximize") {
+        if (isMaximized()) showNormal();
+        else showMaximized();
+        return ok();
+    } else if (action == "windowClose") {
+        close();
+        return ok();
+    } else if (action == "openRootFolder") {
+        on_actionViewLauncherRootFolder_triggered();
+        return ok();
+    } else if (action == "openInstancesFolder") {
+        on_actionViewInstanceFolder_triggered();
+        return ok();
+    } else if (action == "openModsFolder") {
+        on_actionViewCentralModsFolder_triggered();
+        return ok();
+    } else if (action == "openLogsFolder") {
+        on_actionViewLogsFolder_triggered();
+        return ok();
+    } else if (action == "openJavaFolder") {
+        on_actionViewJavaFolder_triggered();
+        return ok();
+    } else if (action == "openSkinsFolder") {
+        on_actionViewSkinsFolder_triggered();
+        return ok();
+    } else if (action == "checkForUpdates") {
+        checkForUpdates();
+        return ok();
+    } else if (action == "clearMetadata") {
+        on_actionClearMetadata_triggered();
+        return ok();
+    } else if (action == "reportBug") {
+        on_actionReportBug_triggered();
+        return ok();
+    } else if (action == "about") {
+        on_actionAbout_triggered();
+        return ok();
+    } else if (action == "discord") {
+        on_actionDISCORD_triggered();
+        return ok();
+    } else if (action == "reddit") {
+        on_actionREDDIT_triggered();
+        return ok();
+    } else if (action == "matrix") {
+        on_actionMATRIX_triggered();
+        return ok();
     } else if (action == "application") {
         auto* reduceMotion = findChild<QAction*>("awakeReduceMotion");
         auto* applicationMenu = reduceMotion ? qobject_cast<QMenu*>(reduceMotion->parent()) : nullptr;
@@ -617,11 +779,96 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
         menu.addActions({ui->actionRenameInstance, ui->actionChangeInstIcon, ui->actionChangeInstGroup, ui->actionCopyInstance,
                          ui->actionExportInstance, ui->actionCreateInstanceShortcut, ui->actionKillInstance, ui->actionDeleteInstance});
         menu.exec(mapToGlobal(QPoint(width() - 280, height() - 240)));
+    } else if (action == "installPack" || action == "importArchive") {
+        const auto document = QJsonDocument::fromJson(id.toUtf8());
+        if (!document.isObject()) return fail(tr("Invalid installation request."));
+        const auto request = document.object();
+        const auto name = request.value("name").toString().trimmed();
+        if (name.isEmpty() || name.size() > 256) return fail(tr("Enter an instance name."));
+        InstanceTask* task = nullptr;
+        if (action == "installPack") {
+            QString error;
+            task = m_webBridge->packCatalog()->createTask(request.value("provider").toString(), request.value("packId").toString(),
+                request.value("versionId").toString(), this, &error);
+            if (!task) return fail(error);
+        } else {
+            const QUrl url(request.value("url").toString());
+            if ((!Awake::Web::externalUrl(url) && !url.isLocalFile()) ||
+                (url.isLocalFile() && !QFileInfo(url.toLocalFile()).isFile())) return fail(tr("Choose an archive file or a valid download URL."));
+            task = new InstanceImportTask(url, false, this);
+            task->setIcon("default");
+        }
+        task->setName(name);
+        task->setGroup(request.value("group").toString().trimmed());
+        instanceFromInstanceTask(task);
+    } else if (action == "createQuick") {
+        const QJsonDocument doc = QJsonDocument::fromJson(id.toUtf8());
+        const QJsonObject obj = doc.object();
+        QString name = obj.value("name").toString().trimmed();
+        QString mcVersion = obj.value("version").toString().trimmed();
+        const QString loader = obj.value("loader").toString().trimmed();
+        const QString group = obj.value("group").toString().trimmed();
+        if (mcVersion.isEmpty()) return fail(tr("Choose a Minecraft version."));
+        if (name.isEmpty()) name = mcVersion;
+
+        auto meta = APPLICATION->metadataIndex();
+        if (!meta) return fail(tr("Metadata index is not available."));
+
+        auto mcVer = meta->getLoadedVersion("net.minecraft", mcVersion);
+        if (!mcVer) {
+            auto loadTask = meta->loadVersion("net.minecraft", mcVersion);
+            if (loadTask) {
+                runModalTask(loadTask.get());
+                mcVer = meta->getLoadedVersion("net.minecraft", mcVersion);
+            }
+        }
+
+        if (!mcVer) return fail(tr("The selected Minecraft version could not be loaded."));
+
+        QString loaderUid;
+        if (loader.compare("Fabric", Qt::CaseInsensitive) == 0) loaderUid = "net.fabricmc.fabric-loader";
+        else if (loader.compare("NeoForge", Qt::CaseInsensitive) == 0) loaderUid = "net.neoforged";
+        else if (loader.compare("Forge", Qt::CaseInsensitive) == 0) loaderUid = "net.minecraftforge";
+        else if (loader.compare("Quilt", Qt::CaseInsensitive) == 0) loaderUid = "org.quiltmc.quilt-loader";
+        else if (loader != "Vanilla") return fail(tr("Unsupported mod loader."));
+
+        InstanceTask* task = nullptr;
+        if (loaderUid.isEmpty() || loader.compare("Vanilla", Qt::CaseInsensitive) == 0) {
+            task = new VanillaCreationTask(mcVer);
+        } else {
+            auto loaderList = meta->get(loaderUid);
+            if (loaderList && !loaderList->isLoaded()) {
+                auto loadTask = loaderList->getLoadTask();
+                if (loadTask) runModalTask(loadTask.get());
+            }
+            BaseVersion::Ptr loaderVer = loaderList ? loaderList->getRecommendedForParent("net.minecraft", mcVersion) : nullptr;
+            if (loaderVer) {
+                task = new VanillaCreationTask(mcVer, loaderUid, loaderVer);
+            } else {
+                return fail(tr("No compatible version of the selected mod loader is available for this Minecraft version."));
+            }
+        }
+
+        if (task) {
+            task->setName(name);
+            if (!group.isEmpty()) task->setGroup(group);
+            task->setIcon("default");
+            instanceFromInstanceTask(task);
+        }
     } else if (action == "legacy") {
         showWidgetFrontend();
     } else return fail(tr("This action is not available."));
     return ok();
 }
+
+void MainWindow::setModalBackdrop(bool active)
+{
+    if (m_webBridge) {
+        m_webBridge->setModalActive(active);
+    }
+}
+#else
+void MainWindow::setModalBackdrop(bool) {}
 #endif
 
 // macOS always has a native menu bar, so these fixes are not applicable
@@ -633,6 +880,64 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event)
         ui->menuBar->setVisible(!ui->menuBar->isVisible());
     else
         QMainWindow::keyReleaseEvent(event);
+}
+#endif
+
+#if defined(Q_OS_WIN)
+bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr* result)
+{
+    MSG* msg = static_cast<MSG*>(message);
+    if (m_frameless && msg->message == WM_NCHITTEST) {
+        if (isMaximized() || isFullScreen()) {
+            return false;
+        }
+
+        const int border = 8;
+        RECT winrect;
+        GetWindowRect(msg->hwnd, &winrect);
+
+        long x = GET_X_LPARAM(msg->lParam);
+        long y = GET_Y_LPARAM(msg->lParam);
+
+        bool left = (x >= winrect.left && x < winrect.left + border);
+        bool right = (x < winrect.right && x >= winrect.right - border);
+        bool top = (y >= winrect.top && y < winrect.top + border);
+        bool bottom = (y < winrect.bottom && y >= winrect.bottom - border);
+
+        if (top && left) {
+            *result = HTTOPLEFT;
+            return true;
+        }
+        if (top && right) {
+            *result = HTTOPRIGHT;
+            return true;
+        }
+        if (bottom && left) {
+            *result = HTBOTTOMLEFT;
+            return true;
+        }
+        if (bottom && right) {
+            *result = HTBOTTOMRIGHT;
+            return true;
+        }
+        if (left) {
+            *result = HTLEFT;
+            return true;
+        }
+        if (right) {
+            *result = HTRIGHT;
+            return true;
+        }
+        if (top) {
+            *result = HTTOP;
+            return true;
+        }
+        if (bottom) {
+            *result = HTBOTTOM;
+            return true;
+        }
+    }
+    return QMainWindow::nativeEvent(eventType, message, result);
 }
 #endif
 
@@ -1736,15 +2041,41 @@ void MainWindow::on_actionDeleteInstance_triggered()
     auto shortcuts = m_selectedInstance->shortcuts();
     if (!shortcuts.isEmpty())
         shortcutStr = tr(" and its %n registered shortcut(s)", "", shortcuts.size());
-    auto response = CustomMessageBox::selectable(this, tr("Confirm Deletion"),
-                                                 tr("You are about to delete \"%1\"%2.\n"
-                                                    "This may be permanent and will completely delete the instance.\n\n"
-                                                    "Are you sure?")
-                                                     .arg(m_selectedInstance->name(), shortcutStr),
-                                                 QMessageBox::Warning, QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
-                        ->exec();
-
-    if (response != QMessageBox::Yes)
+    AwakePopupDialog confirmation(this);
+    confirmation.setObjectName("awakeDeleteConfirmation");
+    confirmation.setWindowTitle(tr("Delete instance"));
+    confirmation.setPanelSize(QSize(540, 330));
+    auto* title = new QLabel(tr("Delete this instance?"), confirmation.panel());
+    title->setProperty("role", "title");
+    confirmation.panelLayout()->addWidget(title);
+    auto* name = new QLabel(m_selectedInstance->name(), confirmation.panel());
+    name->setTextFormat(Qt::PlainText);
+    name->setWordWrap(true);
+    name->setStyleSheet("font-size: 17px; font-weight: 600;");
+    confirmation.panelLayout()->addWidget(name);
+    auto* explanation = new QLabel(tr("This removes the instance%1, including its worlds, mods and settings. "
+                                      "Copy any worlds you want to keep before continuing.").arg(shortcutStr), confirmation.panel());
+    explanation->setWordWrap(true);
+    explanation->setProperty("role", "muted");
+    confirmation.panelLayout()->addWidget(explanation);
+    confirmation.panelLayout()->addStretch();
+    auto* buttons = new QHBoxLayout;
+    buttons->addStretch();
+    auto* cancel = new QPushButton(tr("Keep instance"), confirmation.panel());
+    cancel->setObjectName("keepInstance");
+    cancel->setDefault(true);
+    auto* remove = new QPushButton(tr("Delete instance"), confirmation.panel());
+    remove->setObjectName("deleteInstance");
+    remove->setAutoDefault(false);
+    remove->setStyleSheet("QPushButton { background: #7f2836; border-color: #c35b6c; } "
+                          "QPushButton:hover { background: #993347; } QPushButton:focus { border: 2px solid #fecaca; }");
+    buttons->addWidget(cancel);
+    buttons->addWidget(remove);
+    confirmation.panelLayout()->addLayout(buttons);
+    connect(cancel, &QPushButton::clicked, &confirmation, &QDialog::reject);
+    connect(remove, &QPushButton::clicked, &confirmation, &QDialog::accept);
+    cancel->setFocus();
+    if (confirmation.exec() != QDialog::Accepted)
         return;
 
     if (!checkLinkedInstances(id, this, tr("Deleting")))

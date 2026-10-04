@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="lavaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#111827" stroke="#9ca3af" stroke-width="2"/>
+  <!-- Stone block cube -->
+  <polygon points="32,10 52,22 32,34 12,22" fill="#64748b"/>
+  <polygon points="12,22 32,34 32,54 12,42" fill="#475569"/>
+  <polygon points="52,22 32,34 32,54 52,42" fill="#334155"/>
+  <!-- Glowing Lava Crack -->
+  <path d="M32 20 L28 28 L34 34 L30 44 L36 50" fill="none" stroke="url(#lavaGrad)" stroke-width="3" stroke-linecap="round"/>
+</svg>

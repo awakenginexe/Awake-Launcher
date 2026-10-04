@@ -29,7 +29,7 @@ class PageViewDelegate : public QStyledItemDelegate {
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         QSize size = QStyledItemDelegate::sizeHint(option, index);
-        size.setHeight(qMax(size.height(), 32));
+        size.setHeight(qMax(size.height(), 36));
         return size;
     }
 };
@@ -89,11 +89,12 @@ class PageView : public QListView {
         setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Expanding);
         setItemDelegate(new PageViewDelegate(this));
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setFrameShape(QFrame::NoFrame);
     }
 
     virtual QSize sizeHint() const
     {
-        int width = sizeHintForColumn(0) + frameWidth() * 2 + 5;
+        int width = qMax(sizeHintForColumn(0) + frameWidth() * 2 + 5, 175);
         if (verticalScrollBar()->isVisible())
             width += verticalScrollBar()->width();
         return QSize(width, 100);
