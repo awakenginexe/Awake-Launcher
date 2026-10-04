@@ -16,4 +16,4 @@ Fetch with `git fetch --no-tags upstream develop`. Review upstream changes befor
 
 Awake additions should live under `launcher/awake/` where possible. Changes to upstream files should remain small integration points. Preserve settings, instance formats, downloads, metadata and launch semantics unless a separately tested change is necessary.
 
-The owner requirements are recorded in [the project brief](docs/PROJECT-BRIEF.md). Architecture and workflow notes are maintained locally, outside the tracked product source.
+Architecture and workflow notes are maintained locally, outside the tracked product source.
