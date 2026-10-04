@@ -13,7 +13,12 @@ const fixture = `(() => {
   const signal = () => ({ listeners: [], connect(fn) { this.listeners.push(fn); }, disconnect(fn) { this.listeners = this.listeners.filter(item => item !== fn); }, emit(...args) { this.listeners.forEach(fn => fn(...args)); } });
   const count = Number(options.get('count') ?? 50);
   const state = { instances: Array.from({length: count}, (_, i) => ({id: 'fixture-' + i, name: 'Test fixture ' + String(i).padStart(2, '0'), group: i % 2 ? 'Test group' : '', minecraftVersion: '1.21.1', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, totalTimePlayed: 0})), selectedId: count ? 'fixture-0' : '', locale: options.get('locale') || 'en_US', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '' };
+  state.totalMemoryMb = Number(options.get('ram') || 32768);
+  state.launcherSettings = {maxMem:8192,minMem:512};
   const host = {
+    gpuSettings(cb) { cb({ok:true,supported:true,mode:state.gpuMode || 'automatic',devices:[{name:'NVIDIA GPU fixture'},{name:'Integrated GPU fixture'}]}); },
+    setGpuPreference(mode, cb) { state.gpuMode = mode; window.__nativeTest.calls.push(['setGpuPreference',mode]); this.gpuSettings(cb); },
+    openGpuSettings(cb) { window.__nativeTest.calls.push(['openGpuSettings']); cb({ok:true}); },
     javaSettings(id, cb) { cb(structuredClone(id ? window.__nativeTest.instanceJava : window.__nativeTest.globalJava)); },
     setJavaProfile(id, profile, cb) {
       window.__nativeTest.calls.push(['setJavaProfile', id, profile]);
@@ -53,6 +58,7 @@ const fixture = `(() => {
       window.__nativeTest.calls.push(['preference', key, value]);
       if (key === 'pin') state.instances.find(i => i.id === value.id).pinned = value.pinned;
       else if (key === 'language') state.locale = value;
+      else if (key === 'maxMem' || key === 'minMem') state.launcherSettings[key] = value;
       else state[key] = value;
       this.stateChanged.emit(structuredClone(state)); cb({ok:true});
     },
@@ -257,6 +263,22 @@ try {
     await page.locator('.account-actions .settings-button').click();
     await page.locator('.settings-tab-btn').nth(1).click();
     await page.locator('.java-options').waitFor();
+    assert.equal(await page.locator('.wordmark').textContent(), ({en_US:'Welcome!',th:'ยินดีต้อนรับ!','zh_CN':'欢迎！','zh_TW':'歡迎！'})[locale]);
+    assert.equal(await page.locator('.ram-preset').count(), 9);
+    assert.equal(await page.locator('.ram-preset.safe').count(), 6);
+    assert.equal(await page.locator('.ram-preset.caution').count(), 2);
+    assert.equal(await page.locator('.ram-preset.danger').count(), 1);
+    await page.locator('.ram-preset').last().scrollIntoViewIfNeeded();
+    await page.screenshot({path:resolve(output, `memory-32gb-${locale}.png`)});
+    await page.locator('.ram-preset').last().click();
+    assert.equal(await page.evaluate(() => window.__nativeTest.state.launcherSettings.maxMem), 32768);
+    await page.evaluate(() => { window.__nativeTest.state.totalMemoryMb = 16384; window.__nativeTest.host.stateChanged.emit(structuredClone(window.__nativeTest.state)); });
+    await page.waitForFunction(() => document.querySelectorAll('.ram-preset:disabled').length === 3);
+    const maxMemory = page.locator('.settings-dialog input[type="number"]').first();
+    await maxMemory.fill('32768'); await maxMemory.press('Tab');
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.at(-1)[2]), 32768);
+    await page.evaluate(() => { window.__nativeTest.state.totalMemoryMb = 32768; window.__nativeTest.state.accountName = 'AwakePlayer'; window.__nativeTest.host.stateChanged.emit(structuredClone(window.__nativeTest.state)); });
+    await page.waitForFunction(() => document.querySelector('.wordmark').textContent.includes('AwakePlayer'));
     assert.equal(await page.locator('.java-option').count(), 8);
     await page.locator('.modal-overlay').evaluate(async el => {
       await document.fonts.ready;
@@ -297,6 +319,14 @@ try {
     if (locale !== 'en_US') assert.notEqual((await page.locator('.java-picker-heading h3').textContent()).trim(), 'Java runtime');
     await page.locator('[data-java-profile="awake"]').focus(); await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.__nativeTest.globalJava.profile === 'awake');
+    await page.locator('.settings-tab-btn').first().click();
+    await page.locator('.settings-tab-btn').nth(2).click();
+    await page.locator('#gpu-preference').waitFor();
+    assert.equal(await page.locator('.gpu-devices li').count(), 2);
+    await page.locator('#gpu-preference').selectOption('highPerformance');
+    await page.waitForFunction(() => window.__nativeTest.state.gpuMode === 'highPerformance');
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.at(-1)), ['setGpuPreference','highPerformance']);
+    await page.screenshot({path:resolve(output, `gpu-global-${locale}.png`)});
     await page.locator('.settings-tab-btn').first().click();
     for (const code of ['zh-CN','zh-TW','th','en']) {
       await page.locator('#settings-lang').click();

@@ -39,6 +39,7 @@
 #include <QStandardPaths>
 
 #include "Application.h"
+#include "awake/GpuSelection.h"
 #include "FileSystem.h"
 #include "launch/LaunchTask.h"
 #include "minecraft/MinecraftInstance.h"
@@ -97,6 +98,11 @@ void LauncherPartLaunch::executeTask()
     emit logLine("Java arguments:\n  " + m_parent->censorPrivateInfo(allArgs) + "\n", MessageLevel::Launcher);
 
     auto javaPath = FS::ResolveExecutable(instance->settings()->get("JavaPath").toString());
+    QString gpuError;
+    if (!Awake::Gpu::applyBeforeJava(javaPath, gpuError)) {
+        emitFailed(gpuError);
+        return;
+    }
 
     m_process.setProcessEnvironment(instance->createLaunchEnvironment());
 

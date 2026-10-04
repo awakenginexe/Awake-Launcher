@@ -1,4 +1,6 @@
 export const en = {
+  gpuSelection: 'GPU for Minecraft', gpuAutomatic: 'Let Windows decide', gpuPowerSaving: 'Power saving', gpuHighPerformance: 'High performance', gpuGlobalHint: 'Applies to all instances before the next game starts.', gpuWindowsHint: 'Windows applies this preference to the Java executable. For several dedicated GPUs, choose the preferred adapter in Windows Graphics settings.', gpuWindowsSettings: 'Open Windows Graphics settings', gpuSaved: 'Saved for the next launch.', gpuUnsupported: 'GPU selection is currently available on Windows.',
+  welcome: 'Welcome!', installedRam: 'Installed RAM', ramSafe: 'Safe', ramCaution: 'Might not be enough', ramDanger: 'Danger', ramPresetUnavailable: 'Exceeds installed RAM. You can still type a value below.', ramOverrideHint: 'Grey presets exceed installed RAM. Type below to override.',
   javaRuntime: 'Java runtime', javaCustom: 'Custom Java', javaRecommended: 'Recommended', javaMostCompatible: 'Most Compatible',
   javaPerformanceCompatibility: 'Performance & Compatibility', javaExperimentalPerformance: 'Experimental Performance', javaStable: 'Stable', javaAlternative: 'Alternative', javaStandard: 'Standard', javaAdvanced: 'Advanced',
   javaGlobalHint: 'Used by all instances unless they have their own Java choice. Compatible runtimes are downloaded when you play.',
@@ -106,6 +108,8 @@ export const en = {
 export type MessageKey = keyof typeof en;
 type Catalog = Record<MessageKey, string>;
 export const th: Catalog = {
+  gpuSelection: 'GPU สำหรับ Minecraft', gpuAutomatic: 'ให้ Windows เลือก', gpuPowerSaving: 'ประหยัดพลังงาน (GPU ในตัว หากมี)', gpuHighPerformance: 'ประสิทธิภาพสูง (การ์ดจอแยก หากมี)', gpuGlobalHint: 'ใช้กับทุกอินสแตนซ์ก่อนเริ่มเกมครั้งถัดไป', gpuWindowsHint: 'Windows ใช้การตั้งค่านี้กับไฟล์ Java หากมีการ์ดจอแยกหลายตัว ให้เลือกตัวที่ต้องการในการตั้งค่ากราฟิกของ Windows', gpuWindowsSettings: 'เปิดการตั้งค่ากราฟิก Windows', gpuSaved: 'บันทึกสำหรับการเปิดเกมครั้งถัดไปแล้ว', gpuUnsupported: 'การเลือก GPU ใช้งานได้บน Windows ในขณะนี้',
+  welcome: 'ยินดีต้อนรับ!', installedRam: 'RAM ที่ติดตั้ง', ramSafe: 'ปลอดภัย', ramCaution: 'RAM ที่เหลืออาจไม่พอ', ramDanger: 'อันตราย', ramPresetUnavailable: 'เกิน RAM ที่ติดตั้ง คุณยังพิมพ์ค่าเองด้านล่างได้', ramOverrideHint: 'ตัวเลือกสีเทาเกิน RAM ที่ติดตั้ง พิมพ์ด้านล่างเพื่อกำหนดเอง',
   javaRuntime: 'รันไทม์ Java', javaCustom: 'Java ที่กำหนดเอง', javaRecommended: 'แนะนำ', javaMostCompatible: 'เข้ากันได้มากที่สุด',
   javaPerformanceCompatibility: 'ประสิทธิภาพและความเข้ากันได้', javaExperimentalPerformance: 'ประสิทธิภาพแบบทดลอง', javaStable: 'เสถียร', javaAlternative: 'ตัวเลือกอื่น', javaStandard: 'มาตรฐาน', javaAdvanced: 'ขั้นสูง',
   javaGlobalHint: 'ใช้กับทุกอินสแตนซ์ที่ไม่ได้เลือก Java ของตัวเอง โดยจะดาวน์โหลดรุ่นที่เข้ากันได้เมื่อเริ่มเล่น',
@@ -211,6 +215,8 @@ export const th: Catalog = {
   archiveBrowseError: 'ไม่สามารถเลือกไฟล์เก็บถาวรได้',
 };
 export const zhCN: Catalog = {
+  gpuSelection: 'Minecraft 的 GPU', gpuAutomatic: '让 Windows 决定', gpuPowerSaving: '节能（如有集成显卡）', gpuHighPerformance: '高性能（如有独立显卡）', gpuGlobalHint: '下次启动游戏前应用于所有实例。', gpuWindowsHint: 'Windows 将此偏好应用于 Java 程序。如有多个独立显卡，请在 Windows 图形设置中选择首选显卡。', gpuWindowsSettings: '打开 Windows 图形设置', gpuSaved: '已为下次启动保存。', gpuUnsupported: 'GPU 选择目前仅在 Windows 上可用。',
+  welcome: '欢迎！', installedRam: '已安装内存', ramSafe: '安全', ramCaution: '剩余内存可能不足', ramDanger: '危险', ramPresetUnavailable: '超过已安装内存。仍可在下方输入数值。', ramOverrideHint: '灰色选项超过已安装内存。可在下方手动输入。',
   javaRuntime: 'Java 运行时', javaCustom: '自定义 Java', javaRecommended: '推荐', javaMostCompatible: '兼容性最佳',
   javaPerformanceCompatibility: '性能与兼容性', javaExperimentalPerformance: '实验性性能', javaStable: '稳定', javaAlternative: '备选', javaStandard: '标准', javaAdvanced: '高级',
   javaGlobalHint: '用于未单独选择 Java 的所有实例。启动游戏时会下载兼容的运行时。',
@@ -316,6 +322,8 @@ export const zhCN: Catalog = {
   archiveBrowseError: '无法浏览选择压缩包。',
 };
 export const zhTW: Catalog = {
+  gpuSelection: 'Minecraft 的 GPU', gpuAutomatic: '讓 Windows 決定', gpuPowerSaving: '節能（如有整合顯示卡）', gpuHighPerformance: '高效能（如有獨立顯示卡）', gpuGlobalHint: '下次啟動遊戲前套用至所有實例。', gpuWindowsHint: 'Windows 將此偏好套用至 Java 程式。如有多個獨立顯示卡，請在 Windows 圖形設定中選擇偏好的顯示卡。', gpuWindowsSettings: '開啟 Windows 圖形設定', gpuSaved: '已為下次啟動儲存。', gpuUnsupported: 'GPU 選擇目前僅在 Windows 上可用。',
+  welcome: '歡迎！', installedRam: '已安裝記憶體', ramSafe: '安全', ramCaution: '剩餘記憶體可能不足', ramDanger: '危險', ramPresetUnavailable: '超過已安裝記憶體。仍可在下方輸入數值。', ramOverrideHint: '灰色選項超過已安裝記憶體。可在下方手動輸入。',
   javaRuntime: 'Java 執行環境', javaCustom: '自訂 Java', javaRecommended: '推薦', javaMostCompatible: '相容性最佳',
   javaPerformanceCompatibility: '效能與相容性', javaExperimentalPerformance: '實驗性效能', javaStable: '穩定', javaAlternative: '替代選項', javaStandard: '標準', javaAdvanced: '進階',
   javaGlobalHint: '用於未單獨選擇 Java 的所有實例。啟動遊戲時會下載相容的執行環境。',

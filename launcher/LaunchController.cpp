@@ -36,6 +36,7 @@
 
 #include "LaunchController.h"
 #include "Application.h"
+#include "awake/GpuSelection.h"
 #include "launch/steps/PrintServers.h"
 #include "minecraft/auth/AccountData.h"
 #include "minecraft/auth/AccountList.h"
@@ -75,6 +76,10 @@ void LaunchController::executeTask()
         return;
     }
 
+    if (!Awake::Gpu::confirmBeforeLaunch(m_parentWidget)) {
+        emitFailed(tr("Launch cancelled."));
+        return;
+    }
     login();
 }
 

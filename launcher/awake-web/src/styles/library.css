@@ -99,6 +99,9 @@ p, h1, h2, h3 { margin: 0; }
   padding-inline: var(--space-1);
 }
 .wordmark {
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   font-weight: 700;
   font-size: 1.25rem;
   letter-spacing: -0.01em;
@@ -1328,6 +1331,24 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   font-weight: 600;
   box-shadow: 0 0 12px rgba(96, 165, 250, 0.2);
 }
+
+.ram-presets-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.ram-preset.safe, .ram-legend .safe { color: #86efac; }
+.ram-preset.caution, .ram-legend .caution { color: #fde047; }
+.ram-preset.danger, .ram-legend .danger { color: #fca5a5; }
+.ram-preset.safe { border-color: #43805b; background: #142d24; }
+.ram-preset.caution { border-color: #8d7a35; background: #332c16; }
+.ram-preset.danger { border-color: #995558; background: #3b1e24; }
+.ram-preset.is-active { border-color: currentColor; outline: 2px solid currentColor; outline-offset: 2px; box-shadow: none; }
+.ram-preset:disabled { color: #8993a1; background: #19202a; border-color: #38414e; cursor: not-allowed; outline: none; box-shadow: none; }
+.ram-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.ram-legend span::before { content: '●'; margin-right: 5px; }
+.ram-hint { margin-top: 8px; }
+.brand-logo { width: 56px; height: 56px; object-fit: contain; }
+.gpu-picker { margin-bottom: 24px; }
+.gpu-devices { padding-left: 18px; margin: 10px 0; color: var(--text-secondary); }
+.gpu-picker select { width: 100%; margin-bottom: 8px; }
+.gpu-picker .setting-hint { margin: 8px 0; }
 
 /* Create Instance Dialog Specifics */
 .create-body {

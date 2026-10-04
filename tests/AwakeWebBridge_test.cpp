@@ -18,6 +18,8 @@
 #include <QLabel>
 #include <QCryptographicHash>
 #include <QTimer>
+#include <QComboBox>
+#include <QDialogButtonBox>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <memory>
@@ -25,6 +27,7 @@
 #include "InstanceList.h"
 #include "awake/web/AwakeWebAssets.h"
 #include "awake/AwakeTheme.h"
+#include "awake/GpuSelection.h"
 #include "awake/web/AwakeWebBridge.h"
 #include "awake/web/AwakePackCatalog.h"
 #include "InstanceImportTask.h"
@@ -48,10 +51,95 @@
 #include "java/download/ArchiveDownloadTask.h"
 #include "net/HttpMetaCache.h"
 
+#if defined(Q_OS_WIN) && !defined(Q_MOC_RUN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void gpuChoiceIsSavedOnceAndCancelDoesNotChangeIt() {
+        auto* config = APPLICATION->settings();
+        const auto previousMode = config->get("AwakeGpuPreference");
+        const auto previousSeen = config->get("AwakeGpuChoiceSeen");
+        const QVariantMap hardware{{"supported", true}, {"devices", QVariantList{QVariantMap{{"name", "GPU one fixture"}}, QVariantMap{{"name", "GPU two fixture"}}}}};
+        config->set("AwakeGpuChoiceSeen", false);
+        QTimer cancel;
+        cancel.setInterval(20);
+        connect(&cancel, &QTimer::timeout, this, [] {
+            if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) dialog->reject();
+        });
+        cancel.start();
+        QVERIFY(!Awake::Gpu::confirmBeforeLaunch(nullptr, hardware));
+        cancel.stop();
+        QVERIFY(!config->get("AwakeGpuChoiceSeen").toBool());
+        QCOMPARE(config->get("AwakeGpuPreference"), previousMode);
+        QTimer accept;
+        accept.setInterval(20);
+        connect(&accept, &QTimer::timeout, this, [] {
+            if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+                auto* choice = dialog->findChild<QComboBox*>("gpuPreferenceChoice");
+                if (!choice) return;
+                choice->setCurrentIndex(choice->findData("highPerformance"));
+                dialog->accept();
+            }
+        });
+        accept.start();
+        QVERIFY(Awake::Gpu::confirmBeforeLaunch(nullptr, hardware));
+        accept.stop();
+        QVERIFY(config->get("AwakeGpuChoiceSeen").toBool());
+        QCOMPARE(config->get("AwakeGpuPreference").toString(), QString("highPerformance"));
+        QVERIFY(Awake::Gpu::confirmBeforeLaunch(nullptr, hardware));
+        config->set("AwakeGpuPreference", previousMode);
+        config->set("AwakeGpuChoiceSeen", previousSeen);
+    }
+    void gpuPreferenceTargetsTheResolvedJavaExecutable() {
+#ifdef Q_OS_WIN
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile java(directory.filePath("javaw.exe"));
+        QVERIFY(java.open(QIODevice::WriteOnly));
+        java.close();
+        const auto valueName = QDir::toNativeSeparators(QFileInfo(java).canonicalFilePath()).toStdWString();
+        HKEY key = nullptr;
+        QCOMPARE(RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\DirectX\\UserGpuPreferences", 0, nullptr, 0, KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, &key, nullptr), LSTATUS(ERROR_SUCCESS));
+        const std::wstring previous = L"AutoHDREnable=1;";
+        QCOMPARE(RegSetValueExW(key, valueName.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(previous.c_str()), static_cast<DWORD>((previous.size() + 1) * sizeof(wchar_t))), LSTATUS(ERROR_SUCCESS));
+        auto* config = APPLICATION->settings();
+        const auto previousMode = config->get("AwakeGpuPreference");
+        const auto previousSeen = config->get("AwakeGpuChoiceSeen");
+        config->set("AwakeGpuChoiceSeen", true);
+        QString error;
+        for (const auto& mode : {QString("highPerformance"), QString("powerSaving"), QString("automatic")}) {
+            config->set("AwakeGpuPreference", mode);
+            QVERIFY2(Awake::Gpu::applyBeforeJava(java.fileName(), error), qPrintable(error));
+            wchar_t buffer[256]{};
+            DWORD size = sizeof(buffer);
+            QCOMPARE(RegQueryValueExW(key, valueName.c_str(), nullptr, nullptr, reinterpret_cast<BYTE*>(buffer), &size), LSTATUS(ERROR_SUCCESS));
+            QCOMPARE(QString::fromWCharArray(buffer), Awake::Gpu::preferenceValue("AutoHDREnable=1;", mode));
+        }
+        RegDeleteValueW(key, valueName.c_str());
+        RegCloseKey(key);
+        config->set("AwakeGpuPreference", previousMode);
+        config->set("AwakeGpuChoiceSeen", previousSeen);
+#endif
+    }
+    void globalGpuPolicyPreservesOtherGraphicsSettings() {
+        using namespace Awake::Gpu;
+        QVERIFY(needsPrompt(false, 2));
+        QVERIFY(!needsPrompt(true, 3));
+        QVERIFY(!needsPrompt(false, 1));
+        QCOMPARE(preferenceValue("AutoHDREnable=1;GpuPreference=1;", "highPerformance"), QString("AutoHDREnable=1;GpuPreference=2;"));
+        QCOMPARE(preferenceValue("GpuPreference=2;SwapEffectUpgradeEnable=0;", "powerSaving"), QString("SwapEffectUpgradeEnable=0;GpuPreference=1;"));
+        QCOMPARE(preferenceValue("AutoHDREnable=1;GpuPreference=2;", "automatic"), QString("AutoHDREnable=1;"));
+        QVERIFY(preferenceValue("GpuPreference=2;", "automatic").isEmpty());
+        QVERIFY(!validMode("nvidia"));
+        QVERIFY(!validMode("inherit"));
+    }
     void initTestCase() {
         QTRY_COMPARE_WITH_TIMEOUT(APPLICATION->status(), Application::Initialized, 15000);
         QVERIFY(QFontDatabase::families().contains("K2D"));

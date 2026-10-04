@@ -5,6 +5,9 @@
 #include "AwakePackCatalog.h"
 #include "AwakeInstanceEditor.h"
 #include "Application.h"
+#include "HardwareInfo.h"
+#include "awake/GpuSelection.h"
+#include <QDesktopServices>
 #include "InstanceList.h"
 #include "awake/InstanceArtwork.h"
 #include "icons/IconList.h"
@@ -206,9 +209,33 @@ QVariantMap Bridge::snapshot()
             {"compact", APPLICATION->settings()->get("AwakeCompactLibrary").toBool()},
             {"sortMode", sortMode == "Playtime" ? QString("TotalTimePlayed") : sortMode},
             {"accountName", account ? account->displayName() : QString()},
+            {"totalMemoryMb", QVariant::fromValue(HardwareInfo::installedRamMiB())},
             {"accounts", accountList},
             {"launcherSettings", settingsMap},
             {"modalActive", m_modalActive}};
+}
+
+QVariantMap Bridge::gpuSettings()
+{
+    if (!m_active) return fail("gpuSettings", tr("The launcher is not active."));
+    return Awake::Gpu::settings();
+}
+
+QVariantMap Bridge::setGpuPreference(const QString& mode)
+{
+    if (!m_active || !Awake::Gpu::validMode(mode)) return fail("setGpuPreference", tr("Invalid GPU preference."));
+    if (!Awake::Gpu::settings().value("supported").toBool()) return fail("setGpuPreference", tr("GPU selection is not supported on this platform."));
+    APPLICATION->settings()->set("AwakeGpuPreference", mode);
+    APPLICATION->settings()->set("AwakeGpuChoiceSeen", true);
+    return Awake::Gpu::settings();
+}
+
+QVariantMap Bridge::openGpuSettings()
+{
+#ifdef Q_OS_WIN
+    if (m_active && QDesktopServices::openUrl(QUrl("ms-settings:display-advancedgraphics"))) return success();
+#endif
+    return fail("openGpuSettings", tr("Unable to open Windows Graphics settings."));
 }
 
 void Bridge::scheduleState()

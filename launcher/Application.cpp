@@ -780,6 +780,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("EnableFeralGamemode", false);
         m_settings->registerSetting("EnableMangoHud", false);
         m_settings->registerSetting("UseDiscreteGpu", false);
+        m_settings->registerSetting("AwakeGpuPreference", "automatic");
+        m_settings->registerSetting("AwakeGpuChoiceSeen", false);
         m_settings->registerSetting("UseZink", false);
 
         // Game time
@@ -1552,7 +1554,7 @@ JavaInstallList* Application::javalist()
 
 QIcon Application::logo()
 {
-    return QIcon(":/" + BuildConfig.LAUNCHER_SVGFILENAME);
+    return QIcon(":/awake-logo.png");
 }
 
 bool Application::openJsonEditor(const QString& filename)

@@ -1,6 +1,7 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/awake/fonts">
+        <file alias="Bayon-Regular.ttf">../../awake-web/src/assets/fonts/Bayon-Regular.ttf</file>
         <file alias="K2D-Regular.ttf">../../awake-web/src/assets/fonts/K2D-Regular.ttf</file>
         <file alias="K2D-Medium.ttf">../../awake-web/src/assets/fonts/K2D-Medium.ttf</file>
         <file alias="K2D-SemiBold.ttf">../../awake-web/src/assets/fonts/K2D-SemiBold.ttf</file>

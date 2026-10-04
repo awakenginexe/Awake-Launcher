@@ -5,14 +5,20 @@ import type { MessageKey } from '../i18n/catalogs.ts';
 import '../styles/language-select.css';
 import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
+import GpuPicker from './GpuPicker.vue';
+import type { GpuService } from './GpuPicker.vue';
+import { ramPresets, memoryRisk, presetFits, installedMemoryMb } from '../features/library/memory.ts';
+import logoUrl from '../../../../program_info/awake-launcher.png';
 
 const props = defineProps<{
   settings: LauncherSettings;
+  totalMemoryMb: number;
   compact: boolean;
   reducedMotion: boolean;
   locale: string;
   t: (key: MessageKey) => string;
   javaService: JavaService;
+  gpuService: GpuService;
 }>();
 
 const emit = defineEmits<{
@@ -87,16 +93,8 @@ function onDocumentPointerDown(event: PointerEvent) {
 onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown));
 onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerDown));
 
-const ramPresets = [
-  { label: '2 GB', mb: 2048 },
-  { label: '4 GB', mb: 4096 },
-  { label: '6 GB', mb: 6144 },
-  { label: '8 GB', mb: 8192 },
-  { label: '12 GB', mb: 12288 },
-  { label: '16 GB', mb: 16384 },
-];
-
 function selectRam(mb: number) {
+  if (!presetFits(mb, props.totalMemoryMb)) return;
   emit('update-pref', 'maxMem', mb);
 }
 
@@ -252,16 +250,25 @@ function selectResolution(w: number, h: number) {
                   v-for="preset in ramPresets"
                   :key="preset.mb"
                   type="button"
-                  class="pill-btn"
-                  :class="{ 'is-active': settings.maxMem === preset.mb }"
+                  class="pill-btn ram-preset"
+                  :class="[memoryRisk(preset.mb, totalMemoryMb), { 'is-active': settings.maxMem === preset.mb }]"
+                  :disabled="!presetFits(preset.mb, totalMemoryMb)"
+                  :title="!presetFits(preset.mb, totalMemoryMb) ? t('ramPresetUnavailable') : t(memoryRisk(preset.mb, totalMemoryMb) === 'danger' ? 'ramDanger' : memoryRisk(preset.mb, totalMemoryMb) === 'caution' ? 'ramCaution' : 'ramSafe')"
                   @click="selectRam(preset.mb)"
                 >
                   {{ preset.label }}
                 </button>
               </div>
+              <div class="ram-legend setting-hint">
+                <span class="safe">{{ t('ramSafe') }}</span>
+                <span class="caution">{{ t('ramCaution') }}</span>
+                <span class="danger">{{ t('ramDanger') }}</span>
+              </div>
+              <p class="setting-hint ram-hint">{{ totalMemoryMb ? `${t('installedRam')}: ${installedMemoryMb(totalMemoryMb) / 1024} GB. ` : '' }}{{ t('ramOverrideHint') }}</p>
               <div class="inline-input-row" style="margin-top: 10px;">
                 <input
                   type="number"
+                  :aria-label="t('maxRamLabel')"
                   class="styled-input"
                   style="width: 120px;"
                   min="1024"
@@ -295,6 +302,7 @@ function selectResolution(w: number, h: number) {
 
           <!-- Game Window Tab -->
           <div v-else-if="activeTab === 'window'" class="settings-group">
+            <GpuPicker :service="gpuService" :t="t" />
             <div class="setting-block">
               <label>{{ t('windowSizeLabel') }}</label>
               <div class="ram-presets-row">
@@ -342,10 +350,10 @@ function selectResolution(w: number, h: number) {
           <!-- About Tab -->
           <div v-else-if="activeTab === 'about'" class="settings-group about-pane">
             <div class="about-brand">
-              <div class="brand-badge">A</div>
+              <img class="brand-logo" :src="logoUrl" alt="" />
               <div>
                 <h3>Awake Launcher</h3>
-                <p class="brand-version">Version 0.1.0-release</p>
+                <p class="brand-version">Version 0.2.0</p>
               </div>
             </div>
             <p class="brand-description">

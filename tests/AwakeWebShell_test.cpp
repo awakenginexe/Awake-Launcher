@@ -6,7 +6,9 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontInfo>
 #include <QImage>
+#include <QLabel>
 #include <QMenu>
 #include <QPointer>
 #include <QTemporaryDir>
@@ -17,6 +19,7 @@
 #include <QWebEngineView>
 #include <memory>
 #include "Application.h"
+#include "HardwareInfo.h"
 #include "LaunchController.h"
 #include "minecraft/auth/AccountList.h"
 #include "InstanceList.h"
@@ -93,6 +96,33 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(APPLICATION->settings()->get("AutomaticJavaDownload").toBool());
         evaluate("document.querySelector('[data-java-profile=awake]').click()");
         QTRY_COMPARE(APPLICATION->settings()->get("AwakeJavaProfile").toString(), QString("awake"));
+        evaluate("document.querySelector('.modal-close-btn').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') === null").toBool());
+    }
+    void memoryPresetsAndBrandingUseNativeState()
+    {
+        QCOMPARE(bridge->snapshot().value("totalMemoryMb").toULongLong(), HardwareInfo::installedRamMiB());
+        auto* title = window->findChild<QLabel*>("awakeBrandTitle");
+        QVERIFY(title);
+        QCOMPARE(title->font().pixelSize(), 28);
+        QCOMPARE(QFontInfo(title->font()).family(), QString("Bayon"));
+        QCOMPARE(title->text(), QString("AWAKE LAUNCHER 0.2.0"));
+        QVERIFY(!APPLICATION->logo().isNull());
+        evaluate("document.querySelector('.account-actions .settings-button').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());
+        evaluate("document.querySelectorAll('.settings-tab-btn')[1].click()");
+        QTRY_COMPARE(evaluate("document.querySelectorAll('.ram-preset').length").toInt(), 9);
+        const auto previous = APPLICATION->settings()->get("MaxMemAlloc");
+        const auto overrideMb = HardwareInfo::installedRamMiB() + 1024;
+        evaluate(QString("(() => { const input = document.querySelector('.settings-dialog input[type=number]'); input.value = '%1'; input.dispatchEvent(new Event('change', {bubbles:true})); })()")
+                     .arg(overrideMb));
+        QTRY_COMPARE(APPLICATION->settings()->get("MaxMemAlloc").toULongLong(), overrideMb);
+        bridge->setPreference("maxMem", previous);
+        evaluate("document.querySelectorAll('.settings-tab-btn')[3].click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.brand-logo')?.complete && document.querySelector('.brand-logo')?.naturalWidth > 0").toBool());
+        QVERIFY(evaluate("document.querySelector('.brand-version').textContent.includes('0.2.0')").toBool());
+        QTest::qWait(150);
+        window->grab().save("W:/.validation/branding-020-native.png");
         evaluate("document.querySelector('.modal-close-btn').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') === null").toBool());
     }
@@ -243,7 +273,7 @@ int main(int argc, char** argv)
     QTemporaryDir data(original + "/.validation/awake-web-shell-XXXXXX");
     if (!data.isValid()) return 1;
     seedStartupAccount(data.path());
-    writeFixture(data.path() + "/awakelauncher.cfg", "Language=en_US\nIgnoreJavaWizard=true\nAutomaticJavaDownload=true\nAutomaticJavaSwitch=true\nUserAskedAboutAutomaticJavaDownload=true\nProxyType=HTTP\nProxyAddr=127.0.0.1\nProxyPort=9\n");
+    writeFixture(data.path() + "/awakelauncher.cfg", "Language=en_US\nAwakeGpuChoiceSeen=true\nIgnoreJavaWizard=true\nAutomaticJavaDownload=true\nAutomaticJavaSwitch=true\nUserAskedAboutAutomaticJavaDownload=true\nProxyType=HTTP\nProxyAddr=127.0.0.1\nProxyPort=9\n");
     for (const auto& id : {QString("one"), QString("two")}) {
         const auto path = data.path() + "/instances/" + id;
         QDir().mkpath(path);

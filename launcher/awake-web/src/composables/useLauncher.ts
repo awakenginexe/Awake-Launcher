@@ -189,6 +189,11 @@ export function useLauncher() {
     if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
     return callNative(native, 'instanceCommand', [id, command, payload]);
   }
+  const gpuService = {
+    settings: () => javaCall('gpuSettings', []),
+    select: (mode: string) => javaCall('setGpuPreference', [mode]),
+    openWindows: () => javaCall('openGpuSettings', []),
+  };
   onScopeDispose(() => {
     connectionRevision++;
     catalog?.dispose();
@@ -197,5 +202,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, gpuService };
 }

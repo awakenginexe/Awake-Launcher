@@ -42,6 +42,9 @@ public:
     Q_INVOKABLE QVariantMap instanceDetails(const QString& id, const QString& section);
     Q_INVOKABLE QVariantMap instanceCommand(const QString& id, const QString& command, const QVariant& payload);
     Q_INVOKABLE QVariantMap javaSettings(const QString& id);
+    Q_INVOKABLE QVariantMap gpuSettings();
+    Q_INVOKABLE QVariantMap setGpuPreference(const QString& mode);
+    Q_INVOKABLE QVariantMap openGpuSettings();
     Q_INVOKABLE QVariantMap setJavaProfile(const QString& id, const QString& profile);
     Q_INVOKABLE QVariantMap browseJava(const QString& requestId, const QString& id);
     PackCatalog* packCatalog() const { return m_packCatalog; }

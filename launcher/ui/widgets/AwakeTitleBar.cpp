@@ -6,6 +6,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QIcon>
+#include <QPainterPath>
+#include <QFontDatabase>
 #include "Application.h"
 #include "BuildConfig.h"
 
@@ -16,11 +18,39 @@
 #include <windows.h>
 #endif
 
+namespace {
+class BrandTitleLabel final : public QLabel {
+public:
+    using QLabel::QLabel;
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const auto split = text().lastIndexOf(' ');
+        const auto brand = split < 0 ? text() : text().first(split);
+        const auto version = split < 0 ? QString() : text().sliced(split + 1);
+        QPainterPath brandPath;
+        brandPath.addText(0, 0, font(), brand);
+        QPainterPath versionPath;
+        versionPath.addText(fontMetrics().horizontalAdvance(brand + ' '), 0, font(), version);
+        const auto bounds = brandPath.united(versionPath).boundingRect();
+        painter.translate(0, (height() - bounds.height()) / 2.0 - bounds.top());
+        painter.fillPath(brandPath, Qt::white);
+        const auto versionBounds = versionPath.boundingRect();
+        QLinearGradient gradient(versionBounds.topLeft(), versionBounds.topRight());
+        gradient.setColorAt(0, QColor("#93c5fd"));
+        gradient.setColorAt(1, QColor("#3b82f6"));
+        painter.fillPath(versionPath, gradient);
+    }
+};
+}
+
 AwakeTitleBar::AwakeTitleBar(QWidget* targetWindow, QWidget* parent)
     : QWidget(parent), m_window(targetWindow)
 {
     setObjectName("awakeTitleBar");
-    setFixedHeight(36);
+    setFixedHeight(46);
 
     auto* layout = new QHBoxLayout(this);
     layout->setContentsMargins(14, 0, 14, 0);
@@ -29,14 +59,20 @@ AwakeTitleBar::AwakeTitleBar(QWidget* targetWindow, QWidget* parent)
     // App Logo
     m_logoLabel = new QLabel(this);
     m_logoLabel->setObjectName("titleBarLogo");
-    m_logoLabel->setFixedSize(18, 18);
-    m_logoLabel->setPixmap(APPLICATION->logo().pixmap(18, 18));
+    m_logoLabel->setFixedSize(30, 30);
+    m_logoLabel->setPixmap(APPLICATION->logo().pixmap(30, 30));
     layout->addWidget(m_logoLabel, 0, Qt::AlignVCenter);
 
-    const QString titleText = APPLICATION->applicationDisplayName();
+    static const int bayonFont = QFontDatabase::addApplicationFont(QStringLiteral(":/awake/fonts/Bayon-Regular.ttf"));
+    Q_UNUSED(bayonFont);
+    const QString titleText = APPLICATION->applicationDisplayName().toUpper();
 
-    m_titleLabel = new QLabel(titleText, this);
-    m_titleLabel->setObjectName("titleBarText");
+    m_titleLabel = new BrandTitleLabel(titleText, this);
+    m_titleLabel->setObjectName("awakeBrandTitle");
+    QFont titleFont(QStringLiteral("Bayon"));
+    titleFont.setPixelSize(28);
+    m_titleLabel->setFont(titleFont);
+    m_titleLabel->setStyleSheet(QStringLiteral("font-family: 'Bayon'; font-size: 28px; font-weight: 400;"));
     layout->addWidget(m_titleLabel, 0, Qt::AlignVCenter);
 
     layout->addStretch();
@@ -102,7 +138,7 @@ AwakeTitleBar::AwakeTitleBar(QWidget* targetWindow, QWidget* parent)
 void AwakeTitleBar::setTitle(const QString& title)
 {
     if (m_titleLabel) {
-        m_titleLabel->setText(title);
+        m_titleLabel->setText(title.toUpper());
     }
 }
 

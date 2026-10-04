@@ -86,13 +86,13 @@ export interface Instance {
 }
 export interface Snapshot {
   instances: Instance[]; selectedId: string; locale: Locale; reducedMotion: boolean; compact: boolean;
-  sortMode: SortMode; accountName: string; modalActive: boolean;
+  sortMode: SortMode; accountName: string; modalActive: boolean; totalMemoryMb: number;
   accounts: AccountItem[]; launcherSettings: LauncherSettings;
 }
 export function emptySnapshot(): Snapshot {
   return {
     instances: [], selectedId: '', locale: 'en', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '', modalActive: false,
-    accounts: [],
+    accounts: [], totalMemoryMb: 0,
     launcherSettings: {
       language: '', minMem: 1024, maxMem: 4096, javaPath: '', gameWidth: 854, gameHeight: 480, maximizeGame: false, closeOnLaunch: false
     }
@@ -156,6 +156,7 @@ export function parseSnapshot(value: unknown): Snapshot {
     compact: data.compact,
     sortMode: data.sortMode as SortMode,
     accountName: data.accountName,
+    totalMemoryMb: typeof data.totalMemoryMb === 'number' && Number.isFinite(data.totalMemoryMb) && data.totalMemoryMb > 0 ? data.totalMemoryMb : 0,
     modalActive: Boolean(data.modalActive),
     accounts,
     launcherSettings,

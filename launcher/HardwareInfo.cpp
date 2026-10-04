@@ -355,3 +355,12 @@ QStringList HardwareInfo::gpuInfo()
     return { "GPU discovery failed: not implemented for this OS" };
 }
 #endif
+
+uint64_t HardwareInfo::installedRamMiB()
+{
+#ifdef Q_OS_WINDOWS
+    ULONGLONG installedKiB = 0;
+    if (GetPhysicallyInstalledSystemMemory(&installedKiB)) return installedKiB / 1024;
+#endif
+    return totalRamMiB();
+}

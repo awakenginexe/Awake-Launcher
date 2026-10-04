@@ -30,6 +30,10 @@ K2D fonts from Google Fonts: https://github.com/google/fonts/tree/main/ofl/k2d
 
 Copyright 2018 The K2D Project Authors (https://github.com/cadsondemak/K2D)
 
+Bayon font from Google Fonts: https://github.com/google/fonts/tree/main/ofl/bayon
+
+Copyright 2019 The Bayon Project Authors (https://github.com/danhhong/Bayon)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL

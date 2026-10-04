@@ -24,6 +24,7 @@
 namespace HardwareInfo {
 QString cpuInfo();
 uint64_t totalRamMiB();
+uint64_t installedRamMiB();
 uint64_t availableRamMiB();
 QStringList gpuInfo();
 }  // namespace HardwareInfo

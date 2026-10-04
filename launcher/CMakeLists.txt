@@ -1259,6 +1259,7 @@ endif()
 add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES} ${AWAKE_WEB_SOURCES}
     awake/LocalePolicy.cpp awake/LocalePolicy.h
     awake/DesignTokens.cpp awake/DesignTokens.h awake/AwakeTheme.cpp awake/AwakeTheme.h
+    awake/GpuSelection.cpp awake/GpuSelection.h
     awake/InstanceSearch.cpp awake/InstanceSearch.h
     awake/InstanceArtwork.cpp awake/InstanceArtwork.h awake/VisualControls.cpp awake/VisualControls.h
     awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h

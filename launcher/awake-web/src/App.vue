@@ -10,7 +10,7 @@ import CreateInstanceModal from './components/CreateInstanceModal.vue';
 import InstanceEditorModal from './components/InstanceEditorModal.vue';
 import AppMenuModal from './components/AppMenuModal.vue';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService } = useLauncher();
+const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, gpuService } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -166,7 +166,7 @@ onUnmounted(() => {
     </div>
 
     <aside class="navigation glass" :aria-label="t('library')">
-      <header class="library-header"><span class="wordmark">Awake Launcher</span><button :disabled="!enabled" class="quiet" @click="showAppMenu = true">{{ t('application') }}</button></header>
+      <header class="library-header"><span class="wordmark" :title="state.accountName">{{ state.accountName ? `${t('welcome')} ${state.accountName}` : t('welcome') }}</span><button :disabled="!enabled" class="quiet" @click="showAppMenu = true">{{ t('application') }}</button></header>
       <h2 class="library-heading">{{ t('library') }}</h2>
       <div class="search-row">
         <label class="visually-hidden" for="instance-search">{{ t('search') }}</label>
@@ -294,6 +294,8 @@ onUnmounted(() => {
       <SettingsModal
         v-if="showSettings"
         :settings="state.launcherSettings"
+        :total-memory-mb="state.totalMemoryMb"
+        :gpu-service="gpuService"
         :java-service="javaService"
         :compact="state.compact"
         :reduced-motion="state.reducedMotion"
