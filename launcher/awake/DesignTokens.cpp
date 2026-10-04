@@ -18,7 +18,7 @@ QColor color(Color token)
         case Color::DisabledText:
             return QColor("#64748b");
         case Color::Border:
-            return QColor("#1e293b");
+            return QColor("#64748b");
         case Color::Accent:
             return QColor("#3b82f6");
         case Color::AccentHover:
