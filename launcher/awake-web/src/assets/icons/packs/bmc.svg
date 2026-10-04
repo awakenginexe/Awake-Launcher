@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bmcBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+    <linearGradient id="bmcGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#bae6fd" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0b172a" stroke="#0284c7" stroke-width="2"/>
+  <path d="M32 8 L52 18 V36 C52 48 32 56 32 56 C32 56 12 48 12 36 V18 Z" fill="url(#bmcBg)" />
+  <path d="M32 14 L46 22 V35 C46 43 32 49 32 49 C32 49 18 43 18 35 V22 Z" fill="#0f172a" opacity="0.6"/>
+  <!-- Winged dragon sword crest -->
+  <path d="M32 16 V44 M26 22 H38 M30 44 L32 48 L34 44" stroke="url(#bmcGold)" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M22 28 C26 24 30 25 32 30 C34 25 38 24 42 28 C38 34 35 34 32 36 C29 34 26 34 22 28 Z" fill="url(#bmcGold)"/>
+</svg>

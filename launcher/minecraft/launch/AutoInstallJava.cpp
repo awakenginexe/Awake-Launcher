@@ -47,6 +47,7 @@
 #include "java/JavaInstallList.h"
 #include "java/JavaUtils.h"
 #include "java/JavaVersion.h"
+#include "java/RuntimeSelection.h"
 #include "java/download/ArchiveDownloadTask.h"
 #include "java/download/ManifestDownloadTask.h"
 #include "java/download/SymlinkTask.h"
@@ -62,13 +63,39 @@ AutoInstallJava::AutoInstallJava(LaunchTask* parent)
 void AutoInstallJava::executeTask()
 {
     auto settings = m_instance->settings();
-    if (!APPLICATION->settings()->get("AutomaticJavaSwitch").toBool() ||
-        (settings->get("OverrideJavaLocation").toBool() && QFileInfo::exists(settings->get("JavaPath").toString()))) {
+    const auto explicitProfile = settings->get("OverrideJavaProfile").toBool();
+    auto profile = settings->get("AwakeJavaProfile").toString();
+    const auto manualOverride = settings->get("OverrideJavaLocation").toBool() && !settings->get("AutomaticJava").toBool();
+    if (!explicitProfile && (manualOverride || !APPLICATION->settings()->get("AutomaticJavaSwitch").toBool())) profile = "custom";
+    if (!Java::runtimeProfileAllowed(profile)) profile = "minecraft";
+    if (profile == "custom") {
+        // A previous managed path must not hide a new global custom selection.
+        if (!explicitProfile && settings->get("AutomaticJava").toBool()) settings->set("OverrideJavaLocation", false);
         emitSucceeded();
         return;
     }
     auto packProfile = m_instance->getPackProfile();
-    if (!APPLICATION->settings()->get("AutomaticJavaDownload").toBool()) {
+    const auto allowDownload = explicitProfile || APPLICATION->settings()->get("AutomaticJavaDownload").toBool();
+    if (!m_vendorAttempted && allowDownload && !Java::runtimeDistribution(profile).isEmpty() &&
+        !packProfile->getProfile()->getCompatibleJavaName().isEmpty()) {
+        m_vendorAttempted = true;
+        auto runtime = makeShared<Java::RuntimeDownloadTask>(profile, packProfile->getProfile()->getCompatibleJavaMajors(),
+                                                           m_supported_arch, APPLICATION->javaPath());
+        m_current_task = runtime;
+        connect(runtime.get(), &Task::succeeded, this, [this, ptr = runtime.get()] { setJavaPath(ptr->javaPath()); });
+        connect(runtime.get(), &Task::failed, this, [this, profile](const QString& reason) {
+            const auto keepAlive = m_current_task;
+            if (profile != "awake") { emitFailed(reason); return; }
+            emit logLine(tr("Awake Optimized could not select a verified runtime. Falling back to Minecraft Default."), MessageLevel::Warning);
+            executeTask();
+        });
+        connect(runtime.get(), &Task::aborted, this, &AutoInstallJava::emitAborted);
+        propagateFromOther(runtime.get());
+        runtime->start();
+        emit progressReportingRequest();
+        return;
+    }
+    if (!allowDownload) {
         auto javas = APPLICATION->javalist();
         m_current_task = javas->getLoadTask();
         connect(m_current_task.get(), &Task::finished, this, [this, javas, packProfile] {
@@ -89,6 +116,7 @@ void AutoInstallJava::executeTask()
         connect(m_current_task.get(), &Task::stepProgress, this, &AutoInstallJava::propagateStepProgress);
         connect(m_current_task.get(), &Task::status, this, &AutoInstallJava::setStatus);
         connect(m_current_task.get(), &Task::details, this, &AutoInstallJava::setDetails);
+        connect(m_current_task.get(), &Task::aborted, this, &AutoInstallJava::emitAborted);
         emit progressReportingRequest();
         return;
     }
@@ -123,6 +151,7 @@ void AutoInstallJava::executeTask()
     connect(m_current_task.get(), &Task::stepProgress, this, &AutoInstallJava::propagateStepProgress);
     connect(m_current_task.get(), &Task::status, this, &AutoInstallJava::setStatus);
     connect(m_current_task.get(), &Task::details, this, &AutoInstallJava::setDetails);
+    connect(m_current_task.get(), &Task::aborted, this, &AutoInstallJava::emitAborted);
     if (!m_current_task->isRunning()) {
         m_current_task->start();
     }
@@ -190,6 +219,7 @@ void AutoInstallJava::downloadJava(Meta::Version::Ptr version, QString javaName)
                 emitFailed(reason);
             });
             connect(m_current_task.get(), &Task::aborted, this, deletePath);
+            connect(m_current_task.get(), &Task::aborted, this, &AutoInstallJava::emitAborted);
             connect(m_current_task.get(), &Task::succeeded, this, &AutoInstallJava::setJavaPathFromPartial);
             connect(m_current_task.get(), &Task::failed, this, &AutoInstallJava::tryNextMajorJava);
             connect(m_current_task.get(), &Task::progress, this, &AutoInstallJava::setProgress);
@@ -224,6 +254,8 @@ void AutoInstallJava::tryNextMajorJava()
 
     auto javaMajor = versionList->getVersion(QString("java%1").arg(majorJavaVersion));
 
+    if (!javaMajor) { tryNextMajorJava(); return; }
+
     if (javaMajor->isLoaded()) {
         downloadJava(javaMajor, wantedJavaName);
     } else {
@@ -235,6 +267,7 @@ void AutoInstallJava::tryNextMajorJava()
         connect(m_current_task.get(), &Task::stepProgress, this, &AutoInstallJava::propagateStepProgress);
         connect(m_current_task.get(), &Task::status, this, &AutoInstallJava::setStatus);
         connect(m_current_task.get(), &Task::details, this, &AutoInstallJava::setDetails);
+        connect(m_current_task.get(), &Task::aborted, this, &AutoInstallJava::emitAborted);
         if (!m_current_task->isRunning()) {
             m_current_task->start();
         }
@@ -243,9 +276,7 @@ void AutoInstallJava::tryNextMajorJava()
 bool AutoInstallJava::abort()
 {
     if (m_current_task && m_current_task->canAbort()) {
-        auto status = m_current_task->abort();
-        emitAborted();
-        return status;
+        return m_current_task->abort();
     }
     return Task::abort();
 }

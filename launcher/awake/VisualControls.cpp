@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "VisualControls.h"
+#include "AwakeTheme.h"
 #include <QAction>
 #include <QEnterEvent>
 #include <QIconEngine>
@@ -172,7 +173,7 @@ void MotionButton::paintEvent(QPaintEvent*)
     if (m_primary && hover > 0)
         background = QColor::fromRgbF(0.647 + hover * 0.09, 0.882 + hover * 0.05, 0.792 + hover * 0.06);
     p.setBrush(background);
-    p.setPen(QPen(hasFocus() ? QColor("#a5e1ca") : QColor(255, 255, 255, int(35 + hover * 35)), hasFocus() ? 2 : 1));
+    p.setPen(QPen(hasFocus() ? QColor("#a5e1ca") : QColor(255, 255, 255, int(22 + hover * 26)), hasFocus() ? 2 : 1));
     p.drawRoundedRect(bounds, m_primary ? 16 : 11, m_primary ? 16 : 11);
     const bool text = toolButtonStyle() != Qt::ToolButtonIconOnly;
     const bool arrow = menu() != nullptr;
@@ -251,7 +252,7 @@ void ArtworkCanvas::startLoad()
     const auto root = m_root;
     const auto previous = m_previousFiles.value(m_id);
     const auto canceled = m_canceled;
-    m_watcher.setFuture(QtConcurrent::run([root, previous, canceled] { return loadRandomScreenshot(root, previous, canceled); }));
+    m_watcher.setFuture(QtConcurrent::run([root, previous, canceled] { return loadArtwork(root, previous, canceled); }));
 }
 void ArtworkCanvas::setReducedMotion(bool reduced)
 {
@@ -295,10 +296,10 @@ QImage ArtworkCanvas::cover(const QImage& image) const
         ridge.lineTo(width(), height() * .56);
         ridge.lineTo(width(), height());
         ridge.closeSubpath();
-        p.fillPath(ridge, QColor("#29454c"));
+        p.fillPath(ridge, QColor(41, 69, 76, 112));
         p.translate(width() * .12, height() * .08);
         p.scale(1.04, 1.04);
-        p.fillPath(ridge, QColor(13, 29, 37, 190));
+        p.fillPath(ridge, QColor(13, 29, 37, 112));
     }
     return result;
 }
@@ -350,9 +351,9 @@ void ArtworkCanvas::paintEvent(QPaintEvent*)
     p.drawImage(rect(), m_cover);
     p.setOpacity(1);
     QLinearGradient shade(0, 0, 0, height());
-    shade.setColorAt(0, QColor(3, 8, 14, 185));
-    shade.setColorAt(.45, QColor(3, 8, 14, 30));
-    shade.setColorAt(1, QColor(3, 8, 14, 220));
+    shade.setColorAt(0, QColor(3, 8, 14, 150));
+    shade.setColorAt(.45, QColor(3, 8, 14, 18));
+    shade.setColorAt(1, QColor(3, 8, 14, 198));
     p.fillRect(rect(), shade);
 }
 void ArtworkCanvas::paintGlass(QPainter& painter, QWidget* surface, int radius)
@@ -370,10 +371,10 @@ void ArtworkCanvas::paintGlass(QPainter& painter, QWidget* surface, int radius)
     painter.setOpacity(m_blend);
     painter.drawImage(surface->rect(), m_frost, source);
     painter.setOpacity(1);
-    painter.fillPath(clip, QColor(10, 18, 26, surface->objectName() == "awakeNavigation" ? 213 : 190));
+    painter.fillPath(clip, QColor(8, 16, 24, surface->objectName() == "awakeNavigation" ? 176 : 154));
     painter.restore();
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QColor(234, 244, 255, 48));
+    painter.setPen(QColor(234, 244, 255, 34));
     painter.drawPath(clip);
 }
 GlassSurface::GlassSurface(ArtworkCanvas* canvas, QWidget* parent) : QWidget(parent), m_canvas(canvas) {}

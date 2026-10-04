@@ -49,6 +49,21 @@ Artwork loadRandomScreenshot(const QString& gameRoot, const QString& previousFil
     return {};
 }
 
+QImage fallbackArtwork()
+{
+    return QImage(":/backgrounds/awake-minecraft");
+}
+
+Artwork loadArtwork(const QString& gameRoot, const QString& previousFile, const std::shared_ptr<std::atomic_bool>& canceled)
+{
+    auto artwork = loadRandomScreenshot(gameRoot, previousFile, canceled);
+    if (!artwork.image.isNull() || (canceled && canceled->load()))
+        return artwork;
+    artwork.image = fallbackArtwork();
+    artwork.path = QStringLiteral(":/backgrounds/awake-minecraft");
+    return artwork;
+}
+
 QImage frostedImage(const QImage& image)
 {
     if (image.isNull())

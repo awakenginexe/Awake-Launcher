@@ -63,7 +63,7 @@ void Assets::requestStarted(QWebEngineUrlRequestJob* request)
     buffer->setData(bytes);
     buffer->open(QIODevice::ReadOnly);
     request->setAdditionalResponseHeaders({
-        {"Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"},
+        {"Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"},
         {"X-Content-Type-Options", "nosniff"}
     });
     request->reply(mime, buffer);

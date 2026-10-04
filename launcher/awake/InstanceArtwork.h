@@ -14,5 +14,9 @@ QStringList screenshotFiles(const QString& gameRoot);
 Artwork loadRandomScreenshot(const QString& gameRoot,
                              const QString& previousFile = {},
                              const std::shared_ptr<std::atomic_bool>& canceled = {});
+Artwork loadArtwork(const QString& gameRoot,
+                    const QString& previousFile = {},
+                    const std::shared_ptr<std::atomic_bool>& canceled = {});
+QImage fallbackArtwork();
 QImage frostedImage(const QImage& image);
 }  // namespace Awake

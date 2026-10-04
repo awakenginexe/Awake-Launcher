@@ -4,6 +4,8 @@
 #include "AwakeWebBridge.h"
 #include "AwakeWebPolicy.h"
 #include <QDesktopServices>
+#include <QApplication>
+#include <QEvent>
 #include <QCoreApplication>
 #include <QLabel>
 #include <QTimer>
@@ -53,6 +55,7 @@ protected:
 
 Shell::Shell(QWidget* parent) : QWidget(parent)
 {
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] { updateArtworkFocus(); });
     setObjectName("awakeWebShell");
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -159,12 +162,28 @@ void Shell::hideEvent(QHideEvent* event)
 {
     QWidget::hideEvent(event);
     setSuspended(true);
+    updateArtworkFocus();
 }
 
 void Shell::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
+    window()->installEventFilter(this);
     setSuspended(false);
+    updateArtworkFocus();
+}
+
+bool Shell::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == window() && (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate || event->type() == QEvent::WindowStateChange))
+        updateArtworkFocus();
+    return QWidget::eventFilter(watched, event);
+}
+
+void Shell::updateArtworkFocus()
+{
+    if (!m_bridge) return;
+    m_bridge->setArtworkFocused(isVisible() && !window()->isMinimized() && window()->isActiveWindow() && qApp->applicationState() == Qt::ApplicationActive);
 }
 
 void Shell::setSuspended(bool suspended)

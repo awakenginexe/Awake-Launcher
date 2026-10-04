@@ -80,6 +80,8 @@ Do not rewrite stable launcher logic merely because rewriting it is aestheticall
 
 # 3. UI TECHNOLOGY DECISION
 
+**2026-10-03 owner decision, superseding the options below:** use Qt WebEngine + Vue 3 + TypeScript + Vite with a narrow QWebChannel bridge. Preserve Prism's C++ engine and existing complex dialogs. Production assets are embedded locally. Do not introduce Electron or Tauri, or rewrite backend systems. Retain the old Awake shell temporarily as a fallback. See [DESIGN.md](../DESIGN.md) for the current screenshot-led composition.
+
 Do not force a web stack onto the application without evidence.
 
 Evaluate the practical options, including:

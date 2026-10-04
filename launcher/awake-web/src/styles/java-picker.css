@@ -1,0 +1,25 @@
+.java-picker { min-width: 0; margin-bottom: 24px; }
+.java-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.java-picker-heading h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.java-picker-hint, .java-picker-description { margin: 8px 0 12px; line-height: 1.65; color: var(--text-secondary, #a0afc2); }
+.java-picker-description { display: grid; }
+.java-picker-description > * { grid-area: 1 / 1; margin: 0; }
+.java-description-size { visibility: hidden; pointer-events: none; user-select: none; }
+.java-inherit { flex-wrap: wrap; margin: 12px 0; }
+.java-inherit span { color: var(--text-secondary, #a0afc2); }
+.java-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.java-option { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; min-height: 60px; padding: 10px 12px; text-align: start; border: 1px solid #293d55; border-radius: 8px; background: #0c1727; color: #edf4ff; cursor: pointer; }
+.java-option strong { font-weight: 600; line-height: 1.5; }
+.java-option-badge { font-size: .78rem; line-height: 1.4; color: #a5b8ce; }
+.java-options:not(.is-unavailable) .java-option:hover:not(.is-selected) { background: #172941; border-color: #54799f; }
+.java-option.is-selected { border-color: #5eabff; background: #132d4e; }
+.java-option.is-selected .java-option-badge { color: #a9d5ff; }
+.java-option:focus-visible { outline: 2px solid #a9d5ff; outline-offset: 2px; }
+.java-option:disabled { cursor: default; opacity: 1; }
+.java-options.is-unavailable .java-option { opacity: .6; }
+.java-custom-path { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.java-custom-path output { flex-basis: 100%; }
+.java-picker output { display: block; overflow-wrap: anywhere; color: #dbe8f7; font-size: .85rem; }
+.java-last-runtime { margin-top: 12px; line-height: 1.6; }
+.java-last-runtime summary { cursor: pointer; color: #a9d5ff; }
+@media (max-width: 700px) { .java-options { grid-template-columns: minmax(0, 1fr); } }

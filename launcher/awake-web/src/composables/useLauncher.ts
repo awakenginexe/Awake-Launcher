@@ -2,14 +2,17 @@ import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { BridgeError, callNative, connectChannel, subscribe } from '../bridge/client.ts';
 import type { NativeObject, ErrorCode } from '../bridge/client.ts';
 import { ArtworkSequence, acceptSnapshot, emptySnapshot, isLocalImage, parseSnapshot } from '../features/library/model.ts';
-import type { Action } from '../features/library/model.ts';
+import type { Action, PreferenceKey } from '../features/library/model.ts';
 import { catalogs, normalizeLocale } from '../i18n/catalogs.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
+import { CatalogClient } from '../bridge/catalog.ts';
 
 interface Failure { code: ErrorCode | 'artworkError'; detail: string; retry: () => Promise<void> }
 interface ArtworkEvent { id: string; url: string; error: string }
 
 export function useLauncher() {
+  const editorRevision = ref(0);
+  const accountsRequest = ref(0);
   const state = shallowRef({ ...emptySnapshot(), locale: normalizeLocale(navigator.language) });
   const status = ref<'loading' | 'ready' | 'error'>('loading');
   const busy = ref(false);
@@ -22,6 +25,7 @@ export function useLauncher() {
   const selected = computed(() => state.value.instances.find(i => i.id === state.value.selectedId));
   const t = (key: MessageKey): string => catalogs[state.value.locale][key] || catalogs.en[key];
   let native: NativeObject | null = null;
+  let catalog: CatalogClient | null = null;
   let disposeSignals: (() => void)[] = [];
   let connectionRevision = 0;
   let stateRevision = 0;
@@ -91,6 +95,8 @@ export function useLauncher() {
   }
   async function connect() {
     const revision = ++connectionRevision;
+    catalog?.dispose();
+    catalog = null;
     disposeSignals.forEach(dispose => dispose());
     disposeSignals = [];
     native = null;
@@ -106,6 +112,13 @@ export function useLauncher() {
       const connection = await connectChannel(window);
       if (revision !== connectionRevision) return;
       native = connection;
+      catalog = new CatalogClient(connection);
+      disposeSignals.push(subscribe(connection, 'accountsRequested', () => {
+        if (revision === connectionRevision) accountsRequest.value++;
+      }));
+      disposeSignals.push(subscribe(connection, 'editorChanged', () => {
+        if (revision === connectionRevision) editorRevision.value++;
+      }));
       disposeSignals.push(subscribe(connection, 'stateChanged', (raw) => {
         if (revision !== connectionRevision) return;
         try {
@@ -150,13 +163,39 @@ export function useLauncher() {
   const select = (id: string) => run('selectInstance', [id]);
   const launch = () => run('launchInstance', [state.value.selectedId]);
   const action = (name: Action, id = '') => run('invokeAction', [name, id], 120_000);
-  const preference = (key: 'compact' | 'reducedMotion' | 'sortMode' | 'pin', value: unknown) => run('setPreference', [key, value]);
+  const preference = (key: PreferenceKey | string, value: unknown) => run('setPreference', [key, value]);
+  async function queryCatalog(method: string, args: unknown[]) {
+    if (!catalog || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
+    return catalog.request(method, args);
+  }
+  const searchPacks = (provider: string, query: string, offset: number) => queryCatalog('searchPacks', [provider, query, offset]);
+  const packVersions = (provider: string, id: string) => queryCatalog('packVersions', [provider, id]);
+  const minecraftVersions = () => queryCatalog('minecraftVersions', []);
+  const browseArchive = () => queryCatalog('browseArchive', []);
+  const javaService = {
+    settings: (id: string) => javaCall('javaSettings', [id]),
+    select: (id: string, profile: string) => javaCall('setJavaProfile', [id, profile]),
+    browse: (id: string) => queryCatalog('browseJava', [id]),
+  };
+  async function javaCall(method: string, args: unknown[]): Promise<unknown> {
+    if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
+    return callNative(native, method, args);
+  }
+  async function instanceDetails(id: string, section: string): Promise<unknown> {
+    if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
+    return callNative(native, 'instanceDetails', [id, section]);
+  }
+  async function instanceCommand(id: string, command: string, payload: unknown = null): Promise<unknown> {
+    if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
+    return callNative(native, 'instanceCommand', [id, command, payload]);
+  }
   onScopeDispose(() => {
     connectionRevision++;
+    catalog?.dispose();
     cancelArtwork?.();
     sequence.begin('');
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService };
 }

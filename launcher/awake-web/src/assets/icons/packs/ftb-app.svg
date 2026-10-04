@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="syncGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0b172a" stroke="#38bdf8" stroke-width="2"/>
+  <!-- Sync Circle Arrows -->
+  <path d="M32 14 A18 18 0 0 1 50 32 H44 L52 42 L60 32 H54 A22 22 0 0 0 32 10 Z" fill="url(#syncGrad)"/>
+  <path d="M32 50 A18 18 0 0 1 14 32 H20 L12 22 L4 32 H10 A22 22 0 0 0 32 54 Z" fill="url(#syncGrad)"/>
+  <text x="32" y="36" font-family="Arial, sans-serif" font-size="9" font-weight="900" fill="#ffffff" text-anchor="middle">SYNC</text>
+</svg>

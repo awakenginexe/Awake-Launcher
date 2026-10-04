@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="crGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="100%" stop-color="#16a34a" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#08180e" stroke="#22c55e" stroke-width="2"/>
+  <!-- Botanical clover -->
+  <circle cx="26" cy="26" r="9" fill="url(#crGreen)"/>
+  <circle cx="38" cy="26" r="9" fill="url(#crGreen)"/>
+  <circle cx="26" cy="38" r="9" fill="url(#crGreen)"/>
+  <circle cx="38" cy="38" r="9" fill="url(#crGreen)"/>
+  <circle cx="32" cy="32" r="4" fill="#fef08a"/>
+  <!-- Stem -->
+  <path d="M32 36 Q34 50 38 52" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

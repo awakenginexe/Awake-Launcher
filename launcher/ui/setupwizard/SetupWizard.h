@@ -22,6 +22,7 @@ class SetupWizard;
 }
 
 class BaseWizardPage;
+class ModalHeaderBar;
 
 class SetupWizard : public QWizard {
     Q_OBJECT
@@ -34,9 +35,15 @@ class SetupWizard : public QWizard {
     BaseWizardPage* getBasePage(int id);
     BaseWizardPage* getCurrentBasePage();
 
+   protected:
+    void paintEvent(QPaintEvent* event) override;
+
    private slots:
     void pageChanged(int id);
 
    private: /* methods */
     void retranslate();
+
+   private:
+    ModalHeaderBar* m_headerBar = nullptr;
 };

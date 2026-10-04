@@ -20,20 +20,9 @@ VersionSelectWidget::VersionSelectWidget(QWidget* parent) : QWidget(parent)
 
     m_proxyModel = new VersionProxyModel(this);
 
-    listView = new VersionListView(this);
-    listView->setObjectName(QStringLiteral("listView"));
-    listView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    listView->setAlternatingRowColors(true);
-    listView->setRootIsDecorated(false);
-    listView->setItemsExpandable(false);
-    listView->setWordWrap(true);
-    listView->header()->setCascadingSectionResizes(true);
-    listView->header()->setStretchLastSection(false);
-    listView->setModel(m_proxyModel);
-    verticalLayout->addWidget(listView);
-
     search = new QLineEdit(this);
-    search->setPlaceholderText(tr("Search"));
+    search->setObjectName(QStringLiteral("versionSearch"));
+    search->setPlaceholderText(tr("Search version..."));
     search->setClearButtonEnabled(true);
     verticalLayout->addWidget(search);
     connect(search, &QLineEdit::textEdited, this, [this](const QString& value) {
@@ -46,6 +35,18 @@ VersionSelectWidget::VersionSelectWidget(QWidget* parent) : QWidget(parent)
             listView->scrollTo(listView->selectionModel()->currentIndex(), QAbstractItemView::PositionAtCenter);
     });
     search->installEventFilter(this);
+
+    listView = new VersionListView(this);
+    listView->setObjectName(QStringLiteral("listView"));
+    listView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    listView->setAlternatingRowColors(true);
+    listView->setRootIsDecorated(false);
+    listView->setItemsExpandable(false);
+    listView->setWordWrap(true);
+    listView->header()->setCascadingSectionResizes(true);
+    listView->header()->setStretchLastSection(false);
+    listView->setModel(m_proxyModel);
+    verticalLayout->addWidget(listView);
 
     sneakyProgressBar = new QProgressBar(this);
     sneakyProgressBar->setObjectName(QStringLiteral("sneakyProgressBar"));

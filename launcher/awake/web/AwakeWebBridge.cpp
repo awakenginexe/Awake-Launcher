@@ -2,6 +2,8 @@
 #include "AwakeWebBridge.h"
 #include "AwakeWebAssets.h"
 #include "AwakeWebPolicy.h"
+#include "AwakePackCatalog.h"
+#include "AwakeInstanceEditor.h"
 #include "Application.h"
 #include "InstanceList.h"
 #include "awake/InstanceArtwork.h"
@@ -17,11 +19,20 @@
 #include <QFutureWatcher>
 #include <QTimer>
 #include <QtConcurrentRun>
+#include <QFileDialog>
+#include <QFileInfo>
+#include "meta/Index.h"
+#include "meta/VersionList.h"
+#include "meta/Version.h"
+#include "java/JavaChecker.h"
+#include "java/JavaUtils.h"
+#include "java/RuntimeSelection.h"
+#include <QApplication>
 
 namespace Awake::Web {
 namespace {
 QVariantMap success() { return {{"ok", true}}; }
-struct ArtworkResult { QByteArray png; QString error; };
+struct ArtworkResult { QByteArray png; QString path; QString error; };
 QString componentVersion(const ComponentPtr& component)
 {
     if (!component) return {};
@@ -33,6 +44,17 @@ QString componentVersion(const ComponentPtr& component)
 Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent)
     : QObject(parent), m_assets(assets), m_select(std::move(select)), m_action(std::move(action))
 {
+    m_packCatalog = new PackCatalog(assets, this);
+    m_artworkTimer = new QTimer(this);
+    m_artworkTimer->setObjectName("awakeArtworkTimer");
+    m_artworkTimer->setInterval(60'000);
+    connect(m_artworkTimer, &QTimer::timeout, this, [this] {
+        if (m_active && m_artworkFocused && !m_artworkId.isEmpty()) loadArtwork(m_artworkId);
+    });
+    connect(m_packCatalog, &PackCatalog::finished, this, &Bridge::catalogFinished);
+    m_instanceEditor = new InstanceEditor(assets, this);
+    connect(m_instanceEditor, &InstanceEditor::changed, this, &Bridge::editorChanged);
+    connect(m_instanceEditor, &InstanceEditor::failed, this, [this](const QString& detail) { fail("instanceCommand", detail); });
     const auto changed = [this] { observeInstances(); scheduleState(); };
     auto* instances = APPLICATION->instances();
     connect(instances, &QAbstractItemModel::modelReset, this, changed);
@@ -152,12 +174,41 @@ QVariantMap Bridge::snapshot()
     if (!liveIds.contains(selected)) selected.clear();
     auto account = APPLICATION->accounts()->defaultAccount();
     const auto sortMode = APPLICATION->settings()->get("InstSortMode").toString();
+
+    QVariantList accountList;
+    auto accounts = APPLICATION->accounts();
+    for (int i = 0; i < accounts->count(); ++i) {
+        auto acc = accounts->at(i);
+        QVariantMap accMap;
+        accMap.insert("id", acc->internalId());
+        accMap.insert("name", acc->displayName());
+        accMap.insert("type", acc->accountType() == AccountType::Offline ? QString("offline") : QString("microsoft"));
+        accMap.insert("active", acc == accounts->defaultAccount());
+        accMap.insert("valid", acc->accountState() != AccountState::Errored);
+        accountList.append(accMap);
+    }
+
+    auto s = APPLICATION->settings();
+    QVariantMap settingsMap{
+        {"language", s->get("Language").toString()},
+        {"minMem", s->get("MinMemAlloc").toInt()},
+        {"maxMem", s->get("MaxMemAlloc").toInt()},
+        {"javaPath", s->get("JavaPath").toString()},
+        {"gameWidth", s->get("MinecraftWinWidth").toInt()},
+        {"gameHeight", s->get("MinecraftWinHeight").toInt()},
+        {"maximizeGame", s->get("MaximizeMinecraft").toBool()},
+        {"closeOnLaunch", s->get("CloseAfterLaunch").toBool()}
+    };
+
     return {{"instances", list}, {"selectedId", selected},
             {"locale", frontendLocale(APPLICATION->translations()->selectedLanguage())},
             {"reducedMotion", APPLICATION->settings()->get("AwakeReduceMotion").toBool()},
             {"compact", APPLICATION->settings()->get("AwakeCompactLibrary").toBool()},
             {"sortMode", sortMode == "Playtime" ? QString("TotalTimePlayed") : sortMode},
-            {"accountName", account ? account->displayName() : QString()}};
+            {"accountName", account ? account->displayName() : QString()},
+            {"accounts", accountList},
+            {"launcherSettings", settingsMap},
+            {"modalActive", m_modalActive}};
 }
 
 void Bridge::scheduleState()
@@ -238,12 +289,210 @@ QVariantMap Bridge::setPreference(const QString& key, const QVariant& value)
         ids.removeAll(id);
         if (map.value("pinned").toBool()) ids.append(id);
         settings->set("AwakePinnedInstances", ids);
+    } else if (key == "language") {
+        const auto language = nativeLocale(value.toString());
+        if (!language.isEmpty() && APPLICATION->translations()->selectLanguage(language))
+            settings->set("Language", language);
+    } else if (key == "minMem") {
+        settings->set("MinMemAlloc", value.toInt());
+    } else if (key == "maxMem") {
+        settings->set("MaxMemAlloc", value.toInt());
+    } else if (key == "gameWidth") {
+        settings->set("MinecraftWinWidth", value.toInt());
+    } else if (key == "gameHeight") {
+        settings->set("MinecraftWinHeight", value.toInt());
+    } else if (key == "maximizeGame") {
+        settings->set("MaximizeMinecraft", value.toBool());
+    } else if (key == "closeOnLaunch") {
+        settings->set("CloseAfterLaunch", value.toBool());
+    } else if (key == "javaProfile") {
+        return setJavaProfile({}, value.toString());
     } else {
         const auto nativeKey = key == "reducedMotion" ? "AwakeReduceMotion" : key == "compact" ? "AwakeCompactLibrary" : "InstSortMode";
         settings->set(nativeKey, key == "sortMode" && value.toString() == "TotalTimePlayed" ? QVariant("Playtime") : value);
     }
     scheduleState();
     return success();
+}
+
+QVariantMap Bridge::javaSettings(const QString& id)
+{
+    if (!m_active) return {{"ok", false}, {"error", tr("The instance editor is paused.")}};
+    auto* instance = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
+    if (!id.isEmpty() && !instance) return {{"ok", false}, {"error", tr("This instance no longer exists.")}};
+    auto* settings = instance ? instance->settings() : APPLICATION->settings();
+    const auto manualOverride = instance && settings->get("OverrideJavaLocation").toBool() && !settings->get("AutomaticJava").toBool();
+    const auto overrideProfile = instance && settings->get("OverrideJavaProfile").toBool();
+    auto profile = settings->get("AwakeJavaProfile").toString();
+    if (manualOverride && !overrideProfile) profile = "custom";
+    if (!instance && !settings->get("AutomaticJavaSwitch").toBool()) profile = "custom";
+    QVariantList majors;
+    if (instance && instance->getPackProfile()->getProfile()) {
+        for (const auto major : instance->getPackProfile()->getProfile()->getCompatibleJavaMajors()) majors.append(major);
+    }
+    auto globalProfile = APPLICATION->settings()->get("AutomaticJavaSwitch").toBool() ? APPLICATION->settings()->get("AwakeJavaProfile").toString() : QString("custom");
+    const auto inherited = instance && !overrideProfile && !manualOverride;
+    auto* pathSettings = inherited && globalProfile == "custom" ? APPLICATION->settings() : settings;
+    return {{"ok", true}, {"profile", Java::runtimeProfileAllowed(profile) ? profile : QString("minecraft")},
+        {"inherited", inherited}, {"globalProfile", globalProfile},
+        {"path", pathSettings->get("JavaPath").toString()}, {"version", pathSettings->get("JavaVersion").toString()},
+        {"vendor", pathSettings->get("JavaVendor").toString()}, {"majors", majors}, {"running", instance && instance->isRunning()}};
+}
+
+QVariantMap Bridge::setJavaProfile(const QString& id, const QString& profile)
+{
+    if (!m_active || m_actionPending || m_javaPending) return {{"ok", false}, {"error", tr("Finish the current native action first.")}};
+    auto* instance = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
+    if (!id.isEmpty() && !instance) return {{"ok", false}, {"error", tr("This instance no longer exists.")}};
+    if (instance && instance->isRunning()) return {{"ok", false}, {"error", tr("Stop the game before changing its settings.")}};
+    if (!Java::runtimeProfileAllowed(profile) && !(instance && profile == "inherit"))
+        return {{"ok", false}, {"error", tr("Choose a supported Java runtime.")}};
+    auto* settings = instance ? instance->settings() : APPLICATION->settings();
+    const auto path = settings->get("JavaPath").toString();
+    if (profile == "custom" && !QFileInfo(path).isFile())
+        return {{"ok", false}, {"error", tr("Choose a Java executable using Browse before selecting Custom Java.")}};
+    if (instance) {
+        settings->set("OverrideJavaProfile", profile != "inherit");
+        if (profile != "inherit") settings->set("AwakeJavaProfile", profile);
+        settings->set("OverrideJavaLocation", profile == "custom");
+        settings->set("AutomaticJava", profile != "custom");
+        if (profile == "custom") settings->set("JavaPath", path);
+        emit editorChanged(id, "java");
+    } else {
+        settings->set("AwakeJavaProfile", profile);
+        settings->set("AutomaticJavaSwitch", profile != "custom");
+        settings->set("AutomaticJavaDownload", profile != "custom");
+    }
+    scheduleState();
+    return javaSettings(id);
+}
+
+QVariantMap Bridge::browseJava(const QString& requestId, const QString& id)
+{
+    if (!m_active || m_actionPending || m_javaPending || requestId.isEmpty() || requestId.size() > 128)
+        return {{"ok", false}, {"error", tr("Finish the current native action first.")}};
+    auto* instance = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
+    if ((!id.isEmpty() && !instance) || (instance && instance->isRunning()))
+        return {{"ok", false}, {"error", tr("Stop the game before changing its settings.")}};
+    m_javaPending = true;
+    QTimer::singleShot(0, this, [this, requestId, id] {
+        const auto path = QFileDialog::getOpenFileName(QApplication::activeWindow(), tr("Choose your Java executable"), {},
+#if defined(Q_OS_WIN)
+            tr("Java executable (javaw.exe java.exe)"));
+#else
+            tr("Java executable (java)"));
+#endif
+        if (path.isEmpty()) { m_javaPending = false; emit catalogFinished(requestId, {{"ok", true}, {"canceled", true}}); return; }
+        const QFileInfo file(path);
+        if (!file.isFile() || !QStringList{"javaw.exe", "java.exe", "java"}.contains(file.fileName().toLower()) || JavaUtils::getJavaCheckPath().isEmpty()) {
+            m_javaPending = false;
+            emit catalogFinished(requestId, {{"ok", false}, {"error", tr("Choose the java or javaw program inside your Java installation's bin folder.")}});
+            return;
+        }
+        auto checker = makeShared<JavaChecker>(file.canonicalFilePath(), "");
+        m_javaTask = checker;
+        connect(checker.get(), &JavaChecker::checkFinished, this, [this, requestId, id](const JavaChecker::Result& result) {
+            m_javaPending = false;
+            auto* target = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
+            if ((!id.isEmpty() && !target) || (target && target->isRunning()) || !m_active) {
+                emit catalogFinished(requestId, {{"ok", false}, {"error", tr("The Java selection could not be saved. Stop the game and try again.")}}); return;
+            }
+            if (result.validity != JavaChecker::Result::Validity::Valid) {
+                emit catalogFinished(requestId, {{"ok", false}, {"error", tr("This Java installation did not pass its check. Choose another Java installation.")}}); return;
+            }
+            if (target) {
+                const auto majors = target->getPackProfile()->getProfile()->getCompatibleJavaMajors();
+                if (!majors.isEmpty() && !majors.contains(result.javaVersion.major())) {
+                    emit catalogFinished(requestId, {{"ok", false}, {"error", tr("This Java version is not compatible with the instance. Choose a supported Java version.")}}); return;
+                }
+            }
+            auto* settings = target ? target->settings() : APPLICATION->settings();
+            if (target) { settings->set("OverrideJavaLocation", true); settings->set("AutomaticJava", false); }
+            settings->set("JavaPath", result.path);
+            settings->set("JavaVersion", result.javaVersion.toString());
+            settings->set("JavaVendor", result.javaVendor);
+            emit catalogFinished(requestId, setJavaProfile(id, "custom"));
+        });
+        checker->start();
+    });
+    return {{"ok", true}, {"pending", true}};
+}
+
+QVariantMap Bridge::searchPacks(const QString& requestId, const QString& provider, const QString& query, int offset)
+{
+    if (!m_active || requestId.isEmpty() || requestId.size() > 64 || query.size() > 256 || offset < 0 || offset > 10000 ||
+        !QStringList{"modrinth", "curseforge", "atlauncher", "ftb", "ftb-legacy", "ftb-app", "technic"}.contains(provider))
+        return {{"ok", false}, {"error", tr("Invalid provider search.")}};
+    m_packCatalog->search(requestId, provider, query, offset);
+    return success();
+}
+
+QVariantMap Bridge::packVersions(const QString& requestId, const QString& provider, const QString& packId)
+{
+    if (!m_active || requestId.isEmpty() || requestId.size() > 64 || packId.isEmpty() || packId.size() > 256)
+        return {{"ok", false}, {"error", tr("Invalid pack selection.")}};
+    m_packCatalog->versions(requestId, provider, packId);
+    return success();
+}
+
+QVariantMap Bridge::minecraftVersions(const QString& requestId)
+{
+    if (!m_active || requestId.isEmpty() || requestId.size() > 64)
+        return {{"ok", false}, {"error", tr("Invalid version request.")}};
+    const auto list = APPLICATION->metadataIndex()->get("net.minecraft");
+    const auto reply = [this, requestId, list] {
+        QVariantList versions;
+        for (const auto& version : list->versions()) {
+            versions.append(QVariantMap{{"version", version->version()}, {"released", version->time().date().toString(Qt::ISODate)},
+                {"type", version->type()}, {"recommended", version->isRecommended()}});
+        }
+        emit catalogFinished(requestId, {{"ok", true}, {"minecraftVersions", versions}});
+    };
+    if (list->isLoaded()) QTimer::singleShot(0, this, reply);
+    else {
+        const auto task = list->getLoadTask();
+        if (!task) return {{"ok", false}, {"error", tr("Minecraft metadata is unavailable.")}};
+        m_minecraftTask = task;
+        connect(task.get(), &Task::succeeded, this, reply);
+        connect(task.get(), &Task::failed, this, [this, requestId](const QString& reason) {
+            emit catalogFinished(requestId, {{"ok", false}, {"error", reason}});
+        });
+        connect(task.get(), &Task::aborted, this, [this, requestId] {
+            emit catalogFinished(requestId, {{"ok", false}, {"error", tr("Version request canceled.")}});
+        });
+        if (!task->isRunning()) task->start();
+    }
+    return success();
+}
+
+QVariantMap Bridge::browseArchive(const QString& requestId)
+{
+    if (!m_active || m_actionPending || requestId.isEmpty() || requestId.size() > 64)
+        return {{"ok", false}, {"error", tr("Finish the current native action first.")}};
+    m_actionPending = true;
+    QTimer::singleShot(0, this, [this, requestId] {
+        setModalActive(true);
+        const auto file = QFileDialog::getOpenFileName(nullptr, tr("Import archive"), {}, tr("Modpack archives (*.zip *.mrpack)"));
+        setModalActive(false);
+        m_actionPending = false;
+        emit catalogFinished(requestId, {{"ok", true}, {"archiveUrl", file.isEmpty() ? QString() : QUrl::fromLocalFile(file).toString()},
+            {"fileName", QFileInfo(file).fileName()}});
+    });
+    return success();
+}
+
+QVariantMap Bridge::instanceDetails(const QString& id, const QString& section)
+{
+    if (!m_active) return {{"ok", false}, {"error", tr("The instance editor is paused.")}};
+    return m_instanceEditor->details(id, section);
+}
+
+QVariantMap Bridge::instanceCommand(const QString& id, const QString& command, const QVariant& payload)
+{
+    if (!m_active || m_actionPending || m_modalActive) return fail("instanceCommand", tr("Finish the current native action first."));
+    const auto result = m_instanceEditor->command(id, command, payload);
+    scheduleState();
+    return result;
 }
 
 void Bridge::frontendReady()
@@ -256,22 +505,64 @@ void Bridge::setActive(bool active)
 {
     m_active = active;
     if (!active) {
+        m_artworkTimer->stop();
         if (m_canceled) m_canceled->store(true);
         ++m_artworkGeneration;
-        m_artworkId.clear();
-    } else scheduleState();
+    } else {
+        scheduleState();
+        if (m_artworkFocused) {
+            const auto id = APPLICATION->settings()->get("SelectedInstance").toString();
+            if (id == m_artworkId && m_artworkUrl.isEmpty()) loadArtwork(id);
+            else requestArtwork(id);
+            m_artworkTimer->start();
+        }
+    }
+}
+
+void Bridge::setArtworkFocused(bool focused)
+{
+    if (m_artworkFocused == focused) return;
+    m_artworkFocused = focused;
+    if (!focused) {
+        m_artworkTimer->stop();
+        if (m_canceled) m_canceled->store(true);
+        ++m_artworkGeneration;
+        return;
+    }
+    if (m_active) {
+        const auto id = APPLICATION->settings()->get("SelectedInstance").toString();
+        if (id == m_artworkId && m_artworkUrl.isEmpty()) loadArtwork(id);
+        else requestArtwork(id);
+        m_artworkTimer->start();
+    }
+}
+
+void Bridge::setModalActive(bool active)
+{
+    if (m_modalActive == active) return;
+    m_modalActive = active;
+    emit modalChanged(active);
+    scheduleState();
 }
 
 void Bridge::requestArtwork(const QString& id)
 {
-    if (!m_assets) return;
+    if (!m_assets || !m_active || !m_artworkFocused) return;
     if (!id.isEmpty() && id == m_artworkId) return;
-    if (m_canceled) m_canceled->store(true);
-    const auto generation = ++m_artworkGeneration;
     m_artworkId = id;
+    m_artworkPath.clear();
     m_assets->removeImage(m_artworkUrl);
     m_artworkUrl.clear();
     if (id.isEmpty()) return;
+    loadArtwork(id);
+}
+
+void Bridge::loadArtwork(const QString& id)
+{
+    if (!m_assets || !m_active || !m_artworkFocused || id.isEmpty() || id != m_artworkId) return;
+    if (m_canceled) m_canceled->store(true);
+    const auto previousPath = m_artworkPath;
+    const auto generation = ++m_artworkGeneration;
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!instance) return;
     const auto gameRoot = instance->gameRoot();
@@ -282,18 +573,22 @@ void Bridge::requestArtwork(const QString& id)
         const auto result = watcher->result();
         watcher->deleteLater();
         if (!m_active || !m_assets || generation != m_artworkGeneration || id != m_artworkId || !APPLICATION->instances()->getInstanceById(id)) return;
+        if (result.png.isEmpty()) return;
+        const auto previousUrl = m_artworkUrl;
+        m_artworkPath = result.path;
         m_artworkUrl = m_assets->putImage(result.png);
+        if (!previousUrl.isEmpty()) m_assets->removeImage(previousUrl);
         emit artworkChanged(id, m_artworkUrl, result.error);
     });
-    watcher->setFuture(QtConcurrent::run([gameRoot, canceled] {
+    watcher->setFuture(QtConcurrent::run([gameRoot, canceled, previousPath] {
         ArtworkResult result;
-        const bool hasScreenshots = !Awake::screenshotFiles(gameRoot).isEmpty();
-        const auto artwork = Awake::loadRandomScreenshot(gameRoot, {}, canceled);
+        const auto artwork = Awake::loadArtwork(gameRoot, previousPath, canceled);
         if (canceled->load()) return result;
         if (artwork.image.isNull()) {
-            if (hasScreenshots) result.error = QObject::tr("The instance screenshots could not be decoded safely.");
+            result.error = QObject::tr("The bundled artwork fallback could not be loaded.");
             return result;
         }
+        result.path = artwork.path.startsWith(":/") ? QString() : artwork.path;
         QBuffer buffer(&result.png);
         buffer.open(QIODevice::WriteOnly);
         if (!artwork.image.save(&buffer, "PNG")) result.error = QObject::tr("The screenshot could not be prepared for display.");
@@ -306,5 +601,6 @@ void Bridge::invalidateArtwork()
     if (m_canceled) m_canceled->store(true);
     ++m_artworkGeneration;
     m_artworkId.clear();
+    m_artworkPath.clear();
 }
 }  // namespace Awake::Web

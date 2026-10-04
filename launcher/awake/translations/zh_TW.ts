@@ -1437,6 +1437,10 @@ Some versions of Minecraft may not launch.
       <source>No compatible version of Java was found. Using the default one.</source>
       <translation>找不到相容的 Java 版本。將使用預設版本。</translation>
     </message>
+      <message>
+      <source>Awake Optimized could not select a verified runtime. Falling back to Minecraft Default.</source>
+      <translation>Awake Optimized 無法選擇經過驗證的執行環境。正在退回至 Minecraft Default。</translation>
+    </message>
   </context>
   <context>
     <name>AutoJavaWizardPage</name>
@@ -1570,7 +1574,99 @@ Some versions of Minecraft may not launch.
       <source>Watched Folders:</source>
       <translation type="vanished">監控資料夾：</translation>
     </message>
-  </context>
+      <message>
+      <source>Download required files</source>
+      <translation>下載必要檔案</translation>
+    </message>
+    <message>
+      <source>Some creators require downloads from their website. Click Download for each missing file and save it to your Downloads folder. Keep this window open: installation continues automatically when all files are found.</source>
+      <translation>部分創作者要求從其網站下載檔案。請為每個缺少的檔案按一下「下載」，並儲存至「下載」資料夾。請保持此視窗開啟；找到所有檔案後會自動繼續安裝。</translation>
+    </message>
+    <message>
+      <source>Checked by file name</source>
+      <translation>依檔案名稱檢查</translation>
+    </message>
+    <message>
+      <source>%1: %2</source>
+      <translation>%1：%2</translation>
+    </message>
+    <message>
+      <source>This code checks that the downloaded file is the correct version.</source>
+      <translation>此校驗碼用於確認下載的檔案版本正確。</translation>
+    </message>
+    <message>
+      <source>Download</source>
+      <translation>下載</translation>
+    </message>
+    <message>
+      <source>Download %1</source>
+      <translation>下載 %1</translation>
+    </message>
+    <message>
+      <source>Open the creator's download page in your browser</source>
+      <translation>在瀏覽器中開啟創作者的下載頁面</translation>
+    </message>
+    <message>
+      <source>No download page is available for this file.</source>
+      <translation>此檔案沒有可用的下載頁面。</translation>
+    </message>
+    <message>
+      <source>Saved somewhere else? Drop the files here, or choose the folder where you saved them.</source>
+      <translation>檔案儲存在其他位置？請將檔案拖放到此處，或選擇儲存檔案的資料夾。</translation>
+    </message>
+    <message>
+      <source>Choose download folder</source>
+      <translation>選擇下載資料夾</translation>
+    </message>
+    <message>
+      <source>Download all missing</source>
+      <translation>下載所有缺少的檔案</translation>
+    </message>
+    <message>
+      <source>Continue without missing files</source>
+      <translation>缺少檔案仍要繼續</translation>
+    </message>
+    <message>
+      <source>Missing files will not be installed.</source>
+      <translation>缺少的檔案不會安裝。</translation>
+    </message>
+    <message>
+      <source>Cancel installation</source>
+      <translation>取消安裝</translation>
+    </message>
+    <message>
+      <source>Choose the folder containing your downloaded files</source>
+      <translation>選擇包含已下載檔案的資料夾</translation>
+    </message>
+    <message>
+      <source>Ready to install</source>
+      <translation>可以安裝</translation>
+    </message>
+    <message>
+      <source>Waiting for download</source>
+      <translation>等待下載</translation>
+    </message>
+    <message>
+      <source>Download this file into one of the folders being checked.</source>
+      <translation>請將此檔案下載到正在檢查的資料夾之一。</translation>
+    </message>
+    <message>
+      <source>Downloaded</source>
+      <translation>已下載</translation>
+    </message>
+    <message>
+      <source>%1 of %2 files ready</source>
+      <translation>已就緒 %1 / %2 個檔案</translation>
+    </message>
+    <message>
+      <source>Checking your download folders…</source>
+      <translation>正在檢查下載資料夾…</translation>
+    </message>
+    <message>
+      <source>Checking %1 folder(s) automatically</source>
+      <translation>正在自動檢查 %1 個資料夾</translation>
+    </message>
+</context>
   <context>
     <name>CapeChange</name>
     <message>
@@ -9751,6 +9847,106 @@ Are you sure?</source>
       <message>
         <source>Reduce motion</source>
         <translation>減少動態效果</translation>
+    </message>
+    <message>
+      <source>This instance no longer exists.</source>
+      <translation>此實例已不存在。</translation>
+    </message>
+    <message>
+      <source>The instance could not be selected.</source>
+      <translation>無法選取此實例。</translation>
+    </message>
+    <message>
+      <source>This instance cannot be launched right now.</source>
+      <translation>目前無法啟動此實例。</translation>
+    </message>
+    <message>
+      <source>Username cannot be empty.</source>
+      <translation>使用者名稱不能為空。</translation>
+    </message>
+    <message>
+      <source>You must add a valid Microsoft account before adding an offline account.</source>
+      <translation>新增離線帳戶前，請先新增有效的 Microsoft 帳戶。</translation>
+    </message>
+    <message>
+      <source>Failed to create offline account.</source>
+      <translation>建立離線帳戶失敗。</translation>
+    </message>
+    <message>
+      <source>The application menu is not available.</source>
+      <translation>應用程式選單無法使用。</translation>
+    </message>
+    <message>
+      <source>Invalid installation request.</source>
+      <translation>安裝要求無效。</translation>
+    </message>
+    <message>
+      <source>Enter an instance name.</source>
+      <translation>輸入實例名稱。</translation>
+    </message>
+    <message>
+      <source>Choose an archive file or a valid download URL.</source>
+      <translation>選擇封存檔或有效的下載 URL。</translation>
+    </message>
+    <message>
+      <source>Choose a Minecraft version.</source>
+      <translation>選擇 Minecraft 版本。</translation>
+    </message>
+    <message>
+      <source>Metadata index is not available.</source>
+      <translation>中繼資料索引無法使用。</translation>
+    </message>
+    <message>
+      <source>The selected Minecraft version could not be loaded.</source>
+      <translation>無法載入所選的 Minecraft 版本。</translation>
+    </message>
+    <message>
+      <source>Unsupported mod loader.</source>
+      <translation>不支援此模組載入器。</translation>
+    </message>
+    <message>
+      <source>No compatible version of the selected mod loader is available for this Minecraft version.</source>
+      <translation>所選模組載入器沒有適用於此 Minecraft 版本的版本。</translation>
+    </message>
+    <message>
+      <source>This action is not available.</source>
+      <translation>此操作無法使用。</translation>
+    </message>
+    <message>
+      <source>Unsupported Modrinth link.
+      
+      Prism Launcher currently only supports modpack links such as modrinth://modpack/fabulously-optimized.</source>
+      <translation>不支援此 Modrinth 連結。
+      
+      Prism Launcher 目前僅支援模組包連結，例如 modrinth://modpack/fabulously-optimized。</translation>
+    </message>
+    <message>
+      <source>Delete instance</source>
+      <translation>刪除實例</translation>
+    </message>
+    <message>
+      <source>Delete this instance?</source>
+      <translation>要刪除此實例嗎？</translation>
+    </message>
+    <message>
+      <source>This removes the instance%1, including its worlds, mods and settings. Copy any worlds you want to keep before continuing.</source>
+      <translation>此操作會刪除實例%1，包括其中的世界、模組和設定。繼續前請複製要保留的世界。</translation>
+    </message>
+    <message>
+      <source>Keep instance</source>
+      <translation>保留實例</translation>
+    </message>
+    <message>
+      <source>Instance name:</source>
+      <translation>實例名稱：</translation>
+    </message>
+    <message>
+      <source>Unsupported Modrinth link.
+
+Prism Launcher currently only supports modpack links such as modrinth://modpack/fabulously-optimized.</source>
+      <translation>不支援此 Modrinth 連結。
+
+Prism Launcher 目前僅支援模組包連結，例如 modrinth://modpack/fabulously-optimized。</translation>
     </message>
 </context>
   <context>
@@ -19596,12 +19792,12 @@ Play time: %4</source>
         <translation>沒有符合搜尋條件的實例。</translation>
     </message>
     <message>
-        <source>Your worlds, within reach.</source>
-        <translation>你的世界，觸手可及。</translation>
+        <source>No instances yet.</source>
+        <translation>目前還沒有實例。</translation>
     </message>
     <message>
-        <source>Create your first instance to start playing.</source>
-        <translation>建立第一個實例，開始遊戲。</translation>
+        <source>Create or import an instance to start playing.</source>
+        <translation>建立或匯入一個實例即可開始遊戲。</translation>
     </message>
     <message>
         <source>Choose a world from your library to play and manage it.</source>
@@ -19624,4 +19820,256 @@ Play time: %4</source>
         <translation>啟動器選單</translation>
     </message>
 </context>
+  <context>
+    <name>AwakePopupDialog</name>
+    <message>
+      <source>Close dialog</source>
+      <translation>關閉對話方塊</translation>
+    </message>
+    <message>
+      <source>Close (Esc)</source>
+      <translation>關閉（Esc）</translation>
+    </message>
+      <message><source>Add an account to play</source><translation>新增帳戶以開始遊戲</translation></message>
+    <message><source>Sign in with the Microsoft account that owns Minecraft. You can add it in the Accounts menu, then come back and press Play.</source><translation>請使用擁有 Minecraft 的 Microsoft 帳戶登入。你可以在帳戶選單中新增帳戶，然後返回並點擊開始遊戲。</translation></message>
+    <message><source>Not now</source><translation>稍後再說</translation></message>
+    <message><source>Add account</source><translation>新增帳戶</translation></message>
+</context>
+  <context>
+    <name>Awake::Web::InstanceEditor</name>
+    <message>
+      <source>This instance no longer exists.</source>
+      <translation>此實例已不存在。</translation>
+    </message>
+    <message>
+      <source>This editor page is not available.</source>
+      <translation>此編輯器頁面無法使用。</translation>
+    </message>
+    <message>
+      <source>Enabled</source>
+      <translation>已啟用</translation>
+    </message>
+    <message>
+      <source>Disabled</source>
+      <translation>已停用</translation>
+    </message>
+    <message>
+      <source>Notes must be text shorter than one megabyte.</source>
+      <translation>備註必須是小於一百萬位元組的文字。</translation>
+    </message>
+    <message>
+      <source>Stop the game before changing its settings.</source>
+      <translation>變更設定前請先停止遊戲。</translation>
+    </message>
+    <message>
+      <source>Invalid game settings.</source>
+      <translation>遊戲設定無效。</translation>
+    </message>
+    <message>
+      <source>Memory or window size is outside the supported range.</source>
+      <translation>記憶體或視窗大小超出支援範圍。</translation>
+    </message>
+    <message>
+      <source>Invalid game setting switches.</source>
+      <translation>遊戲設定開關無效。</translation>
+    </message>
+    <message>
+      <source>Minimum memory cannot exceed maximum memory.</source>
+      <translation>最低記憶體不能大於最高記憶體。</translation>
+    </message>
+    <message>
+      <source>There is no active console to clear. Saved log files are kept.</source>
+      <translation>沒有正在執行的主控台可清除。已儲存的記錄檔會保留。</translation>
+    </message>
+    <message>
+      <source>Unknown content folder.</source>
+      <translation>未知內容資料夾。</translation>
+    </message>
+    <message>
+      <source>This page does not have a content folder.</source>
+      <translation>此頁面沒有內容資料夾。</translation>
+    </message>
+    <message>
+      <source>The folder could not be opened.</source>
+      <translation>無法開啟資料夾。</translation>
+    </message>
+    <message>
+      <source>This page does not contain editable files.</source>
+      <translation>此頁面不包含可編輯的檔案。</translation>
+    </message>
+    <message>
+      <source>Stop the game before changing its files.</source>
+      <translation>變更檔案前請先停止遊戲。</translation>
+    </message>
+    <message>
+      <source>Invalid content selection.</source>
+      <translation>所選內容無效。</translation>
+    </message>
+    <message>
+      <source>This file is no longer in the instance.</source>
+      <translation>此檔案已不在該實例中。</translation>
+    </message>
+    <message>
+      <source>Choose whether the mod should be enabled.</source>
+      <translation>選擇是否啟用此模組。</translation>
+    </message>
+    <message>
+      <source>The mod could not be changed.</source>
+      <translation>無法變更此模組。</translation>
+    </message>
+    <message>
+      <source>The selected file could not be removed.</source>
+      <translation>無法移除所選檔案。</translation>
+    </message>
+    <message>
+      <source>Stop the game before adding files.</source>
+      <translation>新增檔案前請先停止遊戲。</translation>
+    </message>
+    <message>
+      <source>Finish the current file selection first.</source>
+      <translation>請先完成目前的檔案選取。</translation>
+    </message>
+    <message>
+      <source>Add files to the instance</source>
+      <translation>新增檔案至實例</translation>
+    </message>
+    <message>
+      <source>Mods (*.jar *.zip)</source>
+      <translation>模組 (*.jar *.zip)</translation>
+    </message>
+    <message>
+      <source>Packs (*.zip)</source>
+      <translation>資源包 (*.zip)</translation>
+    </message>
+    <message>
+      <source>Some files could not be added. Files already in this instance were kept. Check the file names and try again.</source>
+      <translation>部分檔案無法新增。此實例中已有的檔案已保留。請檢查檔案名稱後再試一次。</translation>
+    </message>
+    <message>
+      <source>Unknown advanced page.</source>
+      <translation>未知進階頁面。</translation>
+    </message>
+    <message>
+      <source>This editor action is not available.</source>
+      <translation>此編輯器操作無法使用。</translation>
+    </message>
+  </context>
+  <context>
+    <name>Java::RuntimeDownloadTask</name>
+    <message>
+      <source>This Java provider is unavailable for this system. Choose Minecraft Default or Custom Java.</source>
+      <translation>此 Java 提供者不支援目前系統。請選擇 Minecraft Default 或自訂 Java。</translation>
+    </message>
+    <message>
+      <source>This provider has no compatible Java build for this instance. Choose Awake Optimized, Minecraft Default or Custom Java.</source>
+      <translation>此提供者沒有與此實例相容的 Java 組建。請選擇 Awake Optimized、Minecraft Default 或自訂 Java。</translation>
+    </message>
+    <message>
+      <source>Finding a compatible Java runtime</source>
+      <translation>正在尋找相容的 Java 執行環境</translation>
+    </message>
+    <message>
+      <source>Java download information could not be read. Please try again.</source>
+      <translation>無法讀取 Java 下載資訊。請重試。</translation>
+    </message>
+    <message>
+      <source>The Java provider could not be reached. Check your connection and try again.</source>
+      <translation>無法連線至 Java 提供者。請檢查網路連線後重試。</translation>
+    </message>
+    <message>
+      <source>The Java provider response was too large.</source>
+      <translation>Java 提供者的回應過大。</translation>
+    </message>
+    <message>
+      <source>This Java download could not be verified. Choose another provider.</source>
+      <translation>無法驗證此 Java 下載。請選擇其他提供者。</translation>
+    </message>
+    <message>
+      <source>This Java download does not include a trusted checksum. Choose another provider.</source>
+      <translation>此 Java 下載沒有可信的校驗值。請選擇其他提供者。</translation>
+    </message>
+    <message>
+      <source>The Java download checksum could not be read.</source>
+      <translation>無法讀取 Java 下載的校驗值。</translation>
+    </message>
+    <message>
+      <source>The Java runtime folder could not be created.</source>
+      <translation>無法建立 Java 執行環境資料夾。</translation>
+    </message>
+    <message>
+      <source>Checking the Java runtime</source>
+      <translation>正在檢查 Java 執行環境</translation>
+    </message>
+    <message>
+      <source>The downloaded Java runtime could not be checked. Choose another provider.</source>
+      <translation>無法檢查已下載的 Java 執行環境。請選擇其他提供者。</translation>
+    </message>
+    <message>
+      <source>The downloaded Java runtime is not compatible. Choose another provider.</source>
+      <translation>已下載的 Java 執行環境不相容。請選擇其他提供者。</translation>
+    </message>
+    <message>
+      <source>The Java runtime settings could not be saved.</source>
+      <translation>無法儲存 Java 執行環境設定。</translation>
+    </message>
+    <message>
+      <source>The Java runtime could not be installed. Please try again.</source>
+      <translation>無法安裝 Java 執行環境。請重試。</translation>
+    </message>
+  </context>
+  <context>
+    <name>Awake::Web::Bridge</name>
+    <message>
+      <source>The instance editor is paused.</source>
+      <translation>實例編輯器已暫停。</translation>
+    </message>
+    <message>
+      <source>This instance no longer exists.</source>
+      <translation>此實例已不存在。</translation>
+    </message>
+    <message>
+      <source>Finish the current native action first.</source>
+      <translation>請先完成目前操作。</translation>
+    </message>
+    <message>
+      <source>Stop the game before changing its settings.</source>
+      <translation>變更設定前請先停止遊戲。</translation>
+    </message>
+    <message>
+      <source>Choose a supported Java runtime.</source>
+      <translation>請選擇支援的 Java 執行環境。</translation>
+    </message>
+    <message>
+      <source>Choose a Java executable using Browse before selecting Custom Java.</source>
+      <translation>選擇自訂 Java 前，請透過瀏覽選擇 Java 執行檔。</translation>
+    </message>
+    <message>
+      <source>Choose your Java executable</source>
+      <translation>選擇 Java 執行檔</translation>
+    </message>
+    <message>
+      <source>Java executable (javaw.exe java.exe)</source>
+      <translation>Java 執行檔 (javaw.exe java.exe)</translation>
+    </message>
+    <message>
+      <source>Java executable (java)</source>
+      <translation>Java 執行檔 (java)</translation>
+    </message>
+    <message>
+      <source>Choose the java or javaw program inside your Java installation's bin folder.</source>
+      <translation>請選擇 Java 安裝目錄中 bin 資料夾內的 java 或 javaw 程式。</translation>
+    </message>
+    <message>
+      <source>The Java selection could not be saved. Stop the game and try again.</source>
+      <translation>無法儲存 Java 選擇。請停止遊戲後重試。</translation>
+    </message>
+    <message>
+      <source>This Java installation did not pass its check. Choose another Java installation.</source>
+      <translation>此 Java 安裝未通過檢查。請選擇其他 Java 安裝。</translation>
+    </message>
+    <message>
+      <source>This Java version is not compatible with the instance. Choose a supported Java version.</source>
+      <translation>此 Java 版本與實例不相容。請選擇支援的 Java 版本。</translation>
+    </message>
+  </context>
 </TS>

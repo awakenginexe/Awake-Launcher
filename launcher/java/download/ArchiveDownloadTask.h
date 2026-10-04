@@ -25,7 +25,7 @@ namespace Java {
 class ArchiveDownloadTask : public Task {
     Q_OBJECT
    public:
-    ArchiveDownloadTask(QUrl url, QString final_path, QString checksumType = "", QString checksumHash = "");
+    ArchiveDownloadTask(QUrl url, QString final_path, QString checksumType = "", QString checksumHash = "", bool useCache = true);
     virtual ~ArchiveDownloadTask() = default;
 
     bool canAbort() const override { return true; }
@@ -41,5 +41,6 @@ class ArchiveDownloadTask : public Task {
     QString m_checksum_type;
     QString m_checksum_hash;
     Task::Ptr m_task;
+    bool m_useCache = true;
 };
 }  // namespace Java

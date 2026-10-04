@@ -44,6 +44,16 @@
 #include "tasks/Task.h"
 
 #include "ui/widgets/SubTaskProgressBar.h"
+#include "ui/widgets/ModalHeaderBar.h"
+#include "ui/MainWindow.h"
+
+#if defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <dwmapi.h>
+#endif
 
 // map a value in a numeric range of an arbitrary type to between 0 and INT_MAX
 // for getting the best precision out of the qt progress bar
@@ -62,8 +72,20 @@ std::tuple<int, int> map_int_zero_max(T current, T range_max, T range_min)
 ProgressDialog::ProgressDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ProgressDialog)
 {
     ui->setupUi(this);
+    setObjectName("ProgressDialog");
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+#if defined(Q_OS_WIN)
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    DWORD corner = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(hwnd, 33, &corner, sizeof(corner));
+#endif
+
+    m_headerBar = new ModalHeaderBar(this, tr("Downloading Resources"), QIcon(), this);
+    ui->verticalLayout->insertWidget(0, m_headerBar);
+    ui->verticalLayout->setContentsMargins(14, 6, 14, 14);
+    ui->verticalLayout->setSpacing(10);
+
     ui->taskProgressScrollArea->setHidden(true);
-    this->setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setAttribute(Qt::WidgetAttribute::WA_QuitOnClose, true);
     changeProgress(0, 100);
     updateSize(true);
@@ -221,9 +243,13 @@ void ProgressDialog::onTaskSucceeded()
 
 void ProgressDialog::changeStatus([[maybe_unused]] const QString& status)
 {
-    ui->globalStatusLabel->setText(m_task->getStatus());
+    const QString currentStatus = m_task ? m_task->getStatus() : QString();
+    if (m_headerBar && !currentStatus.isEmpty()) {
+        m_headerBar->setTitle(currentStatus);
+    }
+    ui->globalStatusLabel->setText(currentStatus);
     ui->globalStatusLabel->adjustSize();
-    ui->globalStatusDetailsLabel->setText(m_task->getDetails());
+    ui->globalStatusDetailsLabel->setText(m_task ? m_task->getDetails() : QString());
     ui->globalStatusDetailsLabel->adjustSize();
 
     updateSize();
@@ -291,4 +317,20 @@ void ProgressDialog::closeEvent(QCloseEvent* e)
     } else {
         QDialog::closeEvent(e);
     }
+}
+
+void ProgressDialog::showEvent(QShowEvent* e)
+{
+    QDialog::showEvent(e);
+    if (auto* mw = qobject_cast<MainWindow*>(parentWidget() ? parentWidget()->window() : nullptr)) {
+        mw->setModalBackdrop(true);
+    }
+}
+
+void ProgressDialog::hideEvent(QHideEvent* e)
+{
+    if (auto* mw = qobject_cast<MainWindow*>(parentWidget() ? parentWidget()->window() : nullptr)) {
+        mw->setModalBackdrop(false);
+    }
+    QDialog::hideEvent(e);
 }

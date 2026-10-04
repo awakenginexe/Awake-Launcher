@@ -1,0 +1,57 @@
+.instance-context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+.instance-context-menu {
+  position: fixed;
+  z-index: 81;
+  display: flex;
+  flex-direction: column;
+  width: 216px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-medium);
+  background: rgba(8, 15, 26, 0.97);
+  box-shadow: var(--glass-inner-highlight), var(--shadow-floating);
+  backdrop-filter: blur(var(--blur-small));
+  -webkit-backdrop-filter: blur(var(--blur-small));
+}
+
+.instance-context-heading {
+  overflow: hidden;
+  padding: 7px 10px 8px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instance-context-menu button[role="menuitem"] {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: var(--radius-small);
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.instance-context-menu button[role="menuitem"]:hover:not(:disabled),
+.instance-context-menu button[role="menuitem"]:focus-visible {
+  background: var(--surface-hover);
+}
+
+.instance-context-menu button[role="menuitem"].destructive { color: #fca5a5; }
+.instance-context-menu button[role="menuitem"].destructive:hover:not(:disabled),
+.instance-context-menu button[role="menuitem"].destructive:focus-visible { background: rgba(239, 68, 68, 0.12); }
+
+.instance-context-separator {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border-subtle);
+}

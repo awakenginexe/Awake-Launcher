@@ -1,5 +1,7 @@
 # Licenses and copyright notices
 
+**Looking for the license for Awake Launcher itself?** Read [LICENSE](LICENSE) for the complete GPL version 3 terms. This file keeps the copyright and license notices for Prism Launcher and bundled components; those notices must remain with the source and distributions. It is long because it contains those notices in full. The short descriptions here are a guide, not replacements for license terms.
+
 ## Awake Launcher
 
     Copyright (C) 2026 Awake Launcher Contributors

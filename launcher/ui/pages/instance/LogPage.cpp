@@ -49,6 +49,7 @@
 
 #include "ui/GuiUtil.h"
 #include "ui/themes/ThemeManager.h"
+#include "awake/AwakeTheme.h"
 
 #include <BuildConfig.h>
 
@@ -136,7 +137,7 @@ LogPage::LogPage(BaseInstance* instance, QWidget* parent) : QWidget(parent), ui(
 
     // set up fonts in the log proxy
     {
-        QString fontFamily = APPLICATION->settings()->get("ConsoleFont").toString();
+        QString fontFamily = Awake::useRegularUiFont() ? "K2D" : APPLICATION->settings()->get("ConsoleFont").toString();
         bool conversionOk = false;
         int fontSize = APPLICATION->settings()->get("ConsoleFontSize").toInt(&conversionOk);
         if (!conversionOk) {

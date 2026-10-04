@@ -38,14 +38,35 @@ bool externalUrl(const QUrl& url)
 
 bool actionAllowed(const QString& action)
 {
-    static const QSet<QString> actions{"create", "import", "edit", "folder", "accounts", "settings", "manage", "launchOptions", "application", "logs", "legacy"};
+    static const QSet<QString> actions{
+        "create", "import", "edit", "folder", "accounts", "settings", "manage", "launch",
+        "rename", "changeGroup", "copy", "export", "delete", "kill", "installPack", "importArchive",
+        "launchOptions", "application", "logs", "legacy",
+        "addMicrosoft", "addOffline", "removeAccount", "setDefaultAccount", "refreshAccount", "createQuick",
+        "windowMinimize", "windowMaximize", "windowClose",
+        "openRootFolder", "openInstancesFolder", "openModsFolder", "openLogsFolder", "openJavaFolder", "openSkinsFolder",
+        "checkForUpdates", "clearMetadata", "reportBug", "about", "discord", "reddit", "matrix"
+    };
     return actions.contains(action);
 }
 
 bool preferenceAllowed(const QString& key, const QVariant& value)
 {
-    if (key == "reducedMotion" || key == "compact") return value.metaType().id() == QMetaType::Bool;
-    if (key == "sortMode") return value.metaType().id() == QMetaType::QString && QStringList{"Name", "LastLaunch", "TotalTimePlayed"}.contains(value.toString());
+    if (key == "javaProfile") return value.metaType().id() == QMetaType::QString &&
+        QStringList{"awake", "minecraft", "microsoft", "graalvm", "temurin", "zulu", "oracle", "custom"}.contains(value.toString());
+    if (key == "reducedMotion" || key == "compact" || key == "maximizeGame" || key == "closeOnLaunch") {
+        return value.metaType().id() == QMetaType::Bool;
+    }
+    if (key == "sortMode") {
+        return value.metaType().id() == QMetaType::QString && QStringList{"Name", "LastLaunch", "TotalTimePlayed"}.contains(value.toString());
+    }
+    if (key == "language") {
+        return value.metaType().id() == QMetaType::QString &&
+               QStringList{"en", "th", "zh-CN", "zh-TW"}.contains(value.toString());
+    }
+    if (key == "minMem" || key == "maxMem" || key == "gameWidth" || key == "gameHeight") {
+        return value.canConvert<int>() && value.toInt() > 0;
+    }
     if (key == "pin" && value.metaType().id() == QMetaType::QVariantMap) {
         const auto map = value.toMap();
         return map.size() == 2 && map.value("id").metaType().id() == QMetaType::QString && !map.value("id").toString().isEmpty() &&
@@ -61,6 +82,15 @@ QString frontendLocale(QString locale)
     if (locale.compare("zh-TW", Qt::CaseInsensitive) == 0 || locale.startsWith("zh-Hant", Qt::CaseInsensitive) || locale.compare("zh-HK", Qt::CaseInsensitive) == 0) return "zh-TW";
     if (locale.startsWith("zh", Qt::CaseInsensitive)) return "zh-CN";
     return "en";
+}
+
+QString nativeLocale(QString locale)
+{
+    if (locale == "en") return "en_US";
+    if (locale == "th") return "th";
+    if (locale == "zh-CN") return "zh_CN";
+    if (locale == "zh-TW") return "zh_TW";
+    return {};
 }
 
 QVariantMap instanceDto(const InstanceData& i)

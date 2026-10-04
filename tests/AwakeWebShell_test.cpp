@@ -12,10 +12,13 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QPushButton>
 #include <QWebEnginePage>
 #include <QWebEngineView>
 #include <memory>
 #include "Application.h"
+#include "LaunchController.h"
+#include "minecraft/auth/AccountList.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
 #include "awake/web/AwakeWebAssets.h"
@@ -79,6 +82,54 @@ class AwakeWebShellTest : public QObject {
         QTest::keyClick(view, Qt::Key_F, Qt::ControlModifier);
         QTRY_COMPARE(evaluate("document.activeElement.id").toString(), QString("instance-search"));
     }
+    void javaPickerUsesNativeSettings()
+    {
+        evaluate("document.querySelector('.account-actions .settings-button').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());
+        evaluate("document.querySelectorAll('.settings-tab-btn')[1].click()");
+        QTRY_COMPARE(evaluate("document.querySelectorAll('.java-option').length").toInt(), 8);
+        evaluate("document.querySelector('[data-java-profile=zulu]').click()");
+        QTRY_COMPARE(APPLICATION->settings()->get("AwakeJavaProfile").toString(), QString("zulu"));
+        QVERIFY(APPLICATION->settings()->get("AutomaticJavaDownload").toBool());
+        evaluate("document.querySelector('[data-java-profile=awake]').click()");
+        QTRY_COMPARE(APPLICATION->settings()->get("AwakeJavaProfile").toString(), QString("awake"));
+        evaluate("document.querySelector('.modal-close-btn').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') === null").toBool());
+    }
+    void missingAccountPopupOpensWebAccounts()
+    {
+        auto* accounts = APPLICATION->accounts();
+        QList<MinecraftAccountPtr> previousAccounts;
+        while (accounts->count()) {
+            previousAccounts.append(accounts->at(0));
+            accounts->removeAccount(accounts->index(0, 0));
+        }
+        bool captured = false;
+        QTimer clickAdd;
+        clickAdd.setInterval(20);
+        connect(&clickAdd, &QTimer::timeout, this, [&] {
+            auto* popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (!popup || popup->objectName() != "awakeAccountRequired") return;
+            clickAdd.stop();
+            captured = popup->windowFlags().testFlag(Qt::FramelessWindowHint);
+            const auto output = QDir(QCoreApplication::applicationDirPath()).filePath(".validation");
+            QDir().mkpath(output);
+            popup->grab().save(output + "/account-required.png");
+            popup->findChild<QPushButton*>("accountSetupAdd")->click();
+        });
+        clickAdd.start();
+        LaunchController controller;
+        controller.setInstance(APPLICATION->instances()->getInstanceById("one"));
+        controller.setParentWidget(window);
+        controller.start();
+        QVERIFY(captured);
+        QTRY_VERIFY(evaluate("document.querySelector('.empty-accounts') !== null").toBool());
+        QTRY_VERIFY(evaluate("document.activeElement.matches('.modal-footer .btn-primary')").toBool());
+        QVERIFY(!QApplication::activeModalWidget());
+        evaluate("document.querySelector('.modal-close-btn').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.empty-accounts') === null").toBool());
+        for (const auto& account : previousAccounts) accounts->addAccount(account);
+    }
     void nativeFolderUsesSelectedInstanceOnly()
     {
         QDesktopServices::setUrlHandler("file", this, "recordFolder");
@@ -105,7 +156,11 @@ class AwakeWebShellTest : public QObject {
             QTRY_VERIFY_WITH_TIMEOUT(opened, 5000);
             closer.stop();
         }
-        for (const auto& action : {QString("accounts"), QString("application"), QString("manage"), QString("launchOptions")}) {
+        QVERIFY(bridge->invokeAction("accounts", {}).value("ok").toBool());
+        QTRY_VERIFY(evaluate("document.querySelector('.account-card-list') !== null").toBool());
+        evaluate("document.querySelector('.modal-close-btn').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.account-card-list') === null").toBool());
+        for (const auto& action : {QString("application"), QString("manage"), QString("launchOptions")}) {
             bool opened = false;
             QTimer closer;
             closer.setInterval(20);

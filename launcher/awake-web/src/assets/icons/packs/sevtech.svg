@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="sevGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#7c2d12" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#180e07" stroke="#ea580c" stroke-width="2"/>
+  <!-- Steampunk gear base -->
+  <circle cx="32" cy="36" r="14" fill="#2d170a" stroke="url(#sevGrad)" stroke-width="2"/>
+  <circle cx="32" cy="36" r="6" fill="#180e07" stroke="#ea580c" stroke-width="1.5"/>
+  <!-- Space rocket taking off -->
+  <path d="M32 10 C36 18 38 28 38 34 H26 C26 28 28 18 32 10 Z" fill="#f97316"/>
+  <!-- Rocket fins -->
+  <polygon points="26,30 20,38 26,36" fill="#c2410c"/>
+  <polygon points="38,30 44,38 38,36" fill="#c2410c"/>
+  <polygon points="32,36 30,46 34,46" fill="#facc15"/>
+</svg>

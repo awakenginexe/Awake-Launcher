@@ -39,10 +39,21 @@
 
 #include <QCloseEvent>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTimer>
+
+#include "ui/widgets/AwakeTitleBar.h"
+#if defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <windowsx.h>
+#include <dwmapi.h>
+#endif
 
 #include "ui/widgets/PageContainer.h"
 
@@ -63,12 +74,30 @@ InstanceWindow::InstanceWindow(MinecraftInstance* instance, QWidget* parent) : Q
         setWindowTitle(windowTitle);
     }
 
+#if defined(Q_OS_WIN)
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+    m_frameless = true;
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    DWORD cornerPref = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &cornerPref, sizeof(cornerPref));
+#endif
+
     // Add page container
     {
         auto provider = std::make_shared<InstancePageProvider>(m_instance);
         m_container = new PageContainer(provider.get(), "console", this);
         m_container->setParentContainer(this);
-        setCentralWidget(m_container);
+
+        auto* outerWidget = new QWidget(this);
+        outerWidget->setObjectName("awakeOuterContainer");
+        auto* outerLayout = new QVBoxLayout(outerWidget);
+        outerLayout->setContentsMargins(0, 0, 0, 0);
+        outerLayout->setSpacing(0);
+        m_titleBar = new AwakeTitleBar(this, outerWidget);
+        m_titleBar->setTitle(windowTitle);
+        outerLayout->addWidget(m_titleBar);
+        outerLayout->addWidget(m_container);
+        setCentralWidget(outerWidget);
         setContentsMargins(0, 0, 0, 0);
     }
 
@@ -76,7 +105,8 @@ InstanceWindow::InstanceWindow(MinecraftInstance* instance, QWidget* parent) : Q
     {
         auto horizontalLayout = new QHBoxLayout(this);
         horizontalLayout->setObjectName(QStringLiteral("horizontalLayout"));
-        horizontalLayout->setContentsMargins(0, 0, 6, 6);
+        horizontalLayout->setContentsMargins(12, 8, 16, 12);
+        horizontalLayout->setSpacing(8);
 
         auto btnHelp = new QPushButton(this);
         btnHelp->setText(tr("Help"));
@@ -87,6 +117,7 @@ InstanceWindow::InstanceWindow(MinecraftInstance* instance, QWidget* parent) : Q
         horizontalLayout->addSpacerItem(spacer);
 
         m_launchButton = new QToolButton(this);
+        m_launchButton->setObjectName("btnPrimaryLaunch");
         m_launchButton->setText(tr("&Launch"));
         m_launchButton->setToolTip(tr("Launch the instance"));
         m_launchButton->setPopupMode(QToolButton::MenuButtonPopup);
@@ -260,3 +291,61 @@ bool InstanceWindow::requestClose()
     }
     return false;
 }
+
+#if defined(Q_OS_WIN)
+bool InstanceWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr* result)
+{
+    MSG* msg = static_cast<MSG*>(message);
+    if (m_frameless && msg->message == WM_NCHITTEST) {
+        if (isMaximized() || isFullScreen()) {
+            return false;
+        }
+
+        const int border = 8;
+        RECT winrect;
+        GetWindowRect(msg->hwnd, &winrect);
+
+        long x = GET_X_LPARAM(msg->lParam);
+        long y = GET_Y_LPARAM(msg->lParam);
+
+        bool left = (x >= winrect.left && x < winrect.left + border);
+        bool right = (x < winrect.right && x >= winrect.right - border);
+        bool top = (y >= winrect.top && y < winrect.top + border);
+        bool bottom = (y < winrect.bottom && y >= winrect.bottom - border);
+
+        if (top && left) {
+            *result = HTTOPLEFT;
+            return true;
+        }
+        if (top && right) {
+            *result = HTTOPRIGHT;
+            return true;
+        }
+        if (bottom && left) {
+            *result = HTBOTTOMLEFT;
+            return true;
+        }
+        if (bottom && right) {
+            *result = HTBOTTOMRIGHT;
+            return true;
+        }
+        if (left) {
+            *result = HTLEFT;
+            return true;
+        }
+        if (right) {
+            *result = HTRIGHT;
+            return true;
+        }
+        if (top) {
+            *result = HTTOP;
+            return true;
+        }
+        if (bottom) {
+            *result = HTBOTTOM;
+            return true;
+        }
+    }
+    return QMainWindow::nativeEvent(eventType, message, result);
+}
+#endif

@@ -428,6 +428,8 @@ set(JAVA_SOURCES
 
     java/JavaMetadata.h
     java/JavaMetadata.cpp
+    java/RuntimeSelection.cpp
+    java/RuntimeSelection.h
     java/download/ArchiveDownloadTask.cpp
     java/download/ArchiveDownloadTask.h
     java/download/ManifestDownloadTask.cpp
@@ -1079,6 +1081,8 @@ SET(LAUNCHER_SOURCES
     ui/dialogs/ScrollMessageBox.h
     ui/dialogs/BlockedModsDialog.cpp
     ui/dialogs/BlockedModsDialog.h
+    ui/dialogs/AwakePopupDialog.cpp
+    ui/dialogs/AwakePopupDialog.h
     ui/dialogs/ChooseProviderDialog.h
     ui/dialogs/ChooseProviderDialog.cpp
     ui/dialogs/ResourceUpdateDialog.cpp
@@ -1125,6 +1129,10 @@ SET(LAUNCHER_SOURCES
     ui/widgets/ModFilterWidget.h
     ui/widgets/ModListView.cpp
     ui/widgets/ModListView.h
+    ui/widgets/ModalHeaderBar.cpp
+    ui/widgets/ModalHeaderBar.h
+    ui/widgets/AwakeTitleBar.cpp
+    ui/widgets/AwakeTitleBar.h
     ui/widgets/PageContainer.cpp
     ui/widgets/PageContainer.h
     ui/widgets/PageContainer_p.h
@@ -1341,6 +1349,10 @@ if(APPLE)
     if(Launcher_ENABLE_UPDATER)
         target_link_libraries(Launcher_logic ${SPARKLE_FRAMEWORK})
     endif()
+endif()
+
+if(WIN32)
+    target_link_libraries(Launcher_logic dwmapi)
 endif()
 
 add_executable(${Launcher_Name} MACOSX_BUNDLE WIN32 main.cpp ${LAUNCHER_RCS})

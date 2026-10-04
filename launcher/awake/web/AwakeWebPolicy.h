@@ -11,6 +11,7 @@ bool externalUrl(const QUrl& url);
 bool actionAllowed(const QString& action);
 bool preferenceAllowed(const QString& key, const QVariant& value);
 QString frontendLocale(QString locale);
+QString nativeLocale(QString locale);
 
 struct InstanceData {
     QString id, name, group, minecraftVersion, loader, loaderVersion, iconUrl;

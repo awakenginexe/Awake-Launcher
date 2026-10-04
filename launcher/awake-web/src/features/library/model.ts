@@ -3,7 +3,82 @@ import type { Locale } from '../../i18n/catalogs.ts';
 import { BridgeError } from '../../bridge/client.ts';
 
 export type SortMode = 'Name' | 'LastLaunch' | 'TotalTimePlayed';
-export type Action = 'create' | 'import' | 'edit' | 'folder' | 'accounts' | 'settings' | 'manage' | 'launchOptions' | 'application' | 'logs' | 'legacy';
+export type Action =
+  | 'create'
+  | 'import'
+  | 'edit'
+  | 'folder'
+  | 'launch'
+  | 'rename'
+  | 'changeGroup'
+  | 'copy'
+  | 'export'
+  | 'delete'
+  | 'kill'
+  | 'accounts'
+  | 'settings'
+  | 'manage'
+  | 'launchOptions'
+  | 'application'
+  | 'logs'
+  | 'legacy'
+  | 'addMicrosoft'
+  | 'addOffline'
+  | 'removeAccount'
+  | 'setDefaultAccount'
+  | 'refreshAccount'
+  | 'createQuick'
+  | 'installPack'
+  | 'importArchive'
+  | 'windowMinimize'
+  | 'windowMaximize'
+  | 'windowClose'
+  | 'openRootFolder'
+  | 'openInstancesFolder'
+  | 'openModsFolder'
+  | 'openLogsFolder'
+  | 'openJavaFolder'
+  | 'openSkinsFolder'
+  | 'checkForUpdates'
+  | 'clearMetadata'
+  | 'reportBug'
+  | 'about'
+  | 'discord'
+  | 'reddit'
+  | 'matrix';
+
+export type PreferenceKey =
+  | 'compact'
+  | 'reducedMotion'
+  | 'sortMode'
+  | 'pin'
+  | 'language'
+  | 'minMem'
+  | 'maxMem'
+  | 'gameWidth'
+  | 'gameHeight'
+  | 'maximizeGame'
+  | 'closeOnLaunch';
+
+export interface AccountItem {
+  id: string;
+  name: string;
+  type: 'microsoft' | 'offline';
+  active: boolean;
+  valid: boolean;
+}
+
+export interface LauncherSettings {
+  language: string;
+  minMem: number;
+  maxMem: number;
+  javaPath: string;
+  gameWidth: number;
+  gameHeight: number;
+  maximizeGame: boolean;
+  closeOnLaunch: boolean;
+}
+
 export interface Instance {
   id: string; name: string; group: string; minecraftVersion: string; loader: string; loaderVersion: string;
   iconUrl: string; pinned: boolean; canLaunch: boolean; running: boolean; broken: boolean;
@@ -11,10 +86,17 @@ export interface Instance {
 }
 export interface Snapshot {
   instances: Instance[]; selectedId: string; locale: Locale; reducedMotion: boolean; compact: boolean;
-  sortMode: SortMode; accountName: string;
+  sortMode: SortMode; accountName: string; modalActive: boolean;
+  accounts: AccountItem[]; launcherSettings: LauncherSettings;
 }
 export function emptySnapshot(): Snapshot {
-  return { instances: [], selectedId: '', locale: 'en', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '' };
+  return {
+    instances: [], selectedId: '', locale: 'en', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '', modalActive: false,
+    accounts: [],
+    launcherSettings: {
+      language: '', minMem: 1024, maxMem: 4096, javaPath: '', gameWidth: 854, gameHeight: 480, maximizeGame: false, closeOnLaunch: false
+    }
+  };
 }
 export function isLocalImage(value: string): boolean {
   if (!value || /(?:^|\/)(?:\.|%2e){2}(?:\/|$)/i.test(value) || /[\\\s]/.test(value)) return false;
@@ -41,7 +123,43 @@ export function parseSnapshot(value: unknown): Snapshot {
     ids.add(instance.id);
     return { ...instance, iconUrl: isLocalImage(instance.iconUrl) ? instance.iconUrl : '' };
   });
-  return { instances, selectedId: ids.has(data.selectedId) ? data.selectedId : '', locale: normalizeLocale(data.locale), reducedMotion: data.reducedMotion, compact: data.compact, sortMode: data.sortMode as SortMode, accountName: data.accountName };
+
+  const accounts: AccountItem[] = Array.isArray(data.accounts)
+    ? data.accounts
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        .map(a => ({
+          id: String(a.id || ''),
+          name: String(a.name || ''),
+          type: a.type === 'offline' ? ('offline' as const) : ('microsoft' as const),
+          active: Boolean(a.active),
+          valid: Boolean(a.valid),
+        }))
+    : [];
+
+  const rawSettings = (data.launcherSettings || {}) as Record<string, unknown>;
+  const launcherSettings: LauncherSettings = {
+    language: String(rawSettings.language || ''),
+    minMem: Number(rawSettings.minMem) || 1024,
+    maxMem: Number(rawSettings.maxMem) || 4096,
+    javaPath: String(rawSettings.javaPath || ''),
+    gameWidth: Number(rawSettings.gameWidth) || 854,
+    gameHeight: Number(rawSettings.gameHeight) || 480,
+    maximizeGame: Boolean(rawSettings.maximizeGame),
+    closeOnLaunch: Boolean(rawSettings.closeOnLaunch),
+  };
+
+  return {
+    instances,
+    selectedId: ids.has(data.selectedId) ? data.selectedId : '',
+    locale: normalizeLocale(data.locale),
+    reducedMotion: data.reducedMotion,
+    compact: data.compact,
+    sortMode: data.sortMode as SortMode,
+    accountName: data.accountName,
+    modalActive: Boolean(data.modalActive),
+    accounts,
+    launcherSettings,
+  };
 }
 export function acceptSnapshot(current: Snapshot, response: Snapshot, revision: number, requestedRevision: number): Snapshot {
   return revision === requestedRevision ? response : current;

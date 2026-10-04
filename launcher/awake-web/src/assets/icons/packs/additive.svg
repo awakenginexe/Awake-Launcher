@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="addGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#061a12" stroke="#10b981" stroke-width="2"/>
+  <!-- Isometric cube -->
+  <polygon points="32,12 50,22 32,32 14,22" fill="#34d399"/>
+  <polygon points="14,22 32,32 32,52 14,42" fill="url(#addGreen)"/>
+  <polygon points="50,22 32,32 32,52 50,42" fill="#047857"/>
+  <!-- Glowing center plus sign -->
+  <path d="M32 26 V38 M26 32 H38" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -63,6 +63,7 @@ class LibraryWidget : public ArtworkCanvas {
     QComboBox* m_sort;
     QCheckBox* m_pinnedOnly;
     QCheckBox* m_pin;
+    MotionButton* m_add;
     MotionButton* m_createHero;
     MotionButton* m_more;
     MotionButton* m_menu;

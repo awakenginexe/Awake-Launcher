@@ -1,0 +1,114 @@
+.language-picker {
+  position: relative;
+  width: min(220px, 48%);
+  flex: 0 0 auto;
+}
+
+.language-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(19, 38, 66, 0.96), rgba(10, 21, 38, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 5px 16px rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.language-picker-trigger:hover,
+.language-picker-trigger[aria-expanded='true'] {
+  border-color: rgba(96, 165, 250, 0.62);
+  background: linear-gradient(145deg, rgba(24, 49, 84, 0.98), rgba(12, 27, 48, 0.99));
+}
+
+.language-picker-trigger:focus-visible,
+.language-picker-option:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.language-picker-chevron,
+.language-picker-check {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.language-picker-chevron {
+  color: #93c5fd;
+  transition: transform 160ms ease;
+}
+
+.language-picker-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.language-picker-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  right: 0;
+  width: 100%;
+  padding: 5px;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 11px;
+  background: linear-gradient(155deg, rgba(14, 29, 51, 0.99), rgba(7, 15, 27, 0.995));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px);
+}
+
+.language-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.language-picker-option:hover,
+.language-picker-option.is-active {
+  background: rgba(59, 130, 246, 0.18);
+  color: var(--text-primary);
+}
+
+.language-picker-option.is-selected {
+  color: #bfdbfe;
+}
+
+.language-picker-check {
+  color: #60a5fa;
+}
+
+@media (max-width: 540px) {
+  .language-picker {
+    width: min(190px, 52%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .language-picker-trigger,
+  .language-picker-chevron,
+  .language-picker-option {
+    transition: none;
+  }
+}

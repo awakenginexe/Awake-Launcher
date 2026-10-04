@@ -24,10 +24,12 @@
 #include "net/ChecksumValidator.h"
 #include "net/NetJob.h"
 #include "tasks/Task.h"
+#include <QFile>
+#include <QDir>
 
 namespace Java {
-ArchiveDownloadTask::ArchiveDownloadTask(QUrl url, QString final_path, QString checksumType, QString checksumHash)
-    : m_url(url), m_final_path(final_path), m_checksum_type(checksumType), m_checksum_hash(checksumHash)
+ArchiveDownloadTask::ArchiveDownloadTask(QUrl url, QString final_path, QString checksumType, QString checksumHash, bool useCache)
+    : m_url(url), m_final_path(final_path), m_checksum_type(checksumType), m_checksum_hash(checksumHash), m_useCache(useCache)
 {}
 
 void ArchiveDownloadTask::executeTask()
@@ -35,10 +37,20 @@ void ArchiveDownloadTask::executeTask()
     // JRE found ! download the zip
     setStatus(tr("Downloading Java"));
 
-    MetaEntryPtr entry = APPLICATION->metacache()->resolveEntry("java", m_url.fileName());
-
     auto download = makeShared<NetJob>(QString("JRE::DownloadJava"), APPLICATION->network());
-    auto action = Net::Request::makeCached(m_url, entry);
+    QString fullPath;
+    Net::Request::Ptr action;
+    if (m_useCache) {
+        const auto entry = APPLICATION->metacache()->resolveEntry("java", m_url.fileName());
+        fullPath = entry->getFullPath();
+        action = Net::Request::makeCached(m_url, entry);
+    } else {
+        download->setAskRetry(false);
+        // A fresh staging file ensures the expected checksum runs even when an older cache entry exists.
+        fullPath = QDir(m_final_path).filePath(".awake-java-download");
+        action = Net::Request::makeFile(m_url, fullPath);
+        connect(this, &Task::finished, this, [fullPath] { QFile::remove(fullPath); });
+    }
     if (!m_checksum_hash.isEmpty() && !m_checksum_type.isEmpty()) {
         auto hashType = QCryptographicHash::Algorithm::Sha1;
         if (m_checksum_type == "sha256") {
@@ -47,7 +59,6 @@ void ArchiveDownloadTask::executeTask()
         action->addValidator(new Net::ChecksumValidator(hashType, QByteArray::fromHex(m_checksum_hash.toUtf8())));
     }
     download->addNetAction(action);
-    auto fullPath = entry->getFullPath();
 
     connect(download.get(), &Task::failed, this, &ArchiveDownloadTask::emitFailed);
     connect(download.get(), &Task::progress, this, &ArchiveDownloadTask::setProgress);

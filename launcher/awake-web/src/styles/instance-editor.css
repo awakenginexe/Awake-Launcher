@@ -1,0 +1,51 @@
+/* Reuse Create's surface and type scale so editing stays in the same workspace. */
+.instance-editor-window { height: min(650px, 90vh); padding: 18px 22px; }
+.instance-editor-window .create-header-titles { min-width: 0; }
+.instance-editor-window .create-header-titles h2 { overflow-wrap: anywhere; }
+.editor-instance-icon, .editor-instance-initial { width: 42px; height: 42px; object-fit: contain; flex-shrink: 0; border-radius: 8px; }
+.editor-instance-initial { display: grid; place-items: center; background: rgba(59, 130, 246, .18); color: #38bdf8; font-size: 22px; }
+.editor-workspace { display: flex; gap: 16px; flex: 1; min-height: 0; margin-top: 14px; }
+.editor-sidebar { width: 155px; }
+.editor-content { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 2px 4px 4px; gap: 12px; }
+.editor-section-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.editor-section-header h3 { margin: 0; font-size: 1rem; }
+.editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.editor-toolbar .check { font-size: .8rem; }
+.editor-live-status { margin-left: auto; font-size: .8rem; color: var(--text-secondary); }
+.editor-console { flex: 1; min-height: 100px; max-height: none; max-width: 100%; margin: 0; padding: 14px; overflow: auto; border: 1px solid rgba(96,165,250,.14); border-radius: 8px; background: rgba(4, 10, 18, .65); color: #dbeafe; font-size: 12px; line-height: 1.65; white-space: pre; tab-size: 4; }
+.editor-console.wrap-lines { white-space: pre-wrap; overflow-wrap: anywhere; }
+.editor-message { margin: 0; padding: 18px 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.editor-error { background: rgba(160, 35, 45, .15); border-radius: 8px; color: #fecaca; }
+.editor-error p { margin-top: 0; }
+.editor-feedback, .editor-hint { margin: 0; color: var(--text-secondary); font-size: .8rem; }
+.editor-filter { min-width: 0; flex: 1; width: 100px; }
+.editor-file-list { padding: 0; margin: 0; list-style: none; }
+.editor-file-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(96,165,250,.12); }
+.editor-file-copy { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.editor-file-copy strong { font-size: .84rem; font-weight: 600; }
+.editor-file-copy p { margin: 4px 0 0; font-size: .78rem; color: var(--text-secondary); }
+.editor-file-status { color: var(--text-secondary); font-size: .75rem; }
+.editor-mod-toggle input { width: 16px; height: 16px; }
+.editor-notes { width: 100%; min-height: 160px; flex: 1; resize: vertical; line-height: 1.6; }
+.editor-save { align-self: flex-end; }
+.editor-settings { display: flex; flex-direction: column; gap: 16px; }
+.editor-settings fieldset { margin: 0; padding: 12px; border: 1px solid rgba(96,165,250,.18); border-radius: 8px; }
+.editor-settings legend { padding: 0 6px; font-size: .84rem; }
+.editor-settings .check { font-size: .8rem; margin: 4px 0 12px; }
+.editor-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.editor-fields label { display: grid; gap: 6px; min-width: 0; font-size: .78rem; color: var(--text-secondary); }
+.editor-fields input { width: 100%; min-width: 0; }
+.editor-remove-confirm { padding: 12px; border: 1px solid rgba(248,113,113,.4); border-radius: 8px; font-size: .84rem; overflow-wrap: anywhere; }
+.editor-remove-confirm p { margin: 0 0 10px; }
+.editor-remove-confirm button + button { margin-left: 8px; }
+.editor-footer { flex-shrink: 0; gap: 12px; }
+.editor-footer .secondary-note { flex: 1; text-align: right; }
+.instance-editor-window :focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+@media (max-width: 680px) {
+  .instance-editor-window { padding: 12px; width: 96vw; }
+  .editor-workspace { flex-direction: column; gap: 10px; }
+  .editor-sidebar { width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden; }
+  .editor-sidebar .platform-tab { flex-shrink: 0; }
+  .editor-footer .secondary-note { font-size: .7rem; }
+  .editor-file-row { gap: 8px; }
+}

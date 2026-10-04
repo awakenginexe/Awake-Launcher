@@ -6,33 +6,33 @@ QColor color(Color token)
 {
     switch (token) {
         case Color::Background:
-            return QColor("#12161c");
+            return QColor("#060b13");
         case Color::Elevated:
-            return QColor("#1a2028");
+            return QColor("#0b1424");
         case Color::Secondary:
-            return QColor("#222b35");
+            return QColor("#111f38");
         case Color::Text:
-            return QColor("#e7ecef");
+            return QColor("#f8fafc");
         case Color::SecondaryText:
-            return QColor("#aab6c3");
+            return QColor("#94a3b8");
         case Color::DisabledText:
-            return QColor("#87929f");
+            return QColor("#64748b");
         case Color::Border:
-            return QColor("#6b7c90");
+            return QColor("#1e293b");
         case Color::Accent:
-            return QColor("#92cfb2");
+            return QColor("#3b82f6");
         case Color::AccentHover:
-            return QColor("#a5e0c3");
+            return QColor("#60a5fa");
         case Color::Success:
-            return QColor("#92cfb2");
+            return QColor("#38bdf8");
         case Color::Warning:
-            return QColor("#efc17e");
+            return QColor("#f59e0b");
         case Color::Error:
-            return QColor("#f59e9e");
+            return QColor("#ef4444");
         case Color::Selection:
-            return QColor("#29483f");
+            return QColor("#172554");
         case Color::Focus:
-            return QColor("#a5e0c3");
+            return QColor("#60a5fa");
     }
     return {};
 }

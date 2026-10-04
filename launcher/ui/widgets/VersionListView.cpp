@@ -135,24 +135,25 @@ void VersionListView::paintInfoLabel(QPaintEvent* event) const
     // calculate the rect for the overlay
     QPainter painter(viewport());
     painter.setRenderHint(QPainter::Antialiasing, true);
-    QFont font("sans", 20);
-    font.setBold(true);
+    QFont font = QApplication::font();
+    font.setPointSize(11);
+    font.setWeight(QFont::Medium);
 
     QRect bounds = viewport()->geometry();
     bounds.moveTop(0);
     auto innerBounds = bounds;
-    innerBounds.adjust(10, 10, -10, -10);
+    innerBounds.adjust(16, 16, -16, -16);
 
-    QColor background = QApplication::palette().color(QPalette::WindowText);
-    QColor foreground = QApplication::palette().color(QPalette::Base);
-    foreground.setAlpha(190);
+    QColor background(14, 25, 42, 225);
+    QColor foreground(203, 213, 225, 235);
+    QColor borderColor(96, 165, 250, 70);
     painter.setFont(font);
     auto fontMetrics = painter.fontMetrics();
     auto textRect = fontMetrics.boundingRect(innerBounds, Qt::AlignHCenter | Qt::TextWordWrap, emptyString);
     textRect.moveCenter(bounds.center());
 
     auto wrapRect = textRect;
-    wrapRect.adjust(-10, -10, 10, 10);
+    wrapRect.adjust(-16, -12, 16, 12);
 
     // check if we are allowed to draw in our area
     if (!event->rect().intersects(wrapRect)) {
@@ -160,8 +161,8 @@ void VersionListView::paintInfoLabel(QPaintEvent* event) const
     }
 
     painter.setBrush(QBrush(background));
-    painter.setPen(foreground);
-    painter.drawRoundedRect(wrapRect, 5.0, 5.0);
+    painter.setPen(QPen(borderColor, 1.0));
+    painter.drawRoundedRect(wrapRect, 8.0, 8.0);
 
     painter.setPen(foreground);
     painter.setFont(font);

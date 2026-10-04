@@ -3,6 +3,7 @@
 #include "ui/themes/DarkTheme.h"
 
 namespace Awake {
+bool useRegularUiFont();
 class Theme : public DarkTheme {
    public:
     QString id() override;

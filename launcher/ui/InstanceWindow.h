@@ -49,6 +49,7 @@
 
 class QPushButton;
 class PageContainer;
+class AwakeTitleBar;
 class InstanceWindow : public QMainWindow, public BasePageContainer {
     Q_OBJECT
 
@@ -79,6 +80,9 @@ class InstanceWindow : public QMainWindow, public BasePageContainer {
 
    protected:
     void closeEvent(QCloseEvent*) override;
+#if defined(Q_OS_WIN)
+    bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
+#endif
 
    private:
     void updateButtons();
@@ -88,6 +92,8 @@ class InstanceWindow : public QMainWindow, public BasePageContainer {
     MinecraftInstance* m_instance;
     bool m_doNotSave = false;
     bool m_restartQueued = false;
+    bool m_frameless = false;
+    AwakeTitleBar* m_titleBar = nullptr;
     PageContainer* m_container = nullptr;
     QPushButton* m_closeButton = nullptr;
     QToolButton* m_launchButton = nullptr;

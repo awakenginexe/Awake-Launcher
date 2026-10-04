@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "LibraryDelegate.h"
+#include "AwakeTheme.h"
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QFile>
