@@ -57,6 +57,7 @@
 #include "launch/LaunchTask.h"
 #include "java/JavaUtils.h"
 #include "SysInfo.h"
+#include "FileSystem.h"
 #include "java/download/ArchiveDownloadTask.h"
 #include "net/HttpMetaCache.h"
 
@@ -74,6 +75,12 @@ private slots:
     void deletingInstanceReturnsToTheEventLoopAndPublishesStatus()
     {
         auto* instances = APPLICATION->instances();
+        QTemporaryDir recycleProbe(instances->primaryDir() + "/recycle-probe-XXXXXX");
+        QVERIFY(recycleProbe.isValid());
+        QString recycledProbe;
+        if (!FS::trash(recycleProbe.path(), &recycledProbe))
+            QSKIP("Instance recycling is unavailable on this OS or volume (including Windows Server).");
+        QVERIFY(QFile(recycledProbe).rename(recycleProbe.path()));
         const QString id = "async-delete-fixture";
         const auto path = instances->primaryDir() + "/" + id;
         QVERIFY(QDir().mkpath(path));
@@ -1134,7 +1141,20 @@ int main(int argc, char** argv)
                 if (warning->text().startsWith("Your instance folder is in a temporary folder:")) warning->accept();
         });
         temporaryWarning.start();
-        QTimer::singleShot(0, &app, [&] { AwakeWebBridgeTest test; result = QTest::qExec(&test, argc, argv); app.quit(); });
+        QTimer::singleShot(0, &app, [&] {
+            AwakeWebBridgeTest test;
+            QStringList arguments;
+            for (int index = 0; index < argc; ++index) arguments.append(QString::fromLocal8Bit(argv[index]));
+            const auto reportPath = original + "/AwakeWebBridge-results.txt";
+            const bool captureReport = !arguments.contains("-o");
+            if (captureReport) arguments << "-o" << reportPath + ",txt";
+            result = QTest::qExec(&test, arguments);
+            if (captureReport && result) {
+                QFile report(reportPath);
+                if (report.open(QIODevice::ReadOnly)) qCritical().noquote() << report.readAll();
+            }
+            app.quit();
+        });
         app.exec();
     }
     QDir::setCurrent(original);
