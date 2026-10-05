@@ -2,11 +2,15 @@
 
 Awake Launcher is a desktop launcher for Minecraft: Java Edition. It keeps your Minecraft installations in separate instances and combines Awake's interface with Prism Launcher's C++ and Qt foundation.
 
-[Download a Windows development build](https://github.com/awakenginexe/Awake-Launcher/actions/workflows/awake-build.yml) · [Build from source](BUILDING.md) · [Report a bug](https://github.com/awakenginexe/Awake-Launcher/issues)
+[Download for Windows x64](https://github.com/awakenginexe/Awake-Launcher/releases/latest) · [Build from source](BUILDING.md) · [Report a bug](https://github.com/awakenginexe/Awake-Launcher/issues)
 
 ## Getting started
 
-Download the complete Windows development package, extract it to a writable folder, and run `awakelauncher.exe`. Keep the files together and back up the folder before replacing a portable build. Windows requires the Microsoft Visual C++ 2015–2022 x64 runtime.
+Download the **Setup.exe** from the latest release for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before installing an update. Your accounts and instances are kept separately and preserved when you uninstall.
+
+For a portable installation, download the **Windows x64 ZIP**, extract the entire package to a writable folder, and run `awakelauncher.exe`. Keep the files together and back up the folder before replacing a portable build. Release downloads include the Microsoft C++ runtime and SHA-256 checksums.
+
+From v0.3.0, Awake Launcher checks for stable updates daily and supports manual checks from **Application**. Downloads open in your browser. Upgrade v0.2.0 manually to receive the update checker.
 
 Add an account in **Accounts**, then choose **Create instance** to install Minecraft or a modpack. You can also import an existing instance. Awake Launcher uses its own data folder and does not move data from other launchers automatically.
 
