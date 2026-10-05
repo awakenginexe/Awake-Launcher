@@ -17,6 +17,7 @@ QString resourcePath(const QUrl& url)
     auto path = url.path(QUrl::FullyEncoded);
     // No decoding/normalization: percent-escaped separators and repeated encoding are outside the resource namespace.
     if (path.isEmpty() || path == "/") path = "/index.html";
+    if (path == "/assets/minecraft-background.png") return ":/backgrounds/awake-minecraft";
     if (path == "/index.html" || path == "/qwebchannel.js") return ":/awake-web" + path;
     static const QRegularExpression asset("^/assets/[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)+$");
     if (asset.match(path).hasMatch()) return ":/awake-web" + path;

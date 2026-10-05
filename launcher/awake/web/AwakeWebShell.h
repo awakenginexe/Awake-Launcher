@@ -41,6 +41,7 @@ private:
     QTimer* m_timeout;
     QElapsedTimer m_started;
     bool m_ready = false;
+    bool m_suspended = false;
     bool m_stopped = false;
 };
 }  // namespace Awake::Web

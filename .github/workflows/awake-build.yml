@@ -124,9 +124,9 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v0.5.1 fixes release validation on Windows Server runners. It includes the themed global and instance JVM preset menus and GPU preference menus introduced in v0.5.0. Menus support keyboard navigation, selected-item checks, and positioning inside the window.
+          Awake Launcher v0.6.0 reduces background loading work with the 1080p Minecraft wallpaper and reuses the bundled image instead of encoding and animating it again on every refresh. The renderer stays suspended when loading finishes while the launcher is minimized.
 
-          Instance deletion runs outside the UI thread with a visible deleting status and indeterminate progress bar. Running instances cannot be deleted, and deletion failures are reported. Settings tabs keep their loaded controls; GPU discovery runs in a worker and is reused instead of querying Windows again on each tab switch or preference save.
+          Required mod downloads are checked in both the configured download folder and the current system Downloads folder. New or changed files are rescanned automatically, including files that finish downloading without another directory notification.
 
           Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
 

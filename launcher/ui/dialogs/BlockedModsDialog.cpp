@@ -31,6 +31,7 @@
 #include "settings/SettingsObject.h"
 
 #include <QDebug>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDirListing>
@@ -58,6 +59,12 @@ BlockedModsDialog::BlockedModsDialog(QWidget* parent, const QString& title, cons
         new ConcurrentTask("MakeHashesTask", APPLICATION->settings()->get("NumberOfConcurrentTasks").toInt()));
     connect(m_hashingTask.get(), &Task::finished, this, &BlockedModsDialog::hashTaskFinished);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &BlockedModsDialog::directoryChanged);
+    m_rescanTimer.setInterval(2000);
+    connect(&m_rescanTimer, &QTimer::timeout, this, [this] {
+        validateMatchedMods();
+        scanPaths();
+        update();
+    });
 
     auto* heading = new QLabel(tr("Download required files"), panel());
     heading->setProperty("role", "title");
@@ -154,6 +161,7 @@ BlockedModsDialog::BlockedModsDialog(QWidget* parent, const QString& title, cons
     setAcceptDrops(true);
     QTimer::singleShot(0, this, [this] {
         setupWatch();
+        m_rescanTimer.start();
         scanPaths();
         update();
     });
@@ -196,6 +204,7 @@ void BlockedModsDialog::dropEvent(QDropEvent* e)
 
 void BlockedModsDialog::done(int r)
 {
+    m_rescanTimer.stop();
     QDialog::done(r);
     disconnect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &BlockedModsDialog::directoryChanged);
 }
@@ -260,6 +269,7 @@ void BlockedModsDialog::directoryChanged(const QString& path)
     qDebug() << "[Blocked Mods Dialog] Directory changed:" << path;
     validateMatchedMods();
     scanPath(path, true);
+    update();
 }
 
 /// @brief add the user downloads folder and the global mods folder to the filesystem watcher
@@ -269,6 +279,7 @@ void BlockedModsDialog::setupWatch()
     const QString modsFolder = APPLICATION->settings()->get("CentralModsDir").toString();
     const bool downloadsFolderWatchRecursive = APPLICATION->settings()->get("DownloadsDirWatchRecursive").toBool();
     watchPath(downloadsFolder, downloadsFolderWatchRecursive);
+    watchPath(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
     watchPath(modsFolder, true);
 }
 
@@ -319,6 +330,11 @@ void BlockedModsDialog::scanPath(const QString& path, bool startTask)
             continue;
         }
 
+        const auto info = entry.fileInfo();
+        const auto stamp = qMakePair(info.size(), info.lastModified().toMSecsSinceEpoch());
+        if (m_scannedFiles.contains(file) && m_scannedFiles.value(file) == stamp)
+            continue;
+        m_scannedFiles.insert(file, stamp);
         addHashTask(file);
     }
 
@@ -345,7 +361,10 @@ void BlockedModsDialog::buildHashTask(const QString& path)
     qDebug() << "[Blocked Mods Dialog] Creating Hash task for path:" << path;
 
     connect(hashTask.get(), &Task::succeeded, this, [this, hashTask, path] { checkMatchHash(hashTask->getResult(), path); });
-    connect(hashTask.get(), &Task::failed, this, [path] { qDebug() << "Failed to hash path:" << path; });
+    connect(hashTask.get(), &Task::failed, this, [this, path] {
+        m_scannedFiles.remove(path);
+        qDebug() << "Failed to hash path:" << path;
+    });
 
     m_hashingTask->addTask(hashTask);
 }
@@ -375,8 +394,6 @@ void BlockedModsDialog::checkMatchHash(const QString& hash, const QString& path)
             match = true;
 
             qDebug() << "[Blocked Mods Dialog] Hash match found:" << mod.name << hash << "| From path:" << path;
-
-            break;
         }
     }
 
@@ -426,6 +443,8 @@ bool BlockedModsDialog::checkValidPath(const QString& path)
     auto downloadDir = QFileInfo(APPLICATION->settings()->get("DownloadsDir").toString()).absoluteFilePath();
     auto moveFiles = APPLICATION->settings()->get("MoveModsFromDownloadsDir").toBool();
     for (auto& mod : m_mods) {
+        if (mod.matched)
+            continue;
         if (compare(filename, mod.name)) {
             // if the mod is not yet matched and doesn't have a hash then
             // just match it with the file that has the exact same name
@@ -457,6 +476,7 @@ void BlockedModsDialog::validateMatchedMods()
         if (mod.matched) {
             QFileInfo file = QFileInfo(mod.localPath);
             if (!file.exists() || !file.isFile()) {
+                m_scannedFiles.remove(mod.localPath);
                 qDebug() << "[Blocked Mods Dialog] File" << mod.localPath << "for mod" << mod.name
                          << "has vanshed! marking as not matched.";
                 mod.localPath = "";

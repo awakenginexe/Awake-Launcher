@@ -28,6 +28,7 @@
 #include "minecraft/MinecraftInstance.h"
 #include "awake/web/AwakeWebAssets.h"
 #include "awake/web/AwakeWebBridge.h"
+#include "awake/web/AwakeWebShell.h"
 #include "settings/SettingsObject.h"
 #include "translations/TranslationsModel.h"
 #include "ui/MainWindow.h"
@@ -68,6 +69,27 @@ class AwakeWebShellTest : public QObject {
         QTRY_COMPARE(evaluate("document.querySelectorAll('.instance-select').length").toInt(), 2);
         QCOMPARE(view->url(), QUrl("awake://ui/"));
     }
+    void startupKeepsSuspendedRendererFrozen()
+    {
+        QWidget host;
+        auto* shell = new Awake::Web::Shell(&host);
+        auto* native = new Awake::Web::Bridge(shell->assets(), [](const QString&) { return true; },
+            [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; }, shell);
+        host.show();
+        shell->show();
+        shell->start(native);
+        shell->setSuspended(true);
+        QTRY_VERIFY_WITH_TIMEOUT(shell->isReady(), 20000);
+        auto* renderer = shell->findChild<QWebEngineView*>();
+        QVERIFY(renderer);
+        QTRY_COMPARE(renderer->page()->lifecycleState(), QWebEnginePage::LifecycleState::Frozen);
+        QVERIFY(!renderer->page()->isVisible());
+        shell->setSuspended(false);
+        QTRY_COMPARE(renderer->page()->lifecycleState(), QWebEnginePage::LifecycleState::Active);
+        host.close();
+        window->activateWindow();
+        bridge->setArtworkFocused(true);
+    }
     void browserSelectionAndPersistentPreference()
     {
         evaluate("document.querySelectorAll('.instance-select')[0].click()");
@@ -80,6 +102,19 @@ class AwakeWebShellTest : public QObject {
         QTRY_VERIFY(APPLICATION->settings()->get("AwakeReduceMotion").toBool());
         QTRY_VERIFY(evaluate("document.querySelector('.launcher').classList.contains('reduced-motion')").toBool());
         QCOMPARE(APPLICATION->instances()->count(), 2);
+    }
+    void bundledBackgroundLoadsWithoutReplacingImageOnRefresh()
+    {
+        bridge->setArtworkFocused(true);
+        evaluate("document.querySelectorAll('.instance-select')[1].click()");
+        QTRY_VERIFY_WITH_TIMEOUT(evaluate("(() => { const image = document.querySelector('.artwork-image'); return image && image.complete && image.naturalWidth === 1920 && image.src === 'awake://ui/assets/minecraft-background.png'; })()").toBool(), 5000);
+        evaluate("window.__backgroundBeforeRefresh = document.querySelector('.artwork-image')");
+        auto* timer = bridge->findChild<QTimer*>("awakeArtworkTimer");
+        QVERIFY(timer);
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QTest::qWait(500);
+        QVERIFY(evaluate("window.__backgroundBeforeRefresh === document.querySelector('.artwork-image')").toBool());
+        evaluate("document.querySelectorAll('.instance-select')[0].click()");
     }
     void updateCheckThroughNativeBridge()
     {

@@ -50,6 +50,8 @@ void Assets::requestStarted(QWebEngineUrlRequestJob* request)
         mime = QMimeDatabase().mimeTypeForFile(resource, QMimeDatabase::MatchExtension).name().toUtf8();
         if (resource.endsWith(".js"))
             mime = "text/javascript";
+        if (resource == ":/backgrounds/awake-minecraft")
+            mime = "image/png";
     } else {
         const auto found = m_images.constFind(url.path());
         if (found == m_images.cend()) {

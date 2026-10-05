@@ -8,7 +8,7 @@
         <file alias="K2D-Bold.ttf">../../awake-web/src/assets/fonts/K2D-Bold.ttf</file>
     </qresource>
     <qresource prefix="/backgrounds">
-        <file alias="awake-minecraft">../../../program_info/wallpaper_minecraft_pc_bundle_2560x1440.png</file>
+        <file alias="awake-minecraft">../../../program_info/wallpaper_minecraft_pc_bundle_1920x1080.png</file>
         <file alias="kitteh">kitteh.png</file>
         <file alias="kitteh-xmas">kitteh-xmas.png</file>
         <file alias="kitteh-bday">kitteh-bday.png</file>

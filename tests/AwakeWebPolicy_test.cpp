@@ -11,6 +11,7 @@ private slots:
         QCOMPARE(resourcePath(QUrl("awake://ui/")), QString(":/awake-web/index.html"));
         QCOMPARE(resourcePath(QUrl("awake://ui/assets/app-123.js")), QString(":/awake-web/assets/app-123.js"));
         QCOMPARE(resourcePath(QUrl("awake://ui/qwebchannel.js")), QString(":/awake-web/qwebchannel.js"));
+        QCOMPARE(resourcePath(QUrl("awake://ui/assets/minecraft-background.png")), QString(":/backgrounds/awake-minecraft"));
         for (const auto& bad : {"file:///C:/secret.txt", "https://ui/assets/app.js", "awake://other/index.html",
                                "awake://user:pass@ui/index.html", "awake://ui:42/index.html", "awake://ui/../secret",
                                "awake://ui/assets/%2e%2e/secret", "awake://ui/assets/%252e%252e/secret", "awake://ui/assets/a%2fb.js",

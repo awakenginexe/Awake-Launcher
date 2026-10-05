@@ -129,6 +129,8 @@ void Shell::start(Bridge* bridge)
         qInfo() << "Awake frontend ready" << m_started.elapsed() << "ms";
         m_loading->hide();
         m_view->show();
+        setSuspended(m_suspended);
+        updateArtworkFocus();
     });
     m_started.start();
     m_timeout->start(20000);
@@ -183,12 +185,13 @@ bool Shell::eventFilter(QObject* watched, QEvent* event)
 void Shell::updateArtworkFocus()
 {
     if (!m_bridge) return;
-    m_bridge->setArtworkFocused(isVisible() && !window()->isMinimized() && window()->isActiveWindow() && qApp->applicationState() == Qt::ApplicationActive);
+    m_bridge->setArtworkFocused(!m_suspended && isVisible() && !window()->isMinimized() && window()->isActiveWindow() && qApp->applicationState() == Qt::ApplicationActive);
 }
 
 void Shell::setSuspended(bool suspended)
 {
     if (m_stopped) return;
+    m_suspended = suspended;
     if (m_bridge) m_bridge->setActive(!suspended);
     m_view->page()->setVisible(!suspended && m_ready);
     if (!suspended || m_ready)

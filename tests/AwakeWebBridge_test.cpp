@@ -51,6 +51,8 @@
 #include "minecraft/Component.h"
 #include "ui/widgets/JavaSettingsWidget.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include <QStandardPaths>
+#include <QTemporaryFile>
 #include "ui/dialogs/AwakePopupDialog.h"
 #include "java/RuntimeSelection.h"
 #include "minecraft/launch/AutoInstallJava.h"
@@ -671,6 +673,44 @@ private slots:
         QVERIFY(!QFileInfo(QDir(stage.path()).filePath("bin/javaw.exe")).exists());
         QVERIFY(!QFileInfo(QDir(stage.path()).filePath(".awake-java-download")).exists());
     }
+    void blockedModsAlsoWatchSystemDownloads()
+    {
+        QTemporaryDir configured;
+        QTemporaryFile download(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation) + "/awake-download-test-XXXXXX.jar");
+        QVERIFY(download.open());
+        download.write("verified-file");
+        download.flush();
+        const auto previous = APPLICATION->settings()->get("DownloadsDir");
+        APPLICATION->settings()->set("DownloadsDir", configured.path());
+        QList<BlockedMod> mods{{QFileInfo(download.fileName()).fileName(), {},
+            QString::fromLatin1(QCryptographicHash::hash("verified-file", QCryptographicHash::Sha1).toHex()), false, {}, "mods"}};
+        BlockedModsDialog popup(nullptr, {}, {}, mods);
+        popup.show();
+        QTRY_VERIFY_WITH_TIMEOUT(mods.first().matched, 5000);
+        APPLICATION->settings()->set("DownloadsDir", previous);
+    }
+    void blockedModsRetryFileThatFinishesWriting()
+    {
+        QTemporaryDir downloads;
+        const auto previous = APPLICATION->settings()->get("DownloadsDir");
+        APPLICATION->settings()->set("DownloadsDir", downloads.path());
+        QFile file(downloads.path() + "/required.jar");
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("partial");
+        file.close();
+        QList<BlockedMod> mods{{"required.jar", {},
+            QString::fromLatin1(QCryptographicHash::hash("verified-file", QCryptographicHash::Sha1).toHex()), false, {}, "mods"}};
+        BlockedModsDialog popup(nullptr, {}, {}, mods);
+        popup.show();
+        QTest::qWait(500);
+        QVERIFY(!mods.first().matched);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("verified-file");
+        file.close();
+        QTRY_VERIFY_WITH_TIMEOUT(mods.first().matched, 5000);
+        QTRY_COMPARE(popup.result(), static_cast<int>(QDialog::Accepted));
+        APPLICATION->settings()->set("DownloadsDir", previous);
+    }
     void nativePopupsShowActionsAndKeepHashMatching()
     {
         auto* window = APPLICATION->showMainWindow(false);
@@ -860,8 +900,13 @@ private slots:
         artwork.clear();
         QTRY_VERIFY_WITH_TIMEOUT(!artwork.isEmpty(), 5000);
         for (const auto& event : artwork) QCOMPARE(event.at(0).toString(), QString("two"));
-        QVERIFY(artwork.last().at(1).toString().startsWith("awake://ui/images/"));
+        QCOMPARE(artwork.last().at(1).toString(), QString("awake://ui/assets/minecraft-background.png"));
         QVERIFY(artwork.last().at(2).toString().isEmpty());
+        auto* timer = bridge->findChild<QTimer*>("awakeArtworkTimer");
+        const auto events = artwork.size();
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QTest::qWait(500);
+        QCOMPARE(artwork.size(), events);
         QVERIFY(bridge->selectInstance("one").value("ok").toBool());
         QCoreApplication::processEvents();
         bridge.reset();

@@ -51,7 +51,8 @@ Artwork loadRandomScreenshot(const QString& gameRoot, const QString& previousFil
 
 QImage fallbackArtwork()
 {
-    return QImage(":/backgrounds/awake-minecraft");
+    static const QImage image(":/backgrounds/awake-minecraft");
+    return image;
 }
 
 Artwork loadArtwork(const QString& gameRoot, const QString& previousFile, const std::shared_ptr<std::atomic_bool>& canceled)

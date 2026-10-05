@@ -38,7 +38,7 @@
 namespace Awake::Web {
 namespace {
 QVariantMap success() { return {{"ok", true}}; }
-struct ArtworkResult { QByteArray png; QString path; QString error; };
+struct ArtworkResult { QByteArray png; QString path; QString error; bool fallback = false; };
 QString componentVersion(const ComponentPtr& component)
 {
     if (!component) return {};
@@ -698,11 +698,12 @@ void Bridge::loadArtwork(const QString& id)
         const auto result = watcher->result();
         watcher->deleteLater();
         if (!m_active || !m_assets || generation != m_artworkGeneration || id != m_artworkId || !APPLICATION->instances()->getInstanceById(id)) return;
-        if (result.png.isEmpty()) return;
+        if (result.png.isEmpty() && !result.fallback) return;
         const auto previousUrl = m_artworkUrl;
         m_artworkPath = result.path;
-        m_artworkUrl = m_assets->putImage(result.png);
-        if (!previousUrl.isEmpty()) m_assets->removeImage(previousUrl);
+        m_artworkUrl = result.fallback ? QStringLiteral("awake://ui/assets/minecraft-background.png") : m_assets->putImage(result.png);
+        if (m_artworkUrl == previousUrl) return;
+        if (previousUrl.startsWith("awake://ui/images/")) m_assets->removeImage(previousUrl);
         emit artworkChanged(id, m_artworkUrl, result.error);
     });
     watcher->setFuture(QtConcurrent::run([gameRoot, canceled, previousPath] {
@@ -713,7 +714,9 @@ void Bridge::loadArtwork(const QString& id)
             result.error = QObject::tr("The bundled artwork fallback could not be loaded.");
             return result;
         }
-        result.path = artwork.path.startsWith(":/") ? QString() : artwork.path;
+        result.fallback = artwork.path.startsWith(":/");
+        if (result.fallback) return result;
+        result.path = artwork.path;
         QBuffer buffer(&result.png);
         buffer.open(QIODevice::WriteOnly);
         if (!artwork.image.save(&buffer, "PNG")) result.error = QObject::tr("The screenshot could not be prepared for display.");

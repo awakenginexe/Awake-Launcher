@@ -30,6 +30,8 @@
 #include <QString>
 
 #include <QFileSystemWatcher>
+#include <QHash>
+#include <QTimer>
 
 #include "tasks/ConcurrentTask.h"
 
@@ -70,6 +72,8 @@ class BlockedModsDialog : public AwakePopupDialog {
     QPushButton* m_openMissing;
     QList<BlockedMod>& m_mods;
     QFileSystemWatcher m_watcher;
+    QTimer m_rescanTimer;
+    QHash<QString, QPair<qint64, qint64>> m_scannedFiles;
     shared_qobject_ptr<ConcurrentTask> m_hashingTask;
     QSet<QString> m_pendingHashPaths;
     bool m_rehashPending = false;

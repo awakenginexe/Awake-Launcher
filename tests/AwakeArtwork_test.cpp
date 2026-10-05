@@ -21,6 +21,7 @@ class AwakeArtworkTest : public QObject {
         const auto missing = Awake::loadArtwork(root.path());
         QVERIFY(missing.path.startsWith(":/backgrounds/"));
         QVERIFY(!missing.image.isNull());
+        QCOMPARE(missing.image.size(), QSize(1920, 1080));
         QDir().mkpath(root.path() + "/screenshots");
         QFile corrupt(root.path() + "/screenshots/broken.png");
         QVERIFY(corrupt.open(QIODevice::WriteOnly));
