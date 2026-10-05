@@ -170,6 +170,8 @@ set(LAUNCH_SOURCES
 # Old update system
 set(UPDATE_SOURCES
     updater/ExternalUpdater.h
+    updater/AwakeUpdateChecker.h
+    updater/AwakeUpdateChecker.cpp
 )
 
 set(MAC_UPDATE_SOURCES

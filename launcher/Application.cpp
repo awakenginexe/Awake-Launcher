@@ -114,6 +114,8 @@
 #include "net/HttpMetaCache.h"
 
 #include "updater/ExternalUpdater.h"
+#include "updater/AwakeUpdateChecker.h"
+#include <QPushButton>
 
 #include "tools/JProfiler.h"
 #include "tools/JVisualVM.h"
@@ -1334,11 +1336,18 @@ bool Application::createSetupWizard()
 
 bool Application::updaterEnabled()
 {
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_WIN)
+    return true;
+#elif defined(Q_OS_MAC)
     return BuildConfig.UPDATER_ENABLED;
 #else
     return BuildConfig.UPDATER_ENABLED && QFileInfo(FS::PathCombine(m_rootPath, updaterBinaryName())).isFile();
 #endif
+}
+
+Awake::UpdateChecker* Application::awakeUpdateChecker() const
+{
+    return qobject_cast<Awake::UpdateChecker*>(m_updater.get());
 }
 
 QString Application::updaterBinaryName()
@@ -1431,6 +1440,33 @@ void Application::performMainStartupAction()
 #if defined(SPARKLE_ENABLED)
         m_updater.reset(new MacSparkleUpdater());
 #endif
+#elif defined(Q_OS_WIN)
+        auto* checker = new Awake::UpdateChecker(network(), BuildConfig.versionString(), m_dataPath,
+                                                isPortable());
+        m_updater.reset(checker);
+        connect(checker, &Awake::UpdateChecker::stateChanged, this, &Application::awakeUpdateStateChanged);
+        connect(checker, &Awake::UpdateChecker::stateChanged, this, [this, checker, lastPresentation = 0]() mutable {
+            if (m_mainWindow && m_mainWindow->webFrontendActive()) return;
+            const auto state = checker->state();
+            if (!m_mainWindow || state.value("status") == "checking" || state.value("presentation").toInt() <= lastPresentation) return;
+            lastPresentation = state.value("presentation").toInt();
+            const bool available = state.value("status") == "available";
+            QMessageBox dialog(QMessageBox::Information, tr("Awake Launcher updates"),
+                               available ? tr("Awake Launcher %1 is available.").arg(state.value("latestVersion").toString())
+                                         : state.value("status") == "error" ? state.value("error").toString()
+                                                                           : tr("You are running the latest stable version."),
+                               QMessageBox::Close, m_mainWindow);
+            QAbstractButton* download = nullptr;
+            if (available) {
+                download = dialog.addButton(tr("Download update"), QMessageBox::ActionRole);
+                checker->acknowledgeNotification();
+            }
+            dialog.exec();
+            if (download && dialog.clickedButton() == download) {
+                const auto key = state.value("portable").toBool() ? QString("portable") : QString("setup");
+                checker->openDownload(state.value(key + "Url").toString().isEmpty() ? "release" : key);
+            }
+        });
 #else
         m_updater.reset(new PrismExternalUpdater(m_mainWindow, m_rootPath, m_dataPath));
 #endif

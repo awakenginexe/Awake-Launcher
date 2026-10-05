@@ -88,11 +88,30 @@ export interface Snapshot {
   instances: Instance[]; selectedId: string; locale: Locale; reducedMotion: boolean; compact: boolean;
   sortMode: SortMode; accountName: string; modalActive: boolean; totalMemoryMb: number;
   accounts: AccountItem[]; launcherSettings: LauncherSettings;
+  updates: UpdateState;
+}
+export interface UpdateState {
+  status: 'unavailable' | 'idle' | 'checking' | 'available' | 'upToDate' | 'error';
+  currentVersion: string; latestVersion: string; notes: string; error: string;
+  automatic: boolean; portable: boolean; presentation: number;
+  hasSetup: boolean; hasPortable: boolean; hasRelease: boolean;
+}
+function parseUpdates(value: unknown): UpdateState {
+  const data = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const statuses = ['idle', 'checking', 'available', 'upToDate', 'error'];
+  return {
+    status: statuses.includes(String(data.status)) ? data.status as UpdateState['status'] : 'unavailable',
+    currentVersion: String(data.currentVersion || ''), latestVersion: String(data.latestVersion || ''),
+    notes: String(data.notes || ''), error: String(data.error || ''), automatic: data.automatic === true,
+    portable: data.portable === true, presentation: typeof data.presentation === 'number' && Number.isSafeInteger(data.presentation) && data.presentation > 0 ? data.presentation : 0,
+    hasSetup: Boolean(data.setupUrl), hasPortable: Boolean(data.portableUrl), hasRelease: Boolean(data.releaseUrl),
+  };
 }
 export function emptySnapshot(): Snapshot {
   return {
     instances: [], selectedId: '', locale: 'en', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '', modalActive: false,
     accounts: [], totalMemoryMb: 0,
+    updates: parseUpdates(null),
     launcherSettings: {
       language: '', minMem: 1024, maxMem: 4096, javaPath: '', gameWidth: 854, gameHeight: 480, maximizeGame: false, closeOnLaunch: false
     }
@@ -160,6 +179,7 @@ export function parseSnapshot(value: unknown): Snapshot {
     modalActive: Boolean(data.modalActive),
     accounts,
     launcherSettings,
+    updates: parseUpdates(data.updates),
   };
 }
 export function acceptSnapshot(current: Snapshot, response: Snapshot, revision: number, requestedRevision: number): Snapshot {

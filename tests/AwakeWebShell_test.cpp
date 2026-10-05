@@ -19,6 +19,8 @@
 #include <QWebEngineView>
 #include <memory>
 #include "Application.h"
+#include "BuildConfig.h"
+#include "updater/AwakeUpdateChecker.h"
 #include "HardwareInfo.h"
 #include "LaunchController.h"
 #include "minecraft/auth/AccountList.h"
@@ -79,6 +81,21 @@ class AwakeWebShellTest : public QObject {
         QTRY_VERIFY(evaluate("document.querySelector('.launcher').classList.contains('reduced-motion')").toBool());
         QCOMPARE(APPLICATION->instances()->count(), 2);
     }
+    void updateCheckThroughNativeBridge()
+    {
+        auto* checker = APPLICATION->awakeUpdateChecker();
+        QVERIFY(checker);
+        QVERIFY(window->webFrontendActive());
+        checker->setAutomaticallyChecksForUpdates(false);
+        const auto response = bridge->invokeAction("checkForUpdates", "");
+        QVERIFY(response.value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(checker->state().value("status").toString(), "error", 5000);
+        QTRY_VERIFY(evaluate("document.querySelector('.update-dialog') !== null").toBool());
+        QCOMPARE(evaluate("document.querySelector('.update-versions dd').textContent.trim()").toString(), checker->state().value("currentVersion").toString());
+        QTRY_VERIFY(evaluate("document.querySelector('.library-panel')?.inert || document.querySelector('.instance-select').closest('[inert]') !== null").toBool());
+        evaluate("document.querySelector('.update-dialog .modal-close-btn').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.update-dialog') === null").toBool());
+    }
     void nativeSearchShortcut()
     {
         view->setFocus();
@@ -106,7 +123,7 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(title);
         QCOMPARE(title->font().pixelSize(), 28);
         QCOMPARE(QFontInfo(title->font()).family(), QString("Bayon"));
-        QCOMPARE(title->text(), QString("AWAKE LAUNCHER 0.2.0"));
+        QCOMPARE(title->text(), QString("AWAKE LAUNCHER %1").arg(BuildConfig.versionString()));
         QVERIFY(!APPLICATION->logo().isNull());
         evaluate("document.querySelector('.account-actions .settings-button').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());

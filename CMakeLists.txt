@@ -29,6 +29,7 @@ endif()
 set(CMAKE_JAVA_TARGET_OUTPUT_DIR ${PROJECT_BINARY_DIR}/jars)
 
 ######## Set compiler flags ########
+option(ENABLE_LTO "Enable Link Time Optimization" off)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_C_STANDARD_REQUIRED true)
 set(CMAKE_CXX_STANDARD 23)
@@ -52,15 +53,17 @@ if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     )
 
     add_link_options(
-        # /LTCG allows for linking wholy optimizated programs
         # /MANIFEST:NO disables generating a manifest file, we instead provide our own
         # /STACK sets the stack reserve size, ATL's pack list needs 3-4 MiB as of November 2022, provide 8 MiB
-        "$<$<COMPILE_LANGUAGE:C,CXX>:/LTCG;/MANIFEST:NO;/STACK:8388608>"
+        "$<$<COMPILE_LANGUAGE:C,CXX>:/MANIFEST:NO;/STACK:8388608>"
     )
+    if(ENABLE_LTO)
+        add_link_options("$<$<COMPILE_LANGUAGE:C,CXX>:/LTCG>")
+    endif()
 
     # /GL enables whole program optimizations
     # NOTE: With Clang, this is implemented as regular LTO and only used during linking
-    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if(ENABLE_LTO AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         add_compile_options("$<$<AND:$<CONFIG:Release,RelWithDebInfo>,$<COMPILE_LANGUAGE:C,CXX>>:/GL>")
     endif()
 
@@ -142,7 +145,6 @@ if (DEBUG_ADDRESS_SANITIZER)
 endif()
 
 
-option(ENABLE_LTO "Enable Link Time Optimization" off)
 
 if(ENABLE_LTO)
     include(CheckIPOSupported)
@@ -189,7 +191,7 @@ set(Launcher_LEGACY_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" 
 
 ######## Set version numbers ########
 set(Launcher_VERSION_MAJOR 0)
-set(Launcher_VERSION_MINOR 2)
+set(Launcher_VERSION_MINOR 3)
 set(Launcher_VERSION_PATCH 0)
 
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")

@@ -311,6 +311,7 @@ void LauncherPage::loadSettings()
     if (APPLICATION->updater()) {
         ui->autoUpdateCheckBox->setChecked(APPLICATION->updater()->getAutomaticallyChecksForUpdates());
         ui->updateIntervalSpinBox->setValue(APPLICATION->updater()->getUpdateCheckInterval() / 3600);
+        ui->updateIntervalSpinBox->setEnabled(!APPLICATION->awakeUpdateChecker());
     }
 
     ui->preferMenuBarCheckBox->setChecked(s->get("MenuBarInsteadOfToolBar").toBool());

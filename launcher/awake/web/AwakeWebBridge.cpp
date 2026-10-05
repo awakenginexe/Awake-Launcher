@@ -5,6 +5,7 @@
 #include "AwakePackCatalog.h"
 #include "AwakeInstanceEditor.h"
 #include "Application.h"
+#include "updater/AwakeUpdateChecker.h"
 #include "HardwareInfo.h"
 #include "awake/GpuSelection.h"
 #include <QDesktopServices>
@@ -86,6 +87,7 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent)
         scheduleState();
     });
     observeInstances();
+    connect(APPLICATION, &Application::awakeUpdateStateChanged, this, [this] { scheduleState(); });
 }
 
 Bridge::~Bridge() { if (m_canceled) m_canceled->store(true); }
@@ -212,6 +214,7 @@ QVariantMap Bridge::snapshot()
             {"totalMemoryMb", QVariant::fromValue(HardwareInfo::installedRamMiB())},
             {"accounts", accountList},
             {"launcherSettings", settingsMap},
+            {"updates", APPLICATION->awakeUpdateChecker() ? APPLICATION->awakeUpdateChecker()->state() : QVariantMap{}},
             {"modalActive", m_modalActive}};
 }
 
@@ -219,6 +222,28 @@ QVariantMap Bridge::gpuSettings()
 {
     if (!m_active) return fail("gpuSettings", tr("The launcher is not active."));
     return Awake::Gpu::settings();
+}
+
+QVariantMap Bridge::openUpdateDownload(const QString& kind)
+{
+    auto* checker = APPLICATION->awakeUpdateChecker();
+    if (!m_active || !checker || !checker->openDownload(kind)) return fail("openUpdateDownload", tr("Unable to open this release download."));
+    return success();
+}
+
+QVariantMap Bridge::setAutomaticUpdates(bool enabled)
+{
+    auto* checker = APPLICATION->awakeUpdateChecker();
+    if (!m_active || !checker) return fail("setAutomaticUpdates", tr("Update checking is unavailable."));
+    checker->setAutomaticallyChecksForUpdates(enabled);
+    return success();
+}
+
+QVariantMap Bridge::acknowledgeUpdateNotification()
+{
+    if (!m_active || !APPLICATION->awakeUpdateChecker()) return fail("acknowledgeUpdateNotification", tr("Update checking is unavailable."));
+    APPLICATION->awakeUpdateChecker()->acknowledgeNotification();
+    return success();
 }
 
 QVariantMap Bridge::setGpuPreference(const QString& mode)

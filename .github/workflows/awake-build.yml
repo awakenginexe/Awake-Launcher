@@ -80,25 +80,32 @@ jobs:
           ctest --preset windows_msvc --build-config Release
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm --prefix launcher/awake-web test
-      - name: Package portable build
+      - name: Package Windows x64 builds
         run: |
           $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
           cmake --install build --config Release --prefix install
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          cmake --install build --config Release --prefix install --component portable
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $crt = Join-Path $env:VCToolsRedistDir 'x64/Microsoft.VC143.CRT'
           if (!(Test-Path $crt)) { throw 'Microsoft C++ runtime files were not found.' }
           Copy-Item "$crt/*.dll" install/
           foreach ($required in @(
             'awakelauncher.exe', 'QtWebEngineProcess.exe', 'Qt6WebEngineCore.dll',
-            'portable.txt', 'resources/icudtl.dat', 'resources/qtwebengine_resources.pak',
+            'resources/icudtl.dat', 'resources/qtwebengine_resources.pak',
             'translations/qtwebengine_locales/en-US.pak', 'translations/qtwebengine_locales/th.pak',
             'translations/qtwebengine_locales/zh-CN.pak', 'translations/qtwebengine_locales/zh-TW.pak'
           )) {
             if (!(Test-Path "install/$required")) { throw "Package is missing $required" }
           }
           New-Item -ItemType Directory -Path dist | Out-Null
+          $nsis = Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'
+          if (!(Test-Path $nsis)) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          ./scripts/package-windows-setup.ps1 -PackageDir install -Version $env:GITHUB_REF_NAME.Substring(1) -OutputDir dist -MakeNsis $nsis
+          ./scripts/test-windows-setup.ps1 -Installer "dist/Awake-Launcher-$env:GITHUB_REF_NAME-Windows-x64-Setup.exe" -PackageDir install -TestDir "$env:RUNNER_TEMP/Awake-Launcher-setup-test"
+          cmake --install build --config Release --prefix install --component portable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $archive = "dist/Awake-Launcher-$env:GITHUB_REF_NAME-Windows-x64.zip"
           Compress-Archive -Path install/* -DestinationPath $archive -CompressionLevel Optimal
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -106,7 +113,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Awake-Launcher-${{ github.ref_name }}-Windows-x64
-          path: dist/*
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.sha256
           if-no-files-found: error
       - name: Publish GitHub release
         env:
@@ -114,13 +124,17 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Windows x64 portable release.
+          Awake Launcher v0.3.0 adds automatic daily update checks and a K2D update dialog that matches the launcher's glass styling. Manual checks show checking, current-version, available-update, and retry states. Only stable Awake Launcher releases are offered.
+
+          Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
 
           Download the Windows ZIP, extract the entire folder, then run `awakelauncher.exe`.
           Keep all extracted files together. Portable builds store accounts and instances beside the app.
 
-          The `.sha256` file contains the ZIP's SHA-256 checksum. This release is unsigned.
+          Update downloads open in your browser. Setup and portable downloads are selected to match your installation. Existing v0.2.0 builds need to be upgraded manually to receive the update checker.
+
+          Each download has a `.sha256` checksum. This release is unsigned.
           '@ | Set-Content $notes -Encoding utf8
-          $assets = @(Get-ChildItem dist -File | Select-Object -ExpandProperty FullName)
+          $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

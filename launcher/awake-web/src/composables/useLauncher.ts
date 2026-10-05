@@ -194,6 +194,11 @@ export function useLauncher() {
     select: (mode: string) => javaCall('setGpuPreference', [mode]),
     openWindows: () => javaCall('openGpuSettings', []),
   };
+  const updateService = {
+    acknowledge: () => javaCall('acknowledgeUpdateNotification', []),
+    openDownload: (kind: 'setup' | 'portable' | 'release') => run('openUpdateDownload', [kind]),
+    setAutomatic: (enabled: boolean) => run('setAutomaticUpdates', [enabled]),
+  };
   onScopeDispose(() => {
     connectionRevision++;
     catalog?.dispose();
@@ -202,5 +207,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, gpuService };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, gpuService, updateService };
 }

@@ -30,7 +30,7 @@ CMake variable `Launcher_MSA_CLIENT_ID` defaults to Awake Launcher's public Micr
 
 Settings > Services > API Keys supports local Microsoft application ID and CurseForge key overrides. Treat configuration and account files as sensitive; do not add them to Git. The launcher never requests Microsoft passwords itself. Awake Launcher's OAuth, Xbox Live, and XSTS stages have been verified, but Minecraft Services currently rejects its application with HTTP 403; end-to-end sign-in remains blocked, and application approval/allowlisting may be required.
 
-Updaters, including macOS Sparkle, are disabled by default. Enable them only with Awake Launcher's own artifacts, repository/feed and signing configuration. Never point Awake Launcher updates to Prism binaries. Public Prism metadata and legacy Forge library endpoints remain compatibility dependencies.
+Windows builds check Awake Launcher's own stable GitHub releases asynchronously, at most once a day automatically. Users can disable automatic checks in the update dialog or check manually from Application. Downloads open in the default browser; the launcher does not install updates silently. Settings are stored in `awake_update.cfg` in the launcher data directory. The native checker validates repository-specific release and asset URLs and compares numeric versions. macOS Sparkle and the legacy external updater remain disabled by default. Public Prism metadata and legacy Forge library endpoints remain compatibility dependencies.
 
 ## User data and packaging
 
@@ -38,4 +38,6 @@ Awake Launcher has a separate application identity and `awakelauncher.cfg`. It d
 
 Packages must include runtime dependencies, launcher JARs, required licenses and corresponding source availability. Windows release packages are unsigned.
 
-The GitHub workflow runs only when a stable version tag such as `v0.1.0` is pushed. The tag must match the version in `CMakeLists.txt`. It builds and tests Windows x64, bundles the Microsoft C++ runtime, and publishes a portable ZIP and SHA-256 checksum to GitHub Releases. Branch pushes and pull requests do not start builds. Publishing uses GitHub's automatic `GITHUB_TOKEN`; no personal access token or Microsoft client secret is required.
+`scripts/test-windows-setup.ps1` verifies clean installation, installed file hashes, in-place upgrade, and uninstall with a preserved user file. Run it only on a Windows account without an existing Awake Launcher registration or shortcut; the release workflow uses its disposable runner.
+
+The GitHub workflow runs only when a stable version tag such as `v0.3.0` is pushed. The tag must match the version in `CMakeLists.txt`. It builds and tests Windows x64, bundles the Microsoft C++ runtime, and publishes a per-user NSIS setup installer and portable ZIP, each with a SHA-256 checksum. Setup includes Chromium resources and installs in `%LOCALAPPDATA%\Programs\AwakeLauncher`; it excludes `portable.txt` so launcher data stays separate. Uninstall removes only shipped files and preserves launcher data. `scripts/package-windows-setup.ps1` builds setup from a clean nonportable CMake installation using NSIS. Branch pushes and pull requests do not start builds. Publishing uses GitHub's automatic `GITHUB_TOKEN`; no personal access token or Microsoft client secret is required.

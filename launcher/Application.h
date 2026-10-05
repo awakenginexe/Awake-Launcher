@@ -66,6 +66,7 @@ class IconList;
 class QNetworkAccessManager;
 class JavaInstallList;
 class ExternalUpdater;
+namespace Awake { class UpdateChecker; }
 class BaseProfilerFactory;
 class BaseDetachedToolFactory;
 class TranslationsModel;
@@ -195,11 +196,13 @@ class Application : public QApplication {
     void ShowGlobalSettings(class QWidget* parent, QString openPage = QString());
 
     bool updaterEnabled();
+    Awake::UpdateChecker* awakeUpdateChecker() const;
     static QString updaterBinaryName();
 
     static QUrl normalizeImportUrl(const QString& url);
 
    signals:
+    void awakeUpdateStateChanged();
     void updateAllowedChanged(bool status);
     void globalSettingsAboutToOpen();
     void globalSettingsApplied();

@@ -1,4 +1,8 @@
 project(tests)
+
+ecm_add_test(AwakeUpdateChecker_test.cpp ../launcher/updater/AwakeUpdateChecker.cpp LINK_LIBRARIES Qt6::Core Qt6::Gui Qt6::Network Qt6::Test TEST_NAME AwakeUpdateChecker)
+target_sources(AwakeUpdateChecker PRIVATE ../launcher/updater/ExternalUpdater.h)
+target_include_directories(AwakeUpdateChecker PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
 ecm_add_test(AwakeArtwork_test.cpp LINK_LIBRARIES Qt6::Core Qt6::Gui Qt6::Test TEST_NAME AwakeArtwork)
 target_include_directories(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
 target_sources(AwakeArtwork PRIVATE ${CMAKE_SOURCE_DIR}/launcher/awake/InstanceArtwork.cpp ${CMAKE_SOURCE_DIR}/launcher/resources/backgrounds/backgrounds.qrc)

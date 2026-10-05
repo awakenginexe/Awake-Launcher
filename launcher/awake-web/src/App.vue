@@ -9,8 +9,9 @@ import SettingsModal from './components/SettingsModal.vue';
 import CreateInstanceModal from './components/CreateInstanceModal.vue';
 import InstanceEditorModal from './components/InstanceEditorModal.vue';
 import AppMenuModal from './components/AppMenuModal.vue';
+import UpdateModal from './components/UpdateModal.vue';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, gpuService } = useLauncher();
+const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, gpuService, updateService } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -33,7 +34,20 @@ const showSettings = ref(false);
 const showCreate = ref(false);
 const createModalTab = ref('custom');
 const showAppMenu = ref(false);
+const showUpdates = ref(false);
+let updatePresentation = 0;
 const editingInstance = ref<Instance | null>(null);
+watch(() => [state.value.updates.presentation, showAccounts.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive], () => {
+  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive) return;
+  updatePresentation = state.value.updates.presentation;
+  closePopovers(); closeContextMenu(); showUpdates.value = true;
+}, { immediate: true });
+watch(() => [showUpdates.value, state.value.updates.status], async () => {
+  if (showUpdates.value && state.value.updates.status === 'available') {
+    await nextTick();
+    if (showUpdates.value) await updateService.acknowledge().catch(() => {});
+  }
+});
 const editorSection = ref('overview');
 function openEditor(instance: Instance, section = 'overview') {
   closePopovers(); editorSection.value = section; editingInstance.value = instance;
@@ -117,6 +131,7 @@ function toggleContextPin(instance: Instance) {
 }
 
 function keydown(event: KeyboardEvent) {
+  if (showUpdates.value) { if (event.key === 'Escape') { event.preventDefault(); showUpdates.value = false; } return; }
   if (editingInstance.value) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); searchInput.value?.focus(); searchInput.value?.select(); }
   if (event.key === 'Escape') {
@@ -326,6 +341,10 @@ onUnmounted(() => {
 
     <Transition name="modal">
       <InstanceEditorModal v-if="editingInstance" :key="editingInstance.id" :instance="editingInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" @close="editingInstance = null" />
+    </Transition>
+
+    <Transition name="modal">
+      <UpdateModal v-if="showUpdates" :state="state.updates" :busy="busy" :t="t" @close="showUpdates = false" @check="action('checkForUpdates')" @download="kind => updateService.openDownload(kind)" @automatic="value => updateService.setAutomatic(value)" />
     </Transition>
 
     <Transition name="modal">

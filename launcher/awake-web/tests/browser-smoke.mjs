@@ -15,7 +15,11 @@ const fixture = `(() => {
   const state = { instances: Array.from({length: count}, (_, i) => ({id: 'fixture-' + i, name: 'Test fixture ' + String(i).padStart(2, '0'), group: i % 2 ? 'Test group' : '', minecraftVersion: '1.21.1', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, totalTimePlayed: 0})), selectedId: count ? 'fixture-0' : '', locale: options.get('locale') || 'en_US', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '' };
   state.totalMemoryMb = Number(options.get('ram') || 32768);
   state.launcherSettings = {maxMem:8192,minMem:512};
+  state.updates = {status: options.get('updateStatus') || 'idle', currentVersion:'0.3.0', latestVersion:'0.4.0', notes:'Browser test fixture: improved launcher updates. <script>window.__unsafeNotes = true</script>', error:'Network error fixture', automatic:true, portable:options.has('portable'), presentation:options.has('updates') ? 1 : 0, setupUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.4.0/Awake-Launcher-v0.4.0-Windows-x64-Setup.exe', portableUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.4.0/Awake-Launcher-v0.4.0-Windows-x64.zip', releaseUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/tag/v0.4.0'};
   const host = {
+    openUpdateDownload(kind, cb) { window.__nativeTest.calls.push(['openUpdateDownload',kind]); cb({ok:true}); },
+    setAutomaticUpdates(enabled, cb) { state.updates.automatic = enabled; this.stateChanged.emit(structuredClone(state)); cb({ok:true}); },
+    acknowledgeUpdateNotification(cb) { window.__nativeTest.calls.push(['acknowledgeUpdateNotification']); cb({ok:true}); },
     gpuSettings(cb) { cb({ok:true,supported:true,mode:state.gpuMode || 'automatic',devices:[{name:'NVIDIA GPU fixture'},{name:'Integrated GPU fixture'}]}); },
     setGpuPreference(mode, cb) { state.gpuMode = mode; window.__nativeTest.calls.push(['setGpuPreference',mode]); this.gpuSettings(cb); },
     openGpuSettings(cb) { window.__nativeTest.calls.push(['openGpuSettings']); cb({ok:true}); },
@@ -53,7 +57,7 @@ const fixture = `(() => {
     frontendReady(cb) { this.artworkChanged.emit(state.selectedId, '', ''); cb(); },
     selectInstance(id, cb) { state.selectedId = id; this.stateChanged.emit(structuredClone(state)); this.artworkChanged.emit(id, '', ''); cb({ok:true}); },
     launchInstance(id, cb) { window.__nativeTest.calls.push(['launch', id]); cb({ok:true}); },
-    invokeAction(action, id, cb) { window.__nativeTest.calls.push([action, id]); cb({ok:true}); },
+    invokeAction(action, id, cb) { window.__nativeTest.calls.push([action, id]); if (action === 'checkForUpdates') { state.updates.presentation++; state.updates.status = 'checking'; this.stateChanged.emit(structuredClone(state)); setTimeout(() => {state.updates.status = 'upToDate'; this.stateChanged.emit(structuredClone(state));}, 200); } cb({ok:true}); },
     setPreference(key, value, cb) {
       window.__nativeTest.calls.push(['preference', key, value]);
       if (key === 'pin') state.instances.find(i => i.id === value.id).pinned = value.pinned;
@@ -91,6 +95,55 @@ await mkdir(output, { recursive: true });
 const errors = [];
 const requests = [];
 try {
+  for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
+    const page = await browser.newPage({ viewport: {width:1100,height:750} });
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`${origin}/?locale=${locale}&updates&updateStatus=available`);
+    await page.locator('.update-dialog').waitFor();
+    assert.equal(await page.locator('.instance-select').first().evaluate(el => Boolean(el.closest('[inert]'))), true);
+    assert.equal(await page.locator('.update-dialog').evaluate(el => getComputedStyle(el).fontFamily.includes('K2D')), true);
+    assert.equal(await page.evaluate(() => window.__unsafeNotes), undefined);
+    assert.ok((await page.locator('.update-notes p').textContent()).includes('<script>'));
+    await page.locator('.update-automatic input').uncheck();
+    assert.equal(await page.locator('.update-automatic input').isChecked(), false);
+    await page.locator('.update-footer .btn-primary').click();
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.some(call => call[0] === 'openUpdateDownload' && call[1] === 'setup')), true);
+    await page.locator('.modal-close-btn').focus();
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.locator('.update-footer .btn-primary').evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.modal-close-btn').evaluate(el => el === document.activeElement), true);
+    await page.screenshot({path:resolve(output, `updates-${locale}.png`)});
+    await page.setViewportSize({width:640,height:480});
+    const bounds = await page.locator('.update-dialog').boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 640 && bounds.y + bounds.height <= 480);
+    await page.keyboard.press('Escape');
+    await page.locator('.update-dialog').waitFor({state:'detached'});
+    assert.equal(await page.locator('.update-dialog').count(), 0);
+    await page.close();
+  }
+  for (const status of ['checking','upToDate','error']) {
+    const page = await browser.newPage({viewport:{width:800,height:600}, reducedMotion:'reduce'});
+    await page.goto(`${origin}/?updates&updateStatus=${status}`);
+    await page.locator('.update-dialog').waitFor();
+    assert.equal(await page.locator('.update-icon').evaluate(el => getComputedStyle(el).animationName), 'none');
+    if (status === 'checking') assert.equal(await page.locator('.update-footer .btn-primary').isDisabled(), true);
+    if (status === 'error') {
+      await page.locator('.update-footer .btn-primary').click();
+      await page.waitForFunction(() => document.activeElement?.classList.contains('modal-close-btn'));
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await page.locator('.update-automatic input').evaluate(el => el === document.activeElement), true);
+    }
+    await page.screenshot({path:resolve(output, `updates-${status}.png`)});
+    await page.close();
+  }
+  {
+    const page = await browser.newPage();
+    await page.goto(`${origin}/?updates&updateStatus=available&portable`);
+    await page.locator('.update-footer .btn-primary').click();
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.some(call => call[0] === 'openUpdateDownload' && call[1] === 'portable')), true);
+    await page.close();
+  }
   for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
     const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
     page.on('pageerror', error => errors.push(error.message));

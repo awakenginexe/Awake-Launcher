@@ -91,6 +91,13 @@ class MainWindow : public QMainWindow {
     void processURLs(QList<QUrl> urls);
     void setModalBackdrop(bool active);
     bool openWebAccounts();
+    bool webFrontendActive() const {
+#ifdef AWAKE_WEB_ENABLED
+        return m_webMode;
+#else
+        return false;
+#endif
+    }
    signals:
     void isClosing();
 
