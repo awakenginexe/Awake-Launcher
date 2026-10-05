@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QUrl>
+#include <QStringList>
 #include "tasks/Task.h"
 #include <QTemporaryDir>
 #include <functional>
@@ -10,6 +11,8 @@
 namespace Java {
 bool runtimeProfileAllowed(const QString& profile);
 QString runtimeDistribution(const QString& profile);
+bool jvmPresetAllowed(const QString& preset);
+QStringList jvmPresetArguments(const QString& preset, int major, const QString& architecture, const QString& vmName, const QStringList& existing);
 QJsonObject selectRuntimePackage(const QJsonArray& packages, const QString& distribution, int major,
                                 const QString& os, const QString& architecture);
 bool runtimeDownloadUrlAllowed(const QUrl& url, const QString& distribution);

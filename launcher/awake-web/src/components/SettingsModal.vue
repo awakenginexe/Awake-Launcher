@@ -7,6 +7,9 @@ import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
 import GpuPicker from './GpuPicker.vue';
 import type { GpuService } from './GpuPicker.vue';
+import HardwareVisibility from './HardwareVisibility.vue';
+import JvmPresetPicker from './JvmPresetPicker.vue';
+import { useHardwarePrivacy } from '../composables/useHardwarePrivacy.ts';
 import { ramPresets, memoryRisk, presetFits, installedMemoryMb } from '../features/library/memory.ts';
 import logoUrl from '../../../../program_info/awake-launcher.png';
 
@@ -27,6 +30,7 @@ const emit = defineEmits<{
 }>();
 
 const activeTab = ref<'general' | 'java' | 'window' | 'about'>('general');
+const { ramVisible } = useHardwarePrivacy();
 const languageOptions = [
   { value: 'en', label: 'English' },
   { value: 'th', label: 'ภาษาไทย' },
@@ -264,7 +268,11 @@ function selectResolution(w: number, h: number) {
                 <span class="caution">{{ t('ramCaution') }}</span>
                 <span class="danger">{{ t('ramDanger') }}</span>
               </div>
-              <p class="setting-hint ram-hint">{{ totalMemoryMb ? `${t('installedRam')}: ${installedMemoryMb(totalMemoryMb) / 1024} GB. ` : '' }}{{ t('ramOverrideHint') }}</p>
+              <div v-if="totalMemoryMb" class="hardware-label ram-hint">
+                <span class="setting-hint installed-ram">{{ t('installedRam') }}: {{ ramVisible ? installedMemoryMb(totalMemoryMb) / 1024 : '-----' }} GB</span>
+                <HardwareVisibility :visible="ramVisible" :label="t(ramVisible ? 'hideRam' : 'showRam')" @toggle="ramVisible = !ramVisible" />
+              </div>
+              <p class="setting-hint">{{ t('ramOverrideHint') }}</p>
               <div class="inline-input-row" style="margin-top: 10px;">
                 <input
                   type="number"
@@ -298,6 +306,13 @@ function selectResolution(w: number, h: number) {
               </div>
             </div>
 
+            <div class="setting-block">
+              <JvmPresetPicker id="global-jvm-preset" :model-value="settings.jvmPreset" :t="t" @update:model-value="emit('update-pref', 'jvmPreset', $event)" />
+              <label for="global-jvm-args">{{ t('jvmArguments') }}</label>
+              <textarea id="global-jvm-args" class="styled-input jvm-arguments" rows="3" maxlength="8192" spellcheck="false" :disabled="settings.jvmPreset !== 'custom'" :value="settings.jvmArgs" @change="emit('update-pref', 'jvmArgs', ($event.target as HTMLTextAreaElement).value)" />
+              <p class="setting-hint">{{ t('jvmGlobalHint') }}</p>
+              <p class="setting-hint">{{ t('jvmMemoryHint') }}</p>
+            </div>
           </div>
 
           <!-- Game Window Tab -->
@@ -353,7 +368,7 @@ function selectResolution(w: number, h: number) {
               <img class="brand-logo" :src="logoUrl" alt="" />
               <div>
                 <h3>Awake Launcher</h3>
-                <p class="brand-version">Version 0.2.0</p>
+                <p v-if="settings.version" class="brand-version">{{ settings.version }}</p>
               </div>
             </div>
             <p class="brand-description">

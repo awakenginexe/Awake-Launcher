@@ -71,7 +71,8 @@ void LaunchController::executeTask()
         return;
     }
 
-    if (!JavaCommon::checkJVMArgs(m_instance->settings()->get("JvmArgs").toString(), m_parentWidget)) {
+    const auto customArgs = m_instance->jvmPreset() == "custom" ? m_instance->settings()->get("JvmArgs").toString() : QString();
+    if (!JavaCommon::checkJVMArgs(customArgs, m_parentWidget)) {
         emitFailed(tr("Invalid Java arguments specified. Please fix this first."));
         return;
     }

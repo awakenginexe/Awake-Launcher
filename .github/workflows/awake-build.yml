@@ -124,7 +124,9 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v0.3.0 adds automatic daily update checks and a K2D update dialog that matches the launcher's glass styling. Manual checks show checking, current-version, available-update, and retry states. Only stable Awake Launcher releases are offered.
+          Awake Launcher v0.4.0 adds Compatible, Balanced, Performance, and Custom JVM presets globally and per instance. Instances inherit the global preset unless overridden. Custom arguments are preserved when switching presets; memory controls continue to set heap limits. Balanced and Performance apply G1 tuning only on supported 64-bit HotSpot Java. Performance targets shorter GC pauses and may use more CPU; Minecraft FPS gains have not been benchmarked.
+
+          The GPU chooser now appears inside the launcher before Minecraft starts. Eye toggles hide GPU model names and installed RAM by default, including GPU preference dropdowns.
 
           Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
 

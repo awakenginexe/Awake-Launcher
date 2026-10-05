@@ -169,6 +169,7 @@ void JavaChecker::finished(int exitcode, QProcess::ExitStatus status)
     result.realPlatform = osArch;
     result.javaVersion = javaVersion;
     result.javaVendor = javaVendor;
+    result.javaVMName = results.value("java.vm.name");
     qDebug() << "Java checker succeeded.";
     emit checkFinished(result);
     emitSucceeded();

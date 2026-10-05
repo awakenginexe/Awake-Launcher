@@ -75,6 +75,7 @@
 #include "minecraft/update/LibrariesTask.h"
 
 #include "java/JavaUtils.h"
+#include "java/RuntimeSelection.h"
 
 #include "icons/IconList.h"
 
@@ -188,6 +189,7 @@ void MinecraftInstance::loadSpecificSettings()
     // Java Settings
     auto locationOverride = m_settings->registerSetting("OverrideJavaLocation", false);
     auto argsOverride = m_settings->registerSetting("OverrideJavaArgs", false);
+    m_settings->registerSetting("AwakeJvmPreset", "custom");
     auto profileOverride = m_settings->registerSetting("OverrideJavaProfile", false);
     m_settings->registerSetting("AutomaticJava", false);
     m_settings->registerSetting("UseLatestMinecraftVersion", false);
@@ -205,6 +207,7 @@ void MinecraftInstance::loadSpecificSettings()
         m_settings->registerPassthrough(global_settings->getSetting("JavaRealArchitecture"), locationOverride);
         m_settings->registerPassthrough(global_settings->getSetting("JavaVersion"), locationOverride);
         m_settings->registerPassthrough(global_settings->getSetting("JavaVendor"), locationOverride);
+        m_settings->registerPassthrough(global_settings->getSetting("JavaVMName"), locationOverride);
 
         // Window Size
         auto windowSetting = m_settings->registerSetting("OverrideWindow", false);
@@ -537,7 +540,7 @@ static QString replaceTokensIn(const QString& text, const QMap<QString, QString>
 
 QStringList MinecraftInstance::extraArguments()
 {
-    auto list = BaseInstance::extraArguments();
+    auto list = jvmPreset() == "custom" ? BaseInstance::extraArguments() : QStringList{};
     auto version = getPackProfile();
     if (!version)
         return list;
@@ -599,14 +602,23 @@ QStringList MinecraftInstance::extraArguments()
     return list;
 }
 
+QString MinecraftInstance::jvmPreset()
+{
+    const auto preset = settings()->get("OverrideJavaArgs").toBool() ? settings()->get("AwakeJvmPreset").toString() :
+                        globalSettings()->get("AwakeJvmPreset").toString();
+    return Java::jvmPresetAllowed(preset) ? preset : QString("compatible");
+}
+
 QStringList MinecraftInstance::javaArguments()
 {
     QStringList args;
 
     args << "-Duser.language=en";
 
-    // custom args go first. we want to override them if we have our own here.
-    args.append(extraArguments());
+    const auto extra = extraArguments();
+    args.append(Java::jvmPresetArguments(jvmPreset(), getJavaVersion().major(), settings()->get("JavaArchitecture").toString(),
+                                        settings()->get("JavaVMName").toString(), extra));
+    args.append(extra);
 
     // OSX dock icon and name
 #ifdef Q_OS_MAC

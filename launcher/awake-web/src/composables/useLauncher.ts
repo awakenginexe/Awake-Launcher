@@ -6,6 +6,7 @@ import type { Action, PreferenceKey } from '../features/library/model.ts';
 import { catalogs, normalizeLocale } from '../i18n/catalogs.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import { CatalogClient } from '../bridge/catalog.ts';
+import type { GpuSettings } from '../features/library/hardware.ts';
 
 interface Failure { code: ErrorCode | 'artworkError'; detail: string; retry: () => Promise<void> }
 interface ArtworkEvent { id: string; url: string; error: string }
@@ -13,6 +14,7 @@ interface ArtworkEvent { id: string; url: string; error: string }
 export function useLauncher() {
   const editorRevision = ref(0);
   const accountsRequest = ref(0);
+  const gpuChoice = shallowRef<{ id: string; settings: GpuSettings } | null>(null);
   const state = shallowRef({ ...emptySnapshot(), locale: normalizeLocale(navigator.language) });
   const status = ref<'loading' | 'ready' | 'error'>('loading');
   const busy = ref(false);
@@ -156,13 +158,21 @@ export function useLauncher() {
     lastRetry = () => run(method, args, timeout);
     try {
       if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
-      await callNative(native, method, args, timeout);
+      const result = await callNative(native, method, args, timeout) as { gpuChoiceRequired?: boolean; gpuSettings?: GpuSettings };
+      if (method === 'launchInstance' && result.gpuChoiceRequired && result.gpuSettings) {
+        gpuChoice.value = { id: String(args[0]), settings: result.gpuSettings };
+      }
     } catch (error) { showFailure(error, () => run(method, args, timeout)); }
     finally { busy.value = false; }
   }
   const select = (id: string) => run('selectInstance', [id]);
-  const launch = () => run('launchInstance', [state.value.selectedId]);
-  const action = (name: Action, id = '') => run('invokeAction', [name, id], 120_000);
+  const launch = (id = state.value.selectedId) => run('launchInstance', [id]);
+  function continueGpuLaunch() {
+    const id = gpuChoice.value?.id;
+    gpuChoice.value = null;
+    if (id) void launch(id);
+  }
+  const action = (name: Action, id = '') => name === 'launch' ? launch(id) : run('invokeAction', [name, id], 120_000);
   const preference = (key: PreferenceKey | string, value: unknown) => run('setPreference', [key, value]);
   async function queryCatalog(method: string, args: unknown[]) {
     if (!catalog || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
@@ -207,5 +217,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, gpuService, updateService };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, gpuService, gpuChoice, continueGpuLaunch, updateService };
 }

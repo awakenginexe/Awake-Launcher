@@ -20,6 +20,7 @@ class JavaChecker : public Task {
         QString realPlatform;
         JavaVersion javaVersion;
         QString javaVendor;
+        QString javaVMName;
         QString outLog;
         QString errorLog;
         bool is_64bit = false;

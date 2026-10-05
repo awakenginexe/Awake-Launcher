@@ -10,6 +10,8 @@ Download the **Setup.exe** from the latest release for a per-user installation w
 
 For a portable installation, download the **Windows x64 ZIP**, extract the entire package to a writable folder, and run `awakelauncher.exe`. Keep the files together and back up the folder before replacing a portable build. Release downloads include the Microsoft C++ runtime and SHA-256 checksums.
 
+From v0.4.0, choose **Compatible**, **Balanced**, **Performance**, or **Custom** JVM presets in **Settings → Java & Memory**. Each instance can inherit the global preset or select its own in **Edit instance → Settings**. Custom argument text is retained across preset changes. GPU models and installed RAM start hidden behind eye controls for screen sharing.
+
 From v0.3.0, Awake Launcher checks for stable updates daily and supports manual checks from **Application**. Downloads open in your browser. Upgrade v0.2.0 manually to receive the update checker.
 
 Add an account in **Accounts**, then choose **Create instance** to install Minecraft or a modpack. You can also import an existing instance. Awake Launcher uses its own data folder and does not move data from other launchers automatically.

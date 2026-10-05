@@ -5,6 +5,7 @@
 #include "AwakePackCatalog.h"
 #include "AwakeInstanceEditor.h"
 #include "Application.h"
+#include "BuildConfig.h"
 #include "updater/AwakeUpdateChecker.h"
 #include "HardwareInfo.h"
 #include "awake/GpuSelection.h"
@@ -199,6 +200,9 @@ QVariantMap Bridge::snapshot()
         {"minMem", s->get("MinMemAlloc").toInt()},
         {"maxMem", s->get("MaxMemAlloc").toInt()},
         {"javaPath", s->get("JavaPath").toString()},
+        {"jvmArgs", s->get("JvmArgs").toString()},
+        {"jvmPreset", s->get("AwakeJvmPreset").toString()},
+        {"version", BuildConfig.versionString()},
         {"gameWidth", s->get("MinecraftWinWidth").toInt()},
         {"gameHeight", s->get("MinecraftWinHeight").toInt()},
         {"maximizeGame", s->get("MaximizeMinecraft").toBool()},
@@ -298,6 +302,11 @@ QVariantMap Bridge::launchInstance(const QString& id)
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!instance) return fail("launchInstance", tr("This instance no longer exists."));
     if (instance->isRunning() || !instance->canLaunch()) return fail("launchInstance", tr("This instance cannot be launched right now."));
+    if (!APPLICATION->settings()->get("AwakeGpuChoiceSeen").toBool()) {
+        const auto gpu = Awake::Gpu::settings();
+        if (gpu.value("supported").toBool() && Awake::Gpu::needsPrompt(false, gpu.value("devices").toList().size()))
+            return {{"ok", true}, {"gpuChoiceRequired", true}, {"gpuSettings", gpu}};
+    }
     if (!m_select(id)) return fail("launchInstance", tr("The instance could not be selected."));
     m_actionPending = true;
     QTimer::singleShot(0, this, [this, id] {
@@ -312,6 +321,7 @@ QVariantMap Bridge::launchInstance(const QString& id)
 
 QVariantMap Bridge::invokeAction(const QString& action, const QString& id)
 {
+    if (action == "launch") return launchInstance(id);
     if (!m_active || m_actionPending) return fail(action, tr("Finish the current native action first."));
     if (!actionAllowed(action)) return fail(action, tr("This action is not available."));
     const bool needsInstance = QStringList{"edit", "folder", "manage", "launchOptions"}.contains(action);
@@ -349,6 +359,10 @@ QVariantMap Bridge::setPreference(const QString& key, const QVariant& value)
         settings->set("MinMemAlloc", value.toInt());
     } else if (key == "maxMem") {
         settings->set("MaxMemAlloc", value.toInt());
+    } else if (key == "jvmArgs") {
+        settings->set("JvmArgs", value.toString());
+    } else if (key == "jvmPreset") {
+        settings->set("AwakeJvmPreset", value.toString());
     } else if (key == "gameWidth") {
         settings->set("MinecraftWinWidth", value.toInt());
     } else if (key == "gameHeight") {

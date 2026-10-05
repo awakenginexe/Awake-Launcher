@@ -52,6 +52,9 @@ bool actionAllowed(const QString& action)
 
 bool preferenceAllowed(const QString& key, const QVariant& value)
 {
+    if (key == "jvmArgs") return value.metaType().id() == QMetaType::QString && value.toString().size() <= 8192 && !value.toString().contains(QChar(0));
+    if (key == "jvmPreset") return value.metaType().id() == QMetaType::QString &&
+        QStringList{"compatible", "balanced", "performance", "custom"}.contains(value.toString());
     if (key == "javaProfile") return value.metaType().id() == QMetaType::QString &&
         QStringList{"awake", "minecraft", "microsoft", "graalvm", "temurin", "zulu", "oracle", "custom"}.contains(value.toString());
     if (key == "reducedMotion" || key == "compact" || key == "maximizeGame" || key == "closeOnLaunch") {

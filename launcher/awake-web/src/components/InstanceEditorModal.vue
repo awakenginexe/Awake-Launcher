@@ -5,10 +5,13 @@ import type { MessageKey } from '../i18n/catalogs.ts';
 import '../styles/instance-editor.css';
 import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
+import JvmPresetPicker from './JvmPresetPicker.vue';
+import type { JvmPreset } from '../features/library/jvm.ts';
 
 interface Row { id: string; name: string; detail?: string; enabled?: boolean; status?: string }
-interface EditorSettings { minMemory: number; maxMemory: number; width: number; height: number; fullscreen: boolean; overrideMemory: boolean; overrideWindow: boolean }
-interface Details { ok: boolean; error?: string; rows?: Row[]; text?: string; settings?: EditorSettings; running?: boolean }
+interface EditorSettings { minMemory: number; maxMemory: number; width: number; height: number; fullscreen: boolean; overrideMemory: boolean; overrideWindow: boolean; jvmArgs: string; jvmPreset: JvmPreset; useGlobalJvmArgs: boolean }
+interface JvmConfig { jvmArgs: string; jvmPreset: JvmPreset }
+interface Details { ok: boolean; error?: string; rows?: Row[]; text?: string; settings?: EditorSettings; running?: boolean; jvmConfig?: { local: JvmConfig; global: JvmConfig } }
 const props = defineProps<{
   instance: Instance; initialSection?: string; revision?: number; busy: boolean; t: (key: MessageKey) => string;
   details: (id: string, section: string) => Promise<unknown>;
@@ -33,6 +36,7 @@ const notes = ref('');
 const savedNotes = ref('');
 const settings = ref<EditorSettings | null>(null);
 const savedSettings = ref('');
+let localJvm: JvmConfig | undefined;
 const wrap = ref(true);
 const filter = ref('');
 const pendingRemoval = ref<Row | null>(null);
@@ -69,7 +73,11 @@ async function load(quiet = false) {
     data.value = result;
     error.value = '';
     if (activeSection === 'notes') notes.value = savedNotes.value = result.text || '';
-    if (activeSection === 'settings') { settings.value = result.settings ? { ...result.settings } : null; savedSettings.value = JSON.stringify(settings.value); }
+    if (activeSection === 'settings') {
+      settings.value = result.settings ? { ...result.settings } : null;
+      localJvm = result.jvmConfig?.local ? { ...result.jvmConfig.local } : undefined;
+      savedSettings.value = JSON.stringify(settings.value);
+    }
   } catch (reason) {
     if (!closed && request === revision) error.value = reason instanceof Error ? reason.message : String(reason);
   } finally {
@@ -91,6 +99,13 @@ async function run(name: string, payload?: unknown, refresh = true) {
   } catch (reason) {
     if (!closed && request === revision) error.value = reason instanceof Error ? reason.message : String(reason);
   } finally { if (!closed) { working.value = false; schedulePoll(); } }
+}
+function toggleJvmInheritance() {
+  const value = settings.value;
+  if (!value) return;
+  if (value.useGlobalJvmArgs) localJvm = { jvmArgs: value.jvmArgs, jvmPreset: value.jvmPreset };
+  const config = value.useGlobalJvmArgs ? data.value?.jvmConfig?.global : localJvm;
+  if (config) Object.assign(value, config);
 }
 function changeSection(id: string) {
   if (working.value || id === section.value) return;
@@ -169,6 +184,13 @@ onUnmounted(() => {
               <div v-if="settings" class="editor-settings">
                 <fieldset><legend>{{ t('editorMemory') }}</legend><label class="check"><input v-model="settings.overrideMemory" type="checkbox" :disabled="working" />{{ t('editorUseInstanceMemory') }}</label><div class="editor-fields"><label>{{ t('editorMinimumMemory') }}<input v-model.number="settings.minMemory" class="glass-input" type="number" min="128" max="1048576" :disabled="working || !settings.overrideMemory" /></label><label>{{ t('editorMaximumMemory') }}<input v-model.number="settings.maxMemory" class="glass-input" type="number" min="128" max="1048576" :disabled="working || !settings.overrideMemory" /></label></div></fieldset>
                 <fieldset><legend>{{ t('gameWindow') }}</legend><label class="check"><input v-model="settings.overrideWindow" type="checkbox" :disabled="working" />{{ t('editorUseInstanceWindow') }}</label><div class="editor-fields"><label>{{ t('editorWidth') }}<input v-model.number="settings.width" class="glass-input" type="number" min="320" max="16384" :disabled="working || !settings.overrideWindow" /></label><label>{{ t('editorHeight') }}<input v-model.number="settings.height" class="glass-input" type="number" min="320" max="16384" :disabled="working || !settings.overrideWindow" /></label></div><label class="check"><input v-model="settings.fullscreen" type="checkbox" :disabled="working || !settings.overrideWindow" />{{ t('maximizeOnStart') }}</label></fieldset>
+                <fieldset><legend>{{ t('jvmArguments') }}</legend>
+                  <label class="check"><input v-model="settings.useGlobalJvmArgs" type="checkbox" :disabled="working" @change="toggleJvmInheritance" />{{ t('jvmUseGlobal') }}</label>
+                  <JvmPresetPicker id="instance-jvm-preset" v-model="settings.jvmPreset" :disabled="working || settings.useGlobalJvmArgs" :t="t" />
+                  <label for="instance-jvm-args">{{ t('jvmArguments') }}</label>
+                  <textarea id="instance-jvm-args" v-model="settings.jvmArgs" class="glass-input jvm-arguments" rows="3" maxlength="8192" spellcheck="false" :disabled="working || settings.useGlobalJvmArgs || settings.jvmPreset !== 'custom'" />
+                  <p class="editor-hint">{{ t('jvmInstanceHint') }} {{ t('jvmMemoryHint') }}</p>
+                </fieldset>
                 <p v-if="!settingsValid" class="editor-hint" role="status">{{ t('editorSettingsHint') }}</p><button class="btn-primary editor-save" :disabled="disabled || !dirty || !settingsValid" @click="run('saveSettings', settings)">{{ t('editorSaveSettings') }}</button>
               </div><p v-else class="editor-message">{{ t('editorSettingsUnavailable') }}</p>
             </template>

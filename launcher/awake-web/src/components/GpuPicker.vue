@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
+import type { GpuSettings } from '../features/library/hardware.ts';
+import { privateGpuName } from '../features/library/hardware.ts';
+import { useHardwarePrivacy } from '../composables/useHardwarePrivacy.ts';
+import HardwareVisibility from './HardwareVisibility.vue';
 export interface GpuService {
   settings: () => Promise<unknown>;
   select: (mode: string) => Promise<unknown>;
   openWindows: () => Promise<unknown>;
 }
-interface GpuSettings { ok: boolean; supported: boolean; mode: string; devices: { name: string }[]; powerSavingName?: string; highPerformanceName?: string }
-const props = defineProps<{ service: GpuService; t: (key: MessageKey) => string }>();
-const data = ref<GpuSettings>();
+const props = defineProps<{ service: GpuService; t: (key: MessageKey) => string; initial?: GpuSettings; deferred?: boolean }>();
+const emit = defineEmits<{ (e: 'choose', mode: string): void }>();
+const { gpuVisible } = useHardwarePrivacy();
+const data = ref<GpuSettings | undefined>(props.initial);
 const working = ref(false);
 const error = ref('');
 const saved = ref(false);
 async function run(mode?: string) {
+  if (mode && props.deferred && data.value) {
+    data.value = { ...data.value, mode };
+    emit('choose', mode);
+    return;
+  }
   if (working.value) return;
   working.value = true; error.value = ''; saved.value = false;
   try {
@@ -25,17 +35,17 @@ async function openWindows() {
   try { await props.service.openWindows(); }
   catch (failure) { error.value = failure instanceof Error ? failure.message : String(failure); }
 }
-onMounted(() => { void run(); });
+onMounted(() => { if (!data.value) void run(); });
 </script>
 <template>
   <div class="setting-block gpu-picker">
-    <label for="gpu-preference">{{ t('gpuSelection') }}</label>
+    <div class="hardware-label"><label for="gpu-preference">{{ t('gpuSelection') }}</label><HardwareVisibility :visible="gpuVisible" :label="t(gpuVisible ? 'hideGpu' : 'showGpu')" @toggle="gpuVisible = !gpuVisible" /></div>
     <template v-if="data?.supported">
-      <ul class="gpu-devices"><li v-for="(device, index) in data.devices" :key="index">{{ device.name }}</li></ul>
+      <ul class="gpu-devices"><li v-for="(device, index) in data.devices" :key="index">{{ privateGpuName(device.name, gpuVisible) }}</li></ul>
       <select id="gpu-preference" class="styled-input" :value="data.mode" :disabled="working" @change="run(($event.target as HTMLSelectElement).value)">
         <option value="automatic">{{ t('gpuAutomatic') }}</option>
-        <option value="powerSaving">{{ t('gpuPowerSaving') }}{{ data.powerSavingName ? ` — ${data.powerSavingName}` : '' }}</option>
-        <option value="highPerformance">{{ t('gpuHighPerformance') }}{{ data.highPerformanceName ? ` — ${data.highPerformanceName}` : '' }}</option>
+        <option value="powerSaving">{{ t('gpuPowerSaving') }}{{ data.powerSavingName ? ` — ${privateGpuName(data.powerSavingName, gpuVisible)}` : '' }}</option>
+        <option value="highPerformance">{{ t('gpuHighPerformance') }}{{ data.highPerformanceName ? ` — ${privateGpuName(data.highPerformanceName, gpuVisible)}` : '' }}</option>
       </select>
       <p class="setting-hint">{{ t('gpuGlobalHint') }}</p>
       <p class="setting-hint">{{ t('gpuWindowsHint') }}</p>

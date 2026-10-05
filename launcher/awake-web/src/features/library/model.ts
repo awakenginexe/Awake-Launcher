@@ -1,6 +1,8 @@
 import { normalizeLocale } from '../../i18n/catalogs.ts';
 import type { Locale } from '../../i18n/catalogs.ts';
 import { BridgeError } from '../../bridge/client.ts';
+import { parseJvmPreset } from './jvm.ts';
+import type { JvmPreset } from './jvm.ts';
 
 export type SortMode = 'Name' | 'LastLaunch' | 'TotalTimePlayed';
 export type Action =
@@ -73,6 +75,9 @@ export interface LauncherSettings {
   minMem: number;
   maxMem: number;
   javaPath: string;
+  jvmArgs: string;
+  version: string;
+  jvmPreset: JvmPreset;
   gameWidth: number;
   gameHeight: number;
   maximizeGame: boolean;
@@ -113,7 +118,7 @@ export function emptySnapshot(): Snapshot {
     accounts: [], totalMemoryMb: 0,
     updates: parseUpdates(null),
     launcherSettings: {
-      language: '', minMem: 1024, maxMem: 4096, javaPath: '', gameWidth: 854, gameHeight: 480, maximizeGame: false, closeOnLaunch: false
+      language: '', minMem: 1024, maxMem: 4096, javaPath: '', jvmArgs: '', version: '', jvmPreset: 'compatible', gameWidth: 854, gameHeight: 480, maximizeGame: false, closeOnLaunch: false
     }
   };
 }
@@ -161,6 +166,9 @@ export function parseSnapshot(value: unknown): Snapshot {
     minMem: Number(rawSettings.minMem) || 1024,
     maxMem: Number(rawSettings.maxMem) || 4096,
     javaPath: String(rawSettings.javaPath || ''),
+    jvmArgs: String(rawSettings.jvmArgs || ''),
+    version: String(rawSettings.version || ''),
+    jvmPreset: parseJvmPreset(rawSettings.jvmPreset),
     gameWidth: Number(rawSettings.gameWidth) || 854,
     gameHeight: Number(rawSettings.gameHeight) || 480,
     maximizeGame: Boolean(rawSettings.maximizeGame),

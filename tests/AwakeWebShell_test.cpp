@@ -137,7 +137,7 @@ class AwakeWebShellTest : public QObject {
         bridge->setPreference("maxMem", previous);
         evaluate("document.querySelectorAll('.settings-tab-btn')[3].click()");
         QTRY_VERIFY(evaluate("document.querySelector('.brand-logo')?.complete && document.querySelector('.brand-logo')?.naturalWidth > 0").toBool());
-        QVERIFY(evaluate("document.querySelector('.brand-version').textContent.includes('0.2.0')").toBool());
+        QCOMPARE(evaluate("document.querySelector('.brand-version').textContent.trim()").toString(), BuildConfig.versionString());
         QTest::qWait(150);
         window->grab().save("W:/.validation/branding-020-native.png");
         evaluate("document.querySelector('.modal-close-btn').click()");

@@ -757,6 +757,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("JavaRealArchitecture", "");
         m_settings->registerSetting("JavaVersion", "");
         m_settings->registerSetting("JavaVendor", "");
+        m_settings->registerSetting("JavaVMName", "");
         m_settings->registerSetting("LastHostname", "");
         m_settings->registerSetting("JvmArgs", "");
         m_settings->registerSetting("IgnoreJavaCompatibility", false);
@@ -765,6 +766,8 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
         m_settings->registerSetting("AutomaticJavaSwitch", defaultEnableAutoJava);
         m_settings->registerSetting("AutomaticJavaDownload", defaultEnableAutoJava);
         m_settings->registerSetting("AwakeJavaProfile", m_settings->get("AutomaticJavaSwitch").toBool() ? "awake" : "custom");
+        m_settings->registerSetting("AwakeJvmPreset", !m_settings->get("JvmArgs").toString().isEmpty() ? "custom" :
+            m_settings->get("AwakeJavaProfile").toString() == "awake" ? "balanced" : "compatible");
         m_settings->registerSetting("UserAskedAboutAutomaticJavaDownload", false);
 
         // Legacy settings

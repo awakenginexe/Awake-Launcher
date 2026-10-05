@@ -1344,6 +1344,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
 .ram-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 .ram-legend span::before { content: '●'; margin-right: 5px; }
 .ram-hint { margin-top: 8px; }
+.hardware-label { display: flex; align-items: center; gap: 8px; }
+.hardware-label label { margin-bottom: 0; }
 .brand-logo { width: 56px; height: 56px; object-fit: contain; }
 .gpu-picker { margin-bottom: 24px; }
 .gpu-devices { padding-left: 18px; margin: 10px 0; color: var(--text-secondary); }
@@ -2406,3 +2408,5 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   background: linear-gradient(135deg, #0ea5e9, #3b82f6) !important;
   box-shadow: 0 0 22px rgba(14, 165, 233, 0.5) !important;
 }
+
+.jvm-arguments { display: block; width: 100%; resize: vertical; min-height: 84px; font-family: monospace; }

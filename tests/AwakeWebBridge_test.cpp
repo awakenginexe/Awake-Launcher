@@ -19,6 +19,8 @@
 #include <QCryptographicHash>
 #include <QTimer>
 #include <QComboBox>
+#include <QPlainTextEdit>
+#include <QGroupBox>
 #include <QDialogButtonBox>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -41,6 +43,7 @@
 #include "settings/SettingsObject.h"
 #include "translations/TranslationsModel.h"
 #include "ui/MainWindow.h"
+#include "ui/widgets/JavaSettingsWidget.h"
 #include "ui/dialogs/BlockedModsDialog.h"
 #include "ui/dialogs/AwakePopupDialog.h"
 #include "java/RuntimeSelection.h"
@@ -180,6 +183,113 @@ private slots:
         QVERIFY(!bridge.instanceCommand("one", "toggleMod", QVariantMap{{"id", "file.jar"}, {"enabled", false}}).value("ok").toBool());
         instance->setRunning(false);
     }
+    void nativeJvmEditsActivateCustomPreset()
+    {
+        auto* global = APPLICATION->settings();
+        const auto previousArgs = global->get("JvmArgs");
+        const auto previousPreset = global->get("AwakeJvmPreset");
+        global->set("AwakeJvmPreset", "balanced");
+        JavaSettingsWidget widget;
+        widget.saveSettings();
+        QCOMPARE(global->get("AwakeJvmPreset").toString(), QString("balanced"));
+        widget.findChild<QPlainTextEdit*>("jvmArgsTextBox")->setPlainText("-Dnative.global=true");
+        widget.saveSettings();
+        QCOMPARE(global->get("AwakeJvmPreset").toString(), QString("custom"));
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        instance->settings()->set("OverrideJavaArgs", true);
+        instance->settings()->set("AwakeJvmPreset", "performance");
+        JavaSettingsWidget local(instance);
+        local.findChild<QPlainTextEdit*>("jvmArgsTextBox")->setPlainText("-Dnative.instance=true");
+        local.saveSettings();
+        QCOMPARE(instance->jvmPreset(), QString("custom"));
+        QVERIFY(instance->extraArguments().contains("-Dnative.instance=true"));
+        global->set("JvmArgs", previousArgs);
+        global->set("AwakeJvmPreset", previousPreset);
+    }
+    void customJvmArgumentsUseGlobalOrInstanceSettings()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* global = APPLICATION->settings();
+        const auto previous = global->get("JvmArgs");
+        const auto previousPreset = global->get("AwakeJvmPreset");
+        QVERIFY(bridge.setPreference("jvmPreset", "custom").value("ok").toBool());
+        QVERIFY(bridge.setPreference("jvmArgs", "-Dawake.global=true").value("ok").toBool());
+        QCOMPARE(bridge.snapshot().value("launcherSettings").toMap().value("jvmArgs").toString(), QString("-Dawake.global=true"));
+        QVERIFY(!bridge.setPreference("jvmArgs", QString(8193, 'x')).value("ok").toBool());
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        instance->settings()->set("OverrideJavaArgs", false);
+        QCOMPARE(instance->extraArguments().first(), QString("-Dawake.global=true"));
+        auto options = bridge.instanceDetails("one", "settings").value("settings").toMap();
+        options["useGlobalJvmArgs"] = false;
+        options["jvmPreset"] = "custom";
+        options["jvmArgs"] = "-Dawake.instance=true -Xmx128m";
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->extraArguments().first(), QString("-Dawake.instance=true"));
+        const auto arguments = instance->javaArguments();
+        QVERIFY(arguments.contains("-Dawake.instance=true"));
+        const auto heapLimit = QString("-Xmx%1m").arg(instance->settings()->get("MaxMemAlloc").toInt());
+        QVERIFY(arguments.lastIndexOf(heapLimit) > arguments.indexOf("-Xmx128m"));
+        QCOMPARE(global->get("JvmArgs").toString(), QString("-Dawake.global=true"));
+        options["jvmArgs"] = 42;
+        QVERIFY(!bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->extraArguments().first(), QString("-Dawake.instance=true"));
+        options["jvmArgs"] = "-Dawake.instance=true";
+        options["useGlobalJvmArgs"] = true;
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->extraArguments().first(), QString("-Dawake.global=true"));
+        global->set("JvmArgs", previous);
+        global->set("AwakeJvmPreset", previousPreset);
+    }
+    void jvmPresetInheritanceAndCustomTextRetention()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* global = APPLICATION->settings();
+        const auto previousPreset = global->get("AwakeJvmPreset");
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        auto* settings = instance->settings();
+        settings->set("OverrideJavaArgs", false);
+        for (const auto& preset : {"compatible", "balanced", "performance", "custom"}) {
+            QVERIFY(bridge.setPreference("jvmPreset", preset).value("ok").toBool());
+            QCOMPARE(instance->jvmPreset(), QString(preset));
+        }
+        QVERIFY(!bridge.setPreference("jvmPreset", "maximum-fps").value("ok").toBool());
+        auto options = bridge.instanceDetails("one", "settings").value("settings").toMap();
+        options["useGlobalJvmArgs"] = false;
+        options["jvmPreset"] = "custom";
+        options["jvmArgs"] = "-Dawake.preserved=true";
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QVERIFY(instance->extraArguments().contains("-Dawake.preserved=true"));
+        options["jvmPreset"] = "performance";
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->jvmPreset(), QString("performance"));
+        QVERIFY(!instance->extraArguments().contains("-Dawake.preserved=true"));
+        QCOMPARE(settings->get("JvmArgs").toString(), QString("-Dawake.preserved=true"));
+        QVERIFY(bridge.setPreference("jvmPreset", "compatible").value("ok").toBool());
+        QCOMPARE(instance->jvmPreset(), QString("performance"));
+        options["jvmPreset"] = "maximum-fps";
+        QVERIFY(!bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->jvmPreset(), QString("performance"));
+        options["jvmPreset"] = "custom";
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QVERIFY(instance->extraArguments().contains("-Dawake.preserved=true"));
+        options["useGlobalJvmArgs"] = true;
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->jvmPreset(), QString("compatible"));
+        const auto inherited = bridge.instanceDetails("one", "settings");
+        const auto local = inherited.value("jvmConfig").toMap().value("local").toMap();
+        QCOMPARE(local.value("jvmPreset").toString(), QString("custom"));
+        QCOMPARE(local.value("jvmArgs").toString(), QString("-Dawake.preserved=true"));
+        options = inherited.value("settings").toMap();
+        options["useGlobalJvmArgs"] = false;
+        options["jvmPreset"] = local.value("jvmPreset");
+        options["jvmArgs"] = local.value("jvmArgs");
+        QVERIFY(bridge.instanceCommand("one", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(instance->jvmPreset(), QString("custom"));
+        QVERIFY(instance->extraArguments().contains("-Dawake.preserved=true"));
+        global->set("AwakeJvmPreset", previousPreset);
+    }
     void javaInheritanceAndLaunchPrecedence()
     {
         Assets assets;
@@ -249,6 +359,29 @@ private slots:
         QVERIFY(!task.wasSuccessful());
         QCOMPARE(Java::runtimeDistribution("awake"), QString("temurin"));
         QVERIFY(Java::runtimeDistribution("minecraft").isEmpty());
+    }
+    void jvmPresetsRespectRuntimeAndLoaderChoices()
+    {
+        const QString vm = "OpenJDK 64-Bit Server VM";
+        const QStringList balanced{"-XX:+UseG1GC", "-XX:MaxGCPauseMillis=100"};
+        const QStringList performance{"-XX:+UseG1GC", "-XX:MaxGCPauseMillis=50"};
+        for (const auto& preset : {"compatible", "balanced", "performance", "custom"}) QVERIFY(Java::jvmPresetAllowed(preset));
+        QVERIFY(!Java::jvmPresetAllowed("maximum-fps"));
+        QCOMPARE(Java::jvmPresetArguments("balanced", 21, "64", vm, {}), balanced);
+        QCOMPARE(Java::jvmPresetArguments("performance", 17, "64", vm, {}), performance);
+        QCOMPARE(Java::jvmPresetArguments("balanced", 8, "64", vm, {}),
+                 (QStringList{"-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200"}));
+        QCOMPARE(Java::jvmPresetArguments("performance", 8, "64", vm, {}), balanced);
+        QVERIFY(Java::jvmPresetArguments("balanced", 7, "64", vm, {}).isEmpty());
+        QVERIFY(Java::jvmPresetArguments("balanced", 21, "32", vm, {}).isEmpty());
+        QVERIFY(Java::jvmPresetArguments("balanced", 21, "64", "Eclipse OpenJ9 VM", {}).isEmpty());
+        QVERIFY(Java::jvmPresetArguments("balanced", 21, "64", "", {}).isEmpty());
+        QVERIFY(Java::jvmPresetArguments("custom", 21, "64", vm, {}).isEmpty());
+        QVERIFY(Java::jvmPresetArguments("compatible", 21, "64", vm, {}).isEmpty());
+        for (const auto& arg : {"-XX:+UseZGC", "-XX:+UseG1GC", "-XX:-UseG1GC"})
+            QVERIFY(Java::jvmPresetArguments("performance", 21, "64", vm, {arg}).isEmpty());
+        QCOMPARE(Java::jvmPresetArguments("balanced", 21, "64", vm, {"-XX:MaxGCPauseMillis=75"}),
+                 (QStringList{"-XX:+UseG1GC"}));
     }
     void liveJavaDownloadAndOfflineReuse()
     {
@@ -466,6 +599,15 @@ private slots:
         QVERIFY(bridge.invokeAction("settings", {}).value("ok").toBool());
         QVERIFY(!bridge.selectInstance("two").value("ok").toBool());
         QTRY_COMPARE(actions, 1);
+        const auto previousSeen = APPLICATION->settings()->get("AwakeGpuChoiceSeen");
+        APPLICATION->settings()->set("AwakeGpuChoiceSeen", false);
+        const auto gpu = bridge.gpuSettings();
+        if (gpu.value("supported").toBool() && gpu.value("devices").toList().size() > 1) {
+            QVERIFY(bridge.launchInstance("one").value("gpuChoiceRequired").toBool());
+            QCOMPARE(actions, 1);
+            QVERIFY(!APPLICATION->settings()->get("AwakeGpuChoiceSeen").toBool());
+        }
+        APPLICATION->settings()->set("AwakeGpuChoiceSeen", true);
         QVERIFY(bridge.launchInstance("one").value("ok").toBool());
         QTRY_COMPARE(actions, 2);
         QCOMPARE(lastAction, QString("launch"));
@@ -476,6 +618,7 @@ private slots:
         QVERIFY(!bridge.launchInstance("one").value("ok").toBool());
         QCOMPARE(actions, 2);
         instance->setRunning(false);
+        APPLICATION->settings()->set("AwakeGpuChoiceSeen", previousSeen);
     }
     void rapidArtworkAndDestroyedBridge()
     {

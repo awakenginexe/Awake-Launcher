@@ -10,8 +10,9 @@ import CreateInstanceModal from './components/CreateInstanceModal.vue';
 import InstanceEditorModal from './components/InstanceEditorModal.vue';
 import AppMenuModal from './components/AppMenuModal.vue';
 import UpdateModal from './components/UpdateModal.vue';
+import GpuLaunchModal from './components/GpuLaunchModal.vue';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, gpuService, updateService } = useLauncher();
+const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, gpuService, gpuChoice, continueGpuLaunch, updateService } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -131,6 +132,7 @@ function toggleContextPin(instance: Instance) {
 }
 
 function keydown(event: KeyboardEvent) {
+  if (gpuChoice.value) return;
   if (showUpdates.value) { if (event.key === 'Escape') { event.preventDefault(); showUpdates.value = false; } return; }
   if (editingInstance.value) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); searchInput.value?.focus(); searchInput.value?.select(); }
@@ -255,7 +257,7 @@ onUnmounted(() => {
 
         <div class="launch-dock glass">
           <p class="launch-status" role="status">{{ busy ? t('working') : t(selectedStatus) }}</p>
-          <button id="play" class="play-button" :disabled="!canPlay" @click="launch"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="m5 3 11 7-11 7Z" /></svg>{{ t(selected.running ? 'running' : 'play') }}</button>
+          <button id="play" class="play-button" :disabled="!canPlay" @click="launch()"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="m5 3 11 7-11 7Z" /></svg>{{ t(selected.running ? 'running' : 'play') }}</button>
           <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button><button :disabled="!enabled" @click="closePopovers(); action('legacy')">{{ t('legacy') }}</button></div></details>
         </div>
       </div>
@@ -344,7 +346,8 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="modal">
-      <UpdateModal v-if="showUpdates" :state="state.updates" :busy="busy" :t="t" @close="showUpdates = false" @check="action('checkForUpdates')" @download="kind => updateService.openDownload(kind)" @automatic="value => updateService.setAutomatic(value)" />
+      <GpuLaunchModal v-if="gpuChoice" :settings="gpuChoice.settings" :service="gpuService" :t="t" @close="gpuChoice = null" @continue="continueGpuLaunch" />
+      <UpdateModal v-if="showUpdates && !gpuChoice" :state="state.updates" :busy="busy" :t="t" @close="showUpdates = false" @check="action('checkForUpdates')" @download="kind => updateService.openDownload(kind)" @automatic="value => updateService.setAutomatic(value)" />
     </Transition>
 
     <Transition name="modal">

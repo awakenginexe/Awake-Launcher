@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 #include <QUrlQuery>
 #include <QUuid>
+#include <algorithm>
 
 namespace Java {
 namespace {
@@ -33,6 +34,28 @@ QString runtimeDistribution(const QString& profile)
     if (profile == "oracle") return "oracle_open_jdk";
     if (profile == "microsoft" || profile == "zulu") return profile;
     return {};
+}
+bool jvmPresetAllowed(const QString& preset)
+{
+    return QStringList{"compatible", "balanced", "performance", "custom"}.contains(preset);
+}
+QStringList jvmPresetArguments(const QString& preset, int major, const QString& architecture, const QString& vmName, const QStringList& existing)
+{
+    const bool hotspot = vmName.contains("HotSpot", Qt::CaseInsensitive) ||
+                         (vmName.contains("OpenJDK", Qt::CaseInsensitive) && vmName.contains("Server VM", Qt::CaseInsensitive));
+    if ((preset != "balanced" && preset != "performance") || major < 8 || architecture != "64" || !hotspot) return {};
+    // Collector choices from users or loaders take precedence over the preset.
+    const QRegularExpression collector("^-XX:[+-]Use[A-Za-z0-9]+GC$");
+    for (const auto& argument : existing) {
+        if (collector.match(argument).hasMatch()) return {};
+    }
+    QStringList args{"-XX:+UseG1GC"};
+    const auto customPause = std::any_of(existing.cbegin(), existing.cend(), [](const QString& argument) {
+        return argument.startsWith("-XX:MaxGCPauseMillis=");
+    });
+    const int pause = preset == "performance" ? (major >= 17 ? 50 : 100) : (major >= 17 ? 100 : 200);
+    if (!customPause) args << QString("-XX:MaxGCPauseMillis=%1").arg(pause);
+    return args;
 }
 QJsonObject selectRuntimePackage(const QJsonArray& packages, const QString& distribution, int major,
                                 const QString& os, const QString& architecture)

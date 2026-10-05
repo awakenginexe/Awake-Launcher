@@ -228,15 +228,16 @@ void JavaSettingsWidget::saveSettings()
 
     // Java arguments
     bool javaArgs = m_instance == nullptr || m_ui->javaArgumentsGroupBox->isChecked();
+    const auto arguments = m_ui->jvmArgsTextBox->toPlainText().replace("\n", " ");
+    const bool argumentsChanged = arguments != settings->get("JvmArgs").toString();
 
     if (m_instance != nullptr) {
         settings->set("OverrideJavaArgs", javaArgs);
     }
 
     if (javaArgs) {
-        settings->set("JvmArgs", m_ui->jvmArgsTextBox->toPlainText().replace("\n", " "));
-    } else {
-        settings->reset("JvmArgs");
+        if (argumentsChanged) settings->set("AwakeJvmPreset", "custom");
+        settings->set("JvmArgs", arguments);
     }
 }
 

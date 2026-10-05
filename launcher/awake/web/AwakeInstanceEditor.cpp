@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "AwakeInstanceEditor.h"
 #include "AwakeWebAssets.h"
+#include "AwakeWebPolicy.h"
 #include "Application.h"
 #include "InstanceList.h"
 #include "minecraft/MinecraftInstance.h"
@@ -12,6 +13,7 @@
 #include "launch/LaunchTask.h"
 #include "launch/LogModel.h"
 #include "settings/SettingsObject.h"
+#include "settings/Setting.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDesktopServices>
@@ -87,9 +89,16 @@ QVariantMap InstanceEditor::details(const QString& instanceId, const QString& se
     else if (section == "log") result.insert("text", currentLog(instance));
     else if (section == "settings") {
         auto* settings = instance->settings();
+        result.insert("jvmConfig", QVariantMap{
+            {"local", QVariantMap{{"jvmPreset", settings->get("AwakeJvmPreset")},
+                {"jvmArgs", settings->getSetting("JvmArgs")->Setting::get().toString()}}},
+            {"global", QVariantMap{{"jvmPreset", APPLICATION->settings()->get("AwakeJvmPreset")},
+                {"jvmArgs", APPLICATION->settings()->get("JvmArgs").toString()}}}});
         result.insert("settings", QVariantMap{{"minMemory", settings->get("MinMemAlloc")}, {"maxMemory", settings->get("MaxMemAlloc")},
             {"width", settings->get("MinecraftWinWidth")}, {"height", settings->get("MinecraftWinHeight")},
-            {"fullscreen", settings->get("LaunchMaximized")}, {"overrideMemory", settings->get("OverrideMemory")}, {"overrideWindow", settings->get("OverrideWindow")}});
+            {"fullscreen", settings->get("LaunchMaximized")}, {"overrideMemory", settings->get("OverrideMemory")}, {"overrideWindow", settings->get("OverrideWindow")},
+            {"jvmArgs", settings->get("JvmArgs").toString()}, {"jvmPreset", instance->jvmPreset()},
+            {"useGlobalJvmArgs", !settings->get("OverrideJavaArgs").toBool()}});
     } else if (section == "versions" || section == "overview") {
         auto* profile = instance->getPackProfile();
         observe(profile, instanceId, "versions");
@@ -134,8 +143,10 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
     } else if (name == "saveSettings") {
         if (instance->isRunning()) return failure(tr("Stop the game before changing its settings."));
         const QStringList numberKeys{"minMemory", "maxMemory", "width", "height"};
-        const QStringList boolKeys{"overrideMemory", "overrideWindow", "fullscreen"};
-        if (payload.metaType().id() != QMetaType::QVariantMap || options.size() != 7) return failure(tr("Invalid game settings."));
+        const QStringList boolKeys{"overrideMemory", "overrideWindow", "fullscreen", "useGlobalJvmArgs"};
+        if (payload.metaType().id() != QMetaType::QVariantMap || options.size() != 10 || !preferenceAllowed("jvmArgs", options.value("jvmArgs")) ||
+            !preferenceAllowed("jvmPreset", options.value("jvmPreset")))
+            return failure(tr("Invalid game settings."));
         for (const auto& key : numberKeys) {
             bool valid = false;
             const auto number = options.value(key).toInt(&valid);
@@ -147,6 +158,12 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
         auto* settings = instance->settings();
         settings->set("OverrideMemory", options.value("overrideMemory"));
         settings->set("OverrideWindow", options.value("overrideWindow"));
+        const bool overrideArgs = !options.value("useGlobalJvmArgs").toBool();
+        settings->set("OverrideJavaArgs", overrideArgs);
+        if (overrideArgs) {
+            settings->set("AwakeJvmPreset", options.value("jvmPreset"));
+            settings->set("JvmArgs", options.value("jvmArgs"));
+        }
         if (options.value("overrideMemory").toBool()) {
             settings->set("MinMemAlloc", options.value("minMemory"));
             settings->set("MaxMemAlloc", options.value("maxMemory"));
