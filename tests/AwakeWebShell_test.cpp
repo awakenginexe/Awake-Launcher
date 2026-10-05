@@ -116,6 +116,24 @@ class AwakeWebShellTest : public QObject {
         evaluate("document.querySelector('.modal-close-btn').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') === null").toBool());
     }
+    void themedJvmMenuUsesNativePreferences()
+    {
+        const auto previousPreset = APPLICATION->settings()->get("AwakeJvmPreset");
+        evaluate("document.querySelector('.account-actions .settings-button').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());
+        evaluate("document.querySelectorAll('.settings-tab-btn')[1].click()");
+        QTRY_VERIFY(evaluate("document.querySelector('#global-jvm-preset')?.getAttribute('role') === 'combobox'").toBool());
+        evaluate("document.querySelector('#global-jvm-preset').click()");
+        QTRY_COMPARE(evaluate("document.querySelectorAll('#global-jvm-preset-listbox [role=option]').length").toInt(), 4);
+        QCOMPARE(evaluate("getComputedStyle(document.querySelector('#global-jvm-preset-listbox')).position").toString(), QString("fixed"));
+        evaluate("document.querySelector('#global-jvm-preset-listbox [data-value=performance]').click()");
+        QTRY_COMPARE(APPLICATION->settings()->get("AwakeJvmPreset").toString(), QString("performance"));
+        QTRY_VERIFY(evaluate("document.querySelector('#global-jvm-preset-listbox') === null").toBool());
+        evaluate("document.querySelector('.settings-dialog .modal-close-btn').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') === null").toBool());
+        APPLICATION->settings()->set("AwakeJvmPreset", previousPreset);
+        bridge->scheduleState();
+    }
     void memoryPresetsAndBrandingUseNativeState()
     {
         QCOMPARE(bridge->snapshot().value("totalMemoryMb").toULongLong(), HardwareInfo::installedRamMiB());

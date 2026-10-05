@@ -47,6 +47,8 @@
 #include <QStack>
 #include <QTimer>
 #include <QUuid>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
 #include <algorithm>
 #include "Json.h"
 
@@ -65,6 +67,60 @@
 #endif
 
 const static int g_GROUP_FILE_FORMAT_VERSION = 1;
+
+namespace {
+struct RemovalResult {
+    bool removed = false;
+    TrashHistoryItem history;
+    QString error;
+};
+
+class InstanceRemovalTask final : public Task {
+public:
+    InstanceRemovalTask(TrashHistoryItem item, QList<ShortcutData> shortcuts)
+        : m_item(std::move(item)), m_shortcuts(std::move(shortcuts))
+    {
+        connect(&m_watcher, &QFutureWatcher<RemovalResult>::finished, this, [this] {
+            m_result = m_watcher.result();
+            if (m_result.error.isEmpty()) emitSucceeded();
+            else emitFailed(m_result.error);
+        });
+    }
+    const RemovalResult& result() const { return m_result; }
+protected:
+    void executeTask() override
+    {
+        setStatus(tr("Deleting instance…"));
+        setProgress(0, 0);
+        // The worker owns only copied paths; model, settings and history stay on the GUI thread.
+        m_watcher.setFuture(QtConcurrent::run([item = m_item, shortcuts = m_shortcuts] {
+            RemovalResult result;
+            result.history = item;
+            result.removed = FS::trash(item.path, &result.history.trashPath);
+            if (!result.removed) {
+                result.error = QObject::tr("The instance could not be moved to the recycle bin. Close programs using its files and try again.");
+                return result;
+            }
+            QStringList errors;
+            for (const auto& shortcut : shortcuts) {
+                QString trashPath;
+                if (FS::trash(shortcut.filePath, &trashPath)) {
+                    result.history.shortcuts.append({shortcut, trashPath});
+                } else if (!FS::deletePath(shortcut.filePath)) {
+                    errors.append(QObject::tr("Could not remove shortcut: %1").arg(shortcut.filePath));
+                }
+            }
+            result.error = errors.join('\n');
+            return result;
+        }));
+    }
+private:
+    TrashHistoryItem m_item;
+    QList<ShortcutData> m_shortcuts;
+    RemovalResult m_result;
+    QFutureWatcher<RemovalResult> m_watcher;
+};
+}
 
 InstanceList::InstanceList(SettingsObject* settings, const QStringList& instDirs, QObject* parent)
     : QAbstractListModel(parent), m_globalSettings(settings), m_watcher(new QFileSystemWatcher(this))
@@ -455,6 +511,55 @@ void InstanceList::deleteInstance(const InstanceId& id)
         }
         qDebug() << "Shortcut" << name << "at path" << filePath << "for instance" << id << "has been deleted by the launcher.";
     }
+}
+
+bool InstanceList::removeInstance(const InstanceId& id, QString* error)
+{
+    const auto reject = [error](const QString& reason) {
+        if (error) *error = reason;
+        return false;
+    };
+    auto* instance = getInstanceById(id);
+    if (isRemoving()) return reject(tr("Finish deleting the current instance first."));
+    if (!instance) return reject(tr("This instance no longer exists."));
+    if (instance->isRunning()) return reject(tr("Stop the instance before deleting it."));
+    m_removingId = id;
+    m_removingName = instance->name();
+    instance->saveNow();
+    instance->settings()->suspendSave();
+    instance->setDeleting(true);
+    suspendWatch();
+    auto* task = new InstanceRemovalTask({id, instance->instanceRoot(), {}, getInstanceGroup(id), {}}, instance->shortcuts());
+    m_removalTask.reset(task);
+    connect(task, &Task::finished, this, [this, id, task] {
+        const auto result = task->result();
+        if (result.removed) {
+            const auto group = m_instanceGroupIndex.value(id);
+            if (m_instanceGroupIndex.remove(id)) {
+                decreaseGroupCount(group);
+                saveGroupList();
+            }
+            m_trashHistory.push(result.history);
+            if (m_globalSettings->get("SelectedInstance").toString() == id)
+                m_globalSettings->set("SelectedInstance", QString());
+        }
+        if (!result.removed) {
+            if (auto* remaining = getInstanceById(id)) {
+                remaining->settings()->resumeSave();
+                remaining->setDeleting(false);
+                remaining->saveNow();
+            }
+        }
+        m_removingId.clear();
+        m_removingName.clear();
+        m_removalTask.reset();
+        emit instancesChanged();
+        resumeWatch();
+        emit removalFinished(id, result.error);
+    });
+    emit removalStarted(id, m_removingName);
+    task->start();
+    return true;
 }
 
 namespace {

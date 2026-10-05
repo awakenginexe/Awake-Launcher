@@ -367,7 +367,14 @@ SettingsObject* BaseInstance::settings()
 
 bool BaseInstance::canLaunch() const
 {
-    return (!hasVersionBroken() && !isRunning());
+    return (!hasVersionBroken() && !isRunning() && !isDeleting());
+}
+
+void BaseInstance::setDeleting(bool deleting)
+{
+    if (m_isDeleting == deleting) return;
+    m_isDeleting = deleting;
+    emit propertiesChanged();
 }
 
 bool BaseInstance::reloadSettings()

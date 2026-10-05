@@ -33,6 +33,7 @@
 #include "java/JavaUtils.h"
 #include "java/RuntimeSelection.h"
 #include <QApplication>
+#include <utility>
 
 namespace Awake::Web {
 namespace {
@@ -46,8 +47,9 @@ QString componentVersion(const ComponentPtr& component)
 }
 }
 
-Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent)
-    : QObject(parent), m_assets(assets), m_select(std::move(select)), m_action(std::move(action))
+Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent, GpuDetector gpuDetector)
+    : QObject(parent), m_assets(assets), m_select(std::move(select)), m_action(std::move(action)),
+      m_gpuDetector(gpuDetector ? std::move(gpuDetector) : Awake::Gpu::hardwareSettings)
 {
     m_packCatalog = new PackCatalog(assets, this);
     m_artworkTimer = new QTimer(this);
@@ -62,6 +64,11 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent)
     connect(m_instanceEditor, &InstanceEditor::failed, this, [this](const QString& detail) { fail("instanceCommand", detail); });
     const auto changed = [this] { observeInstances(); scheduleState(); };
     auto* instances = APPLICATION->instances();
+    connect(instances, &InstanceList::removalStarted, this, [this] { scheduleState(); });
+    connect(instances, &InstanceList::removalFinished, this, [this](const QString&, const QString& error) {
+        if (!error.isEmpty()) fail("delete", error);
+        scheduleState();
+    });
     connect(instances, &QAbstractItemModel::modelReset, this, changed);
     connect(instances, &QAbstractItemModel::rowsInserted, this, changed);
     connect(instances, &QAbstractItemModel::rowsRemoved, this, changed);
@@ -217,15 +224,52 @@ QVariantMap Bridge::snapshot()
             {"accountName", account ? account->displayName() : QString()},
             {"totalMemoryMb", QVariant::fromValue(HardwareInfo::installedRamMiB())},
             {"accounts", accountList},
+            {"deletion", QVariantMap{{"active", instances->isRemoving()}, {"id", instances->removingInstanceId()}, {"name", instances->removingInstanceName()}}},
             {"launcherSettings", settingsMap},
             {"updates", APPLICATION->awakeUpdateChecker() ? APPLICATION->awakeUpdateChecker()->state() : QVariantMap{}},
             {"modalActive", m_modalActive}};
 }
 
-QVariantMap Bridge::gpuSettings()
+QVariantMap Bridge::cachedGpuSettings() const
+{
+    auto result = m_gpuHardware;
+    result.insert("mode", APPLICATION->settings()->get("AwakeGpuPreference").toString());
+    return result;
+}
+
+void Bridge::discoverGpuHardware()
+{
+    if (m_gpuPending || !m_gpuHardware.isEmpty()) return;
+    m_gpuPending = true;
+    auto* watcher = new QFutureWatcher<QVariantMap>(this);
+    connect(watcher, &QFutureWatcher<QVariantMap>::finished, this, [this, watcher] {
+        m_gpuHardware = watcher->result();
+        m_gpuPending = false;
+        watcher->deleteLater();
+        const auto requests = std::exchange(m_gpuRequests, {});
+        for (const auto& request : requests) emit catalogFinished(request, cachedGpuSettings());
+    });
+    watcher->setFuture(QtConcurrent::run(m_gpuDetector));
+}
+
+QVariantMap Bridge::gpuSettings(const QString& requestId)
 {
     if (!m_active) return fail("gpuSettings", tr("The launcher is not active."));
-    return Awake::Gpu::settings();
+    if (requestId.size() > 128 || m_gpuRequests.size() >= 32) return fail("gpuSettings", tr("Too many GPU requests."));
+    if (!requestId.isEmpty()) {
+        if (!m_gpuHardware.isEmpty()) {
+            QTimer::singleShot(0, this, [this, requestId] { emit catalogFinished(requestId, cachedGpuSettings()); });
+        } else {
+            m_gpuRequests.insert(requestId);
+            discoverGpuHardware();
+        }
+        return success();
+    }
+    if (m_gpuHardware.isEmpty()) {
+        discoverGpuHardware();
+        return {{"ok", true}, {"loading", true}};
+    }
+    return cachedGpuSettings();
 }
 
 QVariantMap Bridge::openUpdateDownload(const QString& kind)
@@ -253,10 +297,10 @@ QVariantMap Bridge::acknowledgeUpdateNotification()
 QVariantMap Bridge::setGpuPreference(const QString& mode)
 {
     if (!m_active || !Awake::Gpu::validMode(mode)) return fail("setGpuPreference", tr("Invalid GPU preference."));
-    if (!Awake::Gpu::settings().value("supported").toBool()) return fail("setGpuPreference", tr("GPU selection is not supported on this platform."));
+    if (!m_gpuHardware.value("supported").toBool()) return fail("setGpuPreference", tr("GPU selection is not supported on this platform."));
     APPLICATION->settings()->set("AwakeGpuPreference", mode);
     APPLICATION->settings()->set("AwakeGpuChoiceSeen", true);
-    return Awake::Gpu::settings();
+    return cachedGpuSettings();
 }
 
 QVariantMap Bridge::openGpuSettings()
@@ -303,7 +347,11 @@ QVariantMap Bridge::launchInstance(const QString& id)
     if (!instance) return fail("launchInstance", tr("This instance no longer exists."));
     if (instance->isRunning() || !instance->canLaunch()) return fail("launchInstance", tr("This instance cannot be launched right now."));
     if (!APPLICATION->settings()->get("AwakeGpuChoiceSeen").toBool()) {
-        const auto gpu = Awake::Gpu::settings();
+        if (m_gpuHardware.isEmpty()) {
+            discoverGpuHardware();
+            return {{"ok", true}, {"gpuDiscoveryRequired", true}};
+        }
+        const auto gpu = cachedGpuSettings();
         if (gpu.value("supported").toBool() && Awake::Gpu::needsPrompt(false, gpu.value("devices").toList().size()))
             return {{"ok", true}, {"gpuChoiceRequired", true}, {"gpuSettings", gpu}};
     }
@@ -324,6 +372,8 @@ QVariantMap Bridge::invokeAction(const QString& action, const QString& id)
     if (action == "launch") return launchInstance(id);
     if (!m_active || m_actionPending) return fail(action, tr("Finish the current native action first."));
     if (!actionAllowed(action)) return fail(action, tr("This action is not available."));
+    if (APPLICATION->instances()->isRemoving() && !QStringList{"windowMinimize", "windowMaximize"}.contains(action))
+        return fail(action, tr("Finish deleting the current instance first."));
     const bool needsInstance = QStringList{"edit", "folder", "manage", "launchOptions"}.contains(action);
     if (needsInstance && !APPLICATION->instances()->getInstanceById(id)) return fail(action, tr("This instance no longer exists."));
     // Return to QWebChannel before invoking native modal dialogs and menus.
@@ -410,6 +460,7 @@ QVariantMap Bridge::setJavaProfile(const QString& id, const QString& profile)
     if (!m_active || m_actionPending || m_javaPending) return {{"ok", false}, {"error", tr("Finish the current native action first.")}};
     auto* instance = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
     if (!id.isEmpty() && !instance) return {{"ok", false}, {"error", tr("This instance no longer exists.")}};
+    if (instance && instance->isDeleting()) return {{"ok", false}, {"error", tr("Finish deleting the instance before changing its settings.")}};
     if (instance && instance->isRunning()) return {{"ok", false}, {"error", tr("Stop the game before changing its settings.")}};
     if (!Java::runtimeProfileAllowed(profile) && !(instance && profile == "inherit"))
         return {{"ok", false}, {"error", tr("Choose a supported Java runtime.")}};
@@ -438,10 +489,17 @@ QVariantMap Bridge::browseJava(const QString& requestId, const QString& id)
     if (!m_active || m_actionPending || m_javaPending || requestId.isEmpty() || requestId.size() > 128)
         return {{"ok", false}, {"error", tr("Finish the current native action first.")}};
     auto* instance = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
+    if (instance && instance->isDeleting()) return {{"ok", false}, {"error", tr("Finish deleting the instance before changing its settings.")}};
     if ((!id.isEmpty() && !instance) || (instance && instance->isRunning()))
         return {{"ok", false}, {"error", tr("Stop the game before changing its settings.")}};
     m_javaPending = true;
     QTimer::singleShot(0, this, [this, requestId, id] {
+        auto* target = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
+        if (!m_active || (!id.isEmpty() && !target) || (target && (target->isDeleting() || target->isRunning()))) {
+            m_javaPending = false;
+            emit catalogFinished(requestId, {{"ok", false}, {"error", tr("The instance is unavailable for Java settings.")}});
+            return;
+        }
         const auto path = QFileDialog::getOpenFileName(QApplication::activeWindow(), tr("Choose your Java executable"), {},
 #if defined(Q_OS_WIN)
             tr("Java executable (javaw.exe java.exe)"));
@@ -460,7 +518,7 @@ QVariantMap Bridge::browseJava(const QString& requestId, const QString& id)
         connect(checker.get(), &JavaChecker::checkFinished, this, [this, requestId, id](const JavaChecker::Result& result) {
             m_javaPending = false;
             auto* target = id.isEmpty() ? nullptr : APPLICATION->instances()->getInstanceById(id);
-            if ((!id.isEmpty() && !target) || (target && target->isRunning()) || !m_active) {
+            if ((!id.isEmpty() && !target) || (target && (target->isRunning() || target->isDeleting())) || !m_active) {
                 emit catalogFinished(requestId, {{"ok", false}, {"error", tr("The Java selection could not be saved. Stop the game and try again.")}}); return;
             }
             if (result.validity != JavaChecker::Result::Validity::Valid) {
@@ -555,7 +613,8 @@ QVariantMap Bridge::instanceDetails(const QString& id, const QString& section)
 
 QVariantMap Bridge::instanceCommand(const QString& id, const QString& command, const QVariant& payload)
 {
-    if (!m_active || m_actionPending || m_modalActive) return fail("instanceCommand", tr("Finish the current native action first."));
+    if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving())
+        return fail("instanceCommand", tr("Finish the current native action first."));
     const auto result = m_instanceEditor->command(id, command, payload);
     scheduleState();
     return result;

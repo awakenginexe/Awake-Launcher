@@ -94,6 +94,7 @@ export interface Snapshot {
   sortMode: SortMode; accountName: string; modalActive: boolean; totalMemoryMb: number;
   accounts: AccountItem[]; launcherSettings: LauncherSettings;
   updates: UpdateState;
+  deletion: { active: boolean; id: string; name: string };
 }
 export interface UpdateState {
   status: 'unavailable' | 'idle' | 'checking' | 'available' | 'upToDate' | 'error';
@@ -117,6 +118,7 @@ export function emptySnapshot(): Snapshot {
     instances: [], selectedId: '', locale: 'en', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '', modalActive: false,
     accounts: [], totalMemoryMb: 0,
     updates: parseUpdates(null),
+    deletion: { active: false, id: '', name: '' },
     launcherSettings: {
       language: '', minMem: 1024, maxMem: 4096, javaPath: '', jvmArgs: '', version: '', jvmPreset: 'compatible', gameWidth: 854, gameHeight: 480, maximizeGame: false, closeOnLaunch: false
     }
@@ -161,6 +163,7 @@ export function parseSnapshot(value: unknown): Snapshot {
     : [];
 
   const rawSettings = (data.launcherSettings || {}) as Record<string, unknown>;
+  const rawDeletion = (data.deletion && typeof data.deletion === 'object' ? data.deletion : {}) as Record<string, unknown>;
   const launcherSettings: LauncherSettings = {
     language: String(rawSettings.language || ''),
     minMem: Number(rawSettings.minMem) || 1024,
@@ -188,6 +191,7 @@ export function parseSnapshot(value: unknown): Snapshot {
     accounts,
     launcherSettings,
     updates: parseUpdates(data.updates),
+    deletion: { active: rawDeletion.active === true, id: String(rawDeletion.id || ''), name: String(rawDeletion.name || '') },
   };
 }
 export function acceptSnapshot(current: Snapshot, response: Snapshot, revision: number, requestedRevision: number): Snapshot {

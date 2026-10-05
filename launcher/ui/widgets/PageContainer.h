@@ -70,6 +70,7 @@ class PageContainer : public QWidget, public BasePageContainer {
      */
     bool prepareToClose();
     bool saveAll();
+    void setSavingEnabled(bool enabled) { m_savingEnabled = enabled; }
 
     /* request close - used by individual pages */
     bool requestClose() override
@@ -109,6 +110,7 @@ class PageContainer : public QWidget, public BasePageContainer {
 
    private:
     BasePageContainer* m_container = nullptr;
+    bool m_savingEnabled = true;
     BasePage* m_currentPage = 0;
     QSortFilterProxyModel* m_proxyModel;
     PageModel* m_model;

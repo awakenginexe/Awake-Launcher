@@ -4,6 +4,11 @@ import { normalizeLocale, catalogs } from '../src/i18n/catalogs.ts';
 import { presentInstances, parseSnapshot, emptySnapshot, acceptSnapshot, isLocalImage, ArtworkSequence } from '../src/features/library/model.ts';
 
 const make = (id: string, name: string, extra = {}) => ({ id, name, group: '', minecraftVersion: '', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, totalTimePlayed: 0, ...extra });
+test('snapshot retains deletion status even after the instance disappears from the library', () => {
+  const deletion = { active: true, id: 'removed', name: 'Removing instance' };
+  assert.deepEqual(parseSnapshot({ ...emptySnapshot(), deletion }).deletion, deletion);
+  assert.deepEqual(parseSnapshot({ ...emptySnapshot(), deletion: undefined }).deletion, { active: false, id: '', name: '' });
+});
 test('locale conventions and four complete independent catalogs', () => {
   for (const [input, expected] of [['en_US', 'en'], ['th_TH', 'th'], ['zh_CN', 'zh-CN'], ['zh-Hans', 'zh-CN'], ['zh_TW', 'zh-TW'], ['zh_Hant_HK', 'zh-TW'], ['fr_FR', 'en']]) assert.equal(normalizeLocale(input), expected);
   for (const catalog of Object.values(catalogs)) assert.deepEqual(Object.keys(catalog).sort(), Object.keys(catalogs.en).sort());

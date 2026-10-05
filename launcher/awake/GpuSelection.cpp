@@ -28,7 +28,7 @@ QString preferenceValue(const QString& existing, const QString& mode)
     if (mode != "automatic") fields.append(mode == "highPerformance" ? "GpuPreference=2" : "GpuPreference=1");
     return fields.isEmpty() ? QString() : fields.join(';') + ';';
 }
-QVariantMap settings()
+QVariantMap hardwareSettings()
 {
     QVariantList devices;
     QString powerSavingName, highPerformanceName;
@@ -57,8 +57,13 @@ QVariantMap settings()
     }
 #endif
     return {{"ok", true}, {"supported", supported}, {"devices", devices},
-            {"powerSavingName", powerSavingName}, {"highPerformanceName", highPerformanceName},
-            {"mode", APPLICATION->settings()->get("AwakeGpuPreference").toString()}};
+            {"powerSavingName", powerSavingName}, {"highPerformanceName", highPerformanceName}};
+}
+QVariantMap settings()
+{
+    auto result = hardwareSettings();
+    result.insert("mode", APPLICATION->settings()->get("AwakeGpuPreference").toString());
+    return result;
 }
 bool confirmBeforeLaunch(QWidget* parent)
 {

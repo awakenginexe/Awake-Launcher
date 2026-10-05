@@ -279,6 +279,7 @@ bool PageContainer::prepareToClose()
 
 bool PageContainer::saveAll()
 {
+    if (!m_savingEnabled) return false;
     for (auto* page : m_model->pages()) {
         if (!page->apply()) {
             return false;

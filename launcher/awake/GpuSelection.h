@@ -8,6 +8,7 @@ bool validMode(const QString& mode);
 bool needsPrompt(bool seen, int deviceCount);
 QString preferenceValue(const QString& existing, const QString& mode);
 QVariantMap settings();
+QVariantMap hardwareSettings();
 bool confirmBeforeLaunch(QWidget* parent);
 bool confirmBeforeLaunch(QWidget* parent, const QVariantMap& hardware);
 bool applyBeforeJava(const QString& javaPath, QString& error);

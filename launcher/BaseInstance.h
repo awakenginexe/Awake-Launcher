@@ -117,6 +117,8 @@ class BaseInstance : public QObject {
     void setMinecraftRunning(bool running);
     void setRunning(bool running);
     bool isRunning() const;
+    bool isDeleting() const { return m_isDeleting; }
+    void setDeleting(bool deleting);
     int64_t totalTimePlayed() const;
     int64_t lastTimePlayed() const;
     bool countTimePlayed() const;
@@ -298,6 +300,7 @@ class BaseInstance : public QObject {
     std::unique_ptr<SettingsObject> m_settings;
     // InstanceFlags m_flags;
     bool m_isRunning = false;
+    bool m_isDeleting = false;
     std::unique_ptr<LaunchTask> m_launchProcess;
     QDateTime m_timeStarted;
     RuntimeContext m_runtimeContext;

@@ -158,7 +158,11 @@ export function useLauncher() {
     lastRetry = () => run(method, args, timeout);
     try {
       if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
-      const result = await callNative(native, method, args, timeout) as { gpuChoiceRequired?: boolean; gpuSettings?: GpuSettings };
+      let result = await callNative(native, method, args, timeout) as { gpuDiscoveryRequired?: boolean; gpuChoiceRequired?: boolean; gpuSettings?: GpuSettings };
+      if (method === 'launchInstance' && result.gpuDiscoveryRequired) {
+        await queryCatalog('gpuSettings', []);
+        result = await callNative(native, method, args, timeout) as typeof result;
+      }
       if (method === 'launchInstance' && result.gpuChoiceRequired && result.gpuSettings) {
         gpuChoice.value = { id: String(args[0]), settings: result.gpuSettings };
       }
@@ -200,7 +204,7 @@ export function useLauncher() {
     return callNative(native, 'instanceCommand', [id, command, payload]);
   }
   const gpuService = {
-    settings: () => javaCall('gpuSettings', []),
+    settings: () => queryCatalog('gpuSettings', []),
     select: (mode: string) => javaCall('setGpuPreference', [mode]),
     openWindows: () => javaCall('openGpuSettings', []),
   };

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import type { GpuSettings } from '../features/library/hardware.ts';
 import { privateGpuName } from '../features/library/hardware.ts';
 import { useHardwarePrivacy } from '../composables/useHardwarePrivacy.ts';
 import HardwareVisibility from './HardwareVisibility.vue';
+import ThemedSelect from './ThemedSelect.vue';
 export interface GpuService {
   settings: () => Promise<unknown>;
   select: (mode: string) => Promise<unknown>;
@@ -17,6 +18,11 @@ const data = ref<GpuSettings | undefined>(props.initial);
 const working = ref(false);
 const error = ref('');
 const saved = ref(false);
+const options = computed(() => [
+  { value: 'automatic', label: props.t('gpuAutomatic') },
+  { value: 'powerSaving', label: props.t('gpuPowerSaving') + (data.value?.powerSavingName ? ` — ${privateGpuName(data.value.powerSavingName, gpuVisible.value)}` : '') },
+  { value: 'highPerformance', label: props.t('gpuHighPerformance') + (data.value?.highPerformanceName ? ` — ${privateGpuName(data.value.highPerformanceName, gpuVisible.value)}` : '') },
+]);
 async function run(mode?: string) {
   if (mode && props.deferred && data.value) {
     data.value = { ...data.value, mode };
@@ -40,13 +46,10 @@ onMounted(() => { if (!data.value) void run(); });
 <template>
   <div class="setting-block gpu-picker">
     <div class="hardware-label"><label for="gpu-preference">{{ t('gpuSelection') }}</label><HardwareVisibility :visible="gpuVisible" :label="t(gpuVisible ? 'hideGpu' : 'showGpu')" @toggle="gpuVisible = !gpuVisible" /></div>
+    <p v-if="working" class="setting-hint" role="status">{{ t('working') }}</p>
     <template v-if="data?.supported">
       <ul class="gpu-devices"><li v-for="(device, index) in data.devices" :key="index">{{ privateGpuName(device.name, gpuVisible) }}</li></ul>
-      <select id="gpu-preference" class="styled-input" :value="data.mode" :disabled="working" @change="run(($event.target as HTMLSelectElement).value)">
-        <option value="automatic">{{ t('gpuAutomatic') }}</option>
-        <option value="powerSaving">{{ t('gpuPowerSaving') }}{{ data.powerSavingName ? ` — ${privateGpuName(data.powerSavingName, gpuVisible)}` : '' }}</option>
-        <option value="highPerformance">{{ t('gpuHighPerformance') }}{{ data.highPerformanceName ? ` — ${privateGpuName(data.highPerformanceName, gpuVisible)}` : '' }}</option>
-      </select>
+      <ThemedSelect id="gpu-preference" :label="t('gpuSelection')" :model-value="data.mode" :options="options" :disabled="working" @update:model-value="run($event)" />
       <p class="setting-hint">{{ t('gpuGlobalHint') }}</p>
       <p class="setting-hint">{{ t('gpuWindowsHint') }}</p>
       <button class="quiet" type="button" @click="openWindows">{{ t('gpuWindowsSettings') }}</button>

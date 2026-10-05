@@ -172,6 +172,14 @@ InstanceWindow::InstanceWindow(MinecraftInstance* instance, QWidget* parent) : Q
     // set up instance destruction detection
     {
         connect(m_instance, &BaseInstance::statusChanged, this, &InstanceWindow::on_instanceStatusChanged);
+        const auto updateDeletion = [this] {
+            const bool deleting = m_instance->isDeleting();
+            m_container->setSavingEnabled(!deleting);
+            m_container->setEnabled(!deleting);
+            updateButtons();
+        };
+        connect(m_instance, &BaseInstance::propertiesChanged, this, updateDeletion);
+        updateDeletion();
     }
 
     // add ourself as the modpack page's instance window
@@ -243,6 +251,10 @@ void InstanceWindow::restartInstance()
 
 void InstanceWindow::closeEvent(QCloseEvent* event)
 {
+    if (!m_doNotSave && m_instance->isDeleting()) {
+        event->ignore();
+        return;
+    }
     bool proceed = true;
     if (!m_doNotSave) {
         proceed &= m_container->prepareToClose();
@@ -260,6 +272,7 @@ void InstanceWindow::closeEvent(QCloseEvent* event)
 
 bool InstanceWindow::saveAll()
 {
+    if (m_doNotSave || m_instance->isDeleting()) return false;
     return m_container->saveAll();
 }
 
@@ -285,6 +298,11 @@ BasePage* InstanceWindow::selectedPage() const
 
 bool InstanceWindow::requestClose()
 {
+    if (m_doNotSave) {
+        close();
+        return true;
+    }
+    if (m_instance->isDeleting()) return false;
     if (m_container->prepareToClose()) {
         close();
         return true;

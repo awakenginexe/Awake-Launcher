@@ -62,7 +62,7 @@ function openCreate(tab = 'custom') {
 const shown = computed(() => presentInstances(state.value.instances, query.value, group.value, pinnedOnly.value, state.value.sortMode, state.value.locale));
 const groups = computed(() => [...new Set(state.value.instances.map(i => i.group).filter(Boolean))].sort(new Intl.Collator(state.value.locale).compare));
 const filtered = computed(() => Boolean(query.value || group.value || pinnedOnly.value));
-const enabled = computed(() => status.value === 'ready' && !busy.value);
+const enabled = computed(() => status.value === 'ready' && !busy.value && !state.value.deletion.active);
 const selectedStatus = computed(() => selected.value?.running ? 'running' : selected.value?.broken ? 'broken' : selected.value?.canLaunch ? 'ready' : 'unavailable');
 const canPlay = computed(() => enabled.value && selected.value?.canLaunch && !selected.value.running && !selected.value.broken);
 const metadata = computed(() => [selected.value?.minecraftVersion ? `${t('minecraft')} ${selected.value.minecraftVersion}` : '', [selected.value?.loader, selected.value?.loaderVersion].filter(Boolean).join(' ')].filter(Boolean));
@@ -236,6 +236,7 @@ onUnmounted(() => {
     </aside>
 
     <section class="stage" :aria-label="t('selected')">
+      <div v-if="state.deletion.active" class="deletion-status notice" role="status" aria-live="polite"><strong>{{ t('deletingInstance') }}</strong><p>{{ state.deletion.name }}</p><progress :aria-label="t('deletingInstance')"></progress></div>
       <div v-if="status === 'error' && failure" class="connection-error notice" role="alert"><h1>{{ t('connectionTitle') }}</h1><p>{{ t(failure.code) }}</p><p v-if="failure.code === 'disconnected'" class="secondary">{{ t('openLauncher') }}</p><details><summary>{{ t('technicalDetails') }}</summary><pre>{{ failure.detail }}</pre></details><button @click="failure.retry">{{ t('retry') }}</button></div>
       <div v-else-if="status === 'ready' && !state.instances.length" class="empty-state"><h1>{{ t('emptyTitle') }}</h1><p class="secondary">{{ t('emptyBody') }}</p><div class="empty-actions"><button :disabled="!enabled" @click="openCreate('custom')">{{ t('create') }}</button><button :disabled="!enabled" @click="openCreate('import')">{{ t('import') }}</button></div></div>
       <p v-else-if="status === 'ready' && !selected" class="choose-instance">{{ t('choose') }}</p>

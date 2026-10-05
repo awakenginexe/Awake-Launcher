@@ -121,6 +121,10 @@ class InstanceList : public QAbstractListModel {
     bool trashedSomething() const;
     bool undoTrashInstance();
     void deleteInstance(const InstanceId& id);
+    bool removeInstance(const InstanceId& id, QString* error = nullptr);
+    bool isRemoving() const { return !m_removingId.isEmpty(); }
+    QString removingInstanceId() const { return m_removingId; }
+    QString removingInstanceName() const { return m_removingName; }
 
     // Wrap an instance creation task in some more task machinery and make it ready to be used
     Task* wrapInstanceTask(InstanceTask* task);
@@ -160,6 +164,8 @@ class InstanceList : public QAbstractListModel {
     void instancesChanged();
     void instanceSelectRequest(QString instanceId);
     void groupsChanged(QSet<QString> groups);
+    void removalStarted(QString id, QString name);
+    void removalFinished(QString id, QString error);
 
    public slots:
     void on_InstFolderChanged(const Setting& setting, const QVariant& value);
@@ -204,4 +210,6 @@ class InstanceList : public QAbstractListModel {
     bool m_instancesProbed = false;
 
     QStack<TrashHistoryItem> m_trashHistory;
+    Task::Ptr m_removalTask;
+    QString m_removingId, m_removingName;
 };

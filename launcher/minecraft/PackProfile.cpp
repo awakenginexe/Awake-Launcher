@@ -286,6 +286,7 @@ QString PackProfile::patchFilePathForUid(const QString& uid) const
 
 bool PackProfile::save_internal()
 {
+    if (d->m_instance->isDeleting()) return false;
     qDebug() << d->m_instance->name() << "|" << "Component list save performed now";
     auto filename = componentsFilePath();
     if (savePackProfile(filename, d->components)) {

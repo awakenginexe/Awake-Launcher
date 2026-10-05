@@ -2026,6 +2026,7 @@ void MainWindow::on_actionDeleteInstance_triggered()
     if (!m_selectedInstance) {
         return;
     }
+    if (APPLICATION->instances()->isRemoving()) return;
 
     if (m_selectedInstance->isRunning()) {
         CustomMessageBox::selectable(this, tr("Cannot Delete Running Instance"),
@@ -2081,13 +2082,19 @@ void MainWindow::on_actionDeleteInstance_triggered()
     if (!checkLinkedInstances(id, this, tr("Deleting")))
         return;
 
-    if (APPLICATION->instances()->trashInstance(id)) {
-        ui->actionUndoTrashInstance->setEnabled(APPLICATION->instances()->trashedSomething());
-    } else {
-        APPLICATION->instances()->deleteInstance(id);
+    QString error;
+    if (!APPLICATION->instances()->removeInstance(id, &error)) {
+        CustomMessageBox::selectable(this, tr("Error"), error, QMessageBox::Critical)->show();
+        return;
     }
-    APPLICATION->settings()->set("SelectedInstance", QString());
-    selectionBad();
+    statusBar()->showMessage(tr("Deleting instance…"));
+    connect(APPLICATION->instances(), &InstanceList::removalFinished, this, [this](const QString&, const QString& error) {
+        statusBar()->clearMessage();
+        ui->actionUndoTrashInstance->setEnabled(APPLICATION->instances()->trashedSomething());
+        refreshCurrentInstance();
+        if (!error.isEmpty() && !m_webMode)
+            CustomMessageBox::selectable(this, tr("Error"), error, QMessageBox::Critical)->show();
+    }, Qt::SingleShotConnection);
 }
 
 void MainWindow::on_actionExportInstanceZip_triggered()
@@ -2150,6 +2157,10 @@ void MainWindow::on_actionViewSelectedInstFolder_triggered()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (APPLICATION->instances()->isRemoving()) {
+        event->ignore();
+        return;
+    }
 #ifdef AWAKE_WEB_ENABLED
     if (m_webShell) {
         m_webShell->shutdown();
@@ -2258,7 +2269,7 @@ void MainWindow::instanceChanged(const QModelIndex& current, [[maybe_unused]] co
         ui->actionLaunchInstance->setEnabled(m_selectedInstance->canLaunch());
 
         ui->actionKillInstance->setEnabled(m_selectedInstance->isRunning());
-        ui->actionExportInstance->setEnabled(m_selectedInstance->canExport());
+        ui->actionExportInstance->setEnabled(m_selectedInstance->canExport() && !m_selectedInstance->isDeleting());
         renameButton->setText(m_selectedInstance->name());
         m_statusLeft->setText(m_selectedInstance->getStatusbarDescription());
         updateStatusCenter();
@@ -2384,6 +2395,7 @@ void MainWindow::updateLibraryDetails()
 // Actions that also require other conditions (e.g. a running instance) won't be changed.
 void MainWindow::setInstanceActionsEnabled(bool enabled)
 {
+    enabled = enabled && m_selectedInstance && !m_selectedInstance->isDeleting();
     ui->actionLaunchInstance->setEnabled(enabled);
     ui->actionKillInstance->setEnabled(enabled);
     ui->actionRenameInstance->setEnabled(enabled);

@@ -124,9 +124,9 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v0.4.0 adds Compatible, Balanced, Performance, and Custom JVM presets globally and per instance. Instances inherit the global preset unless overridden. Custom arguments are preserved when switching presets; memory controls continue to set heap limits. Balanced and Performance apply G1 tuning only on supported 64-bit HotSpot Java. Performance targets shorter GC pauses and may use more CPU; Minecraft FPS gains have not been benchmarked.
+          Awake Launcher v0.5.0 styles the global and instance JVM preset menus and GPU preference menus to match the app. Menus support keyboard navigation, selected-item checks, and positioning inside the window.
 
-          The GPU chooser now appears inside the launcher before Minecraft starts. Eye toggles hide GPU model names and installed RAM by default, including GPU preference dropdowns.
+          Instance deletion runs outside the UI thread with a visible deleting status and indeterminate progress bar. Running instances cannot be deleted, and deletion failures are reported. Settings tabs keep their loaded controls; GPU discovery runs in a worker and is reused instead of querying Windows again on each tab switch or preference save.
 
           Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
 

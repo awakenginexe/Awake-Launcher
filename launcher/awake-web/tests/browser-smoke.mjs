@@ -14,16 +14,21 @@ const fixture = `(() => {
   const count = Number(options.get('count') ?? 50);
   const state = { instances: Array.from({length: count}, (_, i) => ({id: 'fixture-' + i, name: 'Test fixture ' + String(i).padStart(2, '0'), group: i % 2 ? 'Test group' : '', minecraftVersion: '1.21.1', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, totalTimePlayed: 0})), selectedId: count ? 'fixture-0' : '', locale: options.get('locale') || 'en_US', reducedMotion: false, compact: false, sortMode: 'Name', accountName: '' };
   state.totalMemoryMb = Number(options.get('ram') || 32768);
-  state.launcherSettings = {maxMem:8192,minMem:512,jvmPreset:'balanced',jvmArgs:'',version:'0.4.0'};
-  state.updates = {status: options.get('updateStatus') || 'idle', currentVersion:'0.3.0', latestVersion:'0.4.0', notes:'Browser test fixture: improved launcher updates. <script>window.__unsafeNotes = true</script>', error:'Network error fixture', automatic:true, portable:options.has('portable'), presentation:options.has('updates') ? 1 : 0, setupUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.4.0/Awake-Launcher-v0.4.0-Windows-x64-Setup.exe', portableUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.4.0/Awake-Launcher-v0.4.0-Windows-x64.zip', releaseUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/tag/v0.4.0'};
+  state.deletion = {active:options.has('deleting'),id:'fixture-0',name:'Deleting fixture instance'};
+  state.launcherSettings = {maxMem:8192,minMem:512,jvmPreset:'balanced',jvmArgs:'',version:'0.5.0'};
+  state.updates = {status: options.get('updateStatus') || 'idle', currentVersion:'0.3.0', latestVersion:'0.5.0', notes:'Browser test fixture: improved launcher updates. <script>window.__unsafeNotes = true</script>', error:'Network error fixture', automatic:true, portable:options.has('portable'), presentation:options.has('updates') ? 1 : 0, setupUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.5.0/Awake-Launcher-v0.5.0-Windows-x64-Setup.exe', portableUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.5.0/Awake-Launcher-v0.5.0-Windows-x64.zip', releaseUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/tag/v0.5.0'};
   const host = {
     openUpdateDownload(kind, cb) { window.__nativeTest.calls.push(['openUpdateDownload',kind]); cb({ok:true}); },
     setAutomaticUpdates(enabled, cb) { state.updates.automatic = enabled; this.stateChanged.emit(structuredClone(state)); cb({ok:true}); },
     acknowledgeUpdateNotification(cb) { window.__nativeTest.calls.push(['acknowledgeUpdateNotification']); cb({ok:true}); },
-    gpuSettings(cb) { cb({ok:true,supported:true,mode:state.gpuMode || 'automatic',devices:[{name:'NVIDIA GeForce RTX 3070 Ti'},{name:'Intel UHD Graphics 770'}].slice(0,Number(options.get('gpuCount') || 2)),powerSavingName:'Intel UHD Graphics 770',highPerformanceName:'NVIDIA GeForce RTX 3070 Ti'}); },
+    gpuSettings(request, cb) {
+      const result = {ok:true,supported:true,mode:state.gpuMode || 'automatic',devices:[{name:'NVIDIA GeForce RTX 3070 Ti'},{name:'Intel UHD Graphics 770'}].slice(0,Number(options.get('gpuCount') || 2)),powerSavingName:'Intel UHD Graphics 770',highPerformanceName:'NVIDIA GeForce RTX 3070 Ti'};
+      if (typeof request === 'function') request(result);
+      else { window.__nativeTest.calls.push(['gpuSettings',request]); cb({ok:true}); queueMicrotask(() => { state.gpuReady=true; this.catalogFinished.emit(request,result); }); }
+    },
     setGpuPreference(mode, cb) { if (state.failGpuSave) { cb({ok:false,error:'GPU save failure fixture'}); return; } state.gpuMode = mode; state.gpuSeen = true; window.__nativeTest.calls.push(['setGpuPreference',mode]); this.gpuSettings(cb); },
     openGpuSettings(cb) { window.__nativeTest.calls.push(['openGpuSettings']); cb({ok:true}); },
-    javaSettings(id, cb) { cb(structuredClone(id ? window.__nativeTest.instanceJava : window.__nativeTest.globalJava)); },
+    javaSettings(id, cb) { window.__nativeTest.calls.push(['javaSettings',id]); cb(structuredClone(id ? window.__nativeTest.instanceJava : window.__nativeTest.globalJava)); },
     setJavaProfile(id, profile, cb) {
       window.__nativeTest.calls.push(['setJavaProfile', id, profile]);
       const data = id ? window.__nativeTest.instanceJava : window.__nativeTest.globalJava;
@@ -59,7 +64,7 @@ const fixture = `(() => {
     snapshot(cb) { cb(structuredClone(state)); },
     frontendReady(cb) { this.artworkChanged.emit(state.selectedId, '', ''); cb(); },
     selectInstance(id, cb) { state.selectedId = id; this.stateChanged.emit(structuredClone(state)); this.artworkChanged.emit(id, '', ''); cb({ok:true}); },
-    launchInstance(id, cb) { if (options.has('gpuPrompt') && !state.gpuSeen && Number(options.get('gpuCount') || 2) > 1) { this.gpuSettings(gpuSettings => cb({ok:true,gpuChoiceRequired:true,gpuSettings})); return; } window.__nativeTest.calls.push(['launch', id]); cb({ok:true}); },
+    launchInstance(id, cb) { if (options.has('gpuDiscovery') && !state.gpuReady && !state.gpuSeen) { cb({ok:true,gpuDiscoveryRequired:true}); return; } if (options.has('gpuPrompt') && !state.gpuSeen && Number(options.get('gpuCount') || 2) > 1) { this.gpuSettings(gpuSettings => cb({ok:true,gpuChoiceRequired:true,gpuSettings})); return; } window.__nativeTest.calls.push(['launch', id]); cb({ok:true}); },
     invokeAction(action, id, cb) { window.__nativeTest.calls.push([action, id]); if (action === 'checkForUpdates') { state.updates.presentation++; state.updates.status = 'checking'; this.stateChanged.emit(structuredClone(state)); setTimeout(() => {state.updates.status = 'upToDate'; this.stateChanged.emit(structuredClone(state));}, 200); } cb({ok:true}); },
     setPreference(key, value, cb) {
       window.__nativeTest.calls.push(['preference', key, value]);
@@ -97,11 +102,15 @@ const output = resolve(process.env.AWAKE_TEST_OUTPUT || '.test-output');
 await mkdir(output, { recursive: true });
 const errors = [];
 const requests = [];
+async function chooseDropdown(page, id, value) {
+  await page.locator(`#${id}`).click();
+  await page.locator(`#${id}-listbox [data-value="${value}"]`).click();
+}
 try {
   for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
     const page = await browser.newPage({viewport:{width:1100,height:750}});
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`${origin}/?gpuPrompt=1&locale=${locale}`);
+    await page.goto(`${origin}/?gpuPrompt=1&gpuDiscovery=1&locale=${locale}`);
     await page.locator('#play:not(:disabled)').waitFor();
     await page.locator('#play').click();
     await page.locator('.gpu-launch-dialog').waitFor();
@@ -110,20 +119,22 @@ try {
     assert.equal(await page.evaluate(() => document.activeElement.matches('.gpu-launch-dialog .modal-close-btn')), true);
     await page.keyboard.press('Shift+Tab');
     assert.equal(await page.evaluate(() => document.activeElement.matches('.gpu-launch-dialog .btn-primary')), true);
-    await page.locator('#gpu-preference').selectOption('highPerformance');
+    await chooseDropdown(page, 'gpu-preference', 'highPerformance');
     assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.filter(call => ['launch','setGpuPreference'].includes(call[0]))), []);
     await page.keyboard.press('Escape');
     await page.locator('.gpu-launch-dialog').waitFor({state:'detached'});
     assert.equal(await page.locator('#play').evaluate(el => el === document.activeElement), true);
     await page.locator('#play').click();
     await page.locator('.gpu-launch-dialog').waitFor();
-    assert.equal(await page.locator('#gpu-preference').inputValue(), 'automatic');
+    assert.equal(await page.locator('#gpu-preference').getAttribute('value'), 'automatic');
     await page.locator('.gpu-launch-dialog .hardware-visibility').click();
     assert.equal(await page.locator('.gpu-devices li').first().textContent(), 'NVIDIA GeForce RTX 3070 Ti');
-    assert.equal(await page.locator('#gpu-preference').textContent().then(text => text.includes('3070')), true);
+    await page.locator('#gpu-preference').click();
+    assert.equal(await page.locator('#gpu-preference-listbox').textContent().then(text => text.includes('3070')), true);
+    await page.keyboard.press('Escape');
     await page.locator('.hardware-visibility').click();
     await page.screenshot({path:resolve(output, `gpu-launch-private-${locale}.png`)});
-    await page.locator('#gpu-preference').selectOption('highPerformance');
+    await chooseDropdown(page, 'gpu-preference', 'highPerformance');
     await page.evaluate(() => { window.__nativeTest.state.failGpuSave = true; });
     await page.locator('.gpu-launch-dialog .btn-primary').click();
     await page.locator('.gpu-launch-dialog [role=alert]').waitFor();
@@ -137,19 +148,39 @@ try {
     assert.equal(await page.locator('.gpu-launch-dialog').count(), 0);
     await page.locator('.account-actions .settings-button').click();
     await page.locator('.settings-tab-btn').nth(1).click();
-    assert.equal(await page.locator('#global-jvm-preset').inputValue(), 'balanced');
+    assert.equal(await page.locator('#global-jvm-preset').getAttribute('value'), 'balanced');
+    await page.locator('#global-jvm-preset').click();
+    const menu = page.locator('#global-jvm-preset-listbox');
+    await menu.waitFor();
+    assert.equal(await menu.locator('[role=option]').count(), 4);
+    assert.equal(await menu.locator('[aria-selected=true]').getAttribute('data-value'), 'balanced');
+    const box = await menu.boundingBox();
+    assert.ok(box.y >= 0 && box.y + box.height <= 750, 'Dropdown fits the window');
+    assert.equal(await menu.evaluate(el => getComputedStyle(el).position), 'fixed');
+    await page.screenshot({path:resolve(output, `jvm-dropdown-${locale}.png`),animations:'disabled'});
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.__nativeTest.state.launcherSettings.jvmPreset === 'performance');
+    assert.equal(await page.locator('#global-jvm-preset').getAttribute('aria-expanded'), 'false');
+    await page.locator('#global-jvm-preset').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.settings-dialog').count(), 1);
+    assert.equal(await page.locator('#global-jvm-preset').evaluate(el => el === document.activeElement), true);
+    await page.locator('#global-jvm-preset').click();
+    await page.locator('.settings-dialog .modal-header h2').click();
+    assert.equal(await page.locator('#global-jvm-preset').getAttribute('aria-expanded'), 'false');
     assert.equal(await page.locator('#global-jvm-args').isDisabled(), true);
     for (const preset of ['compatible','performance','custom']) {
-      await page.locator('#global-jvm-preset').selectOption(preset);
+      await chooseDropdown(page, 'global-jvm-preset', preset);
       await page.waitForFunction(p => window.__nativeTest.state.launcherSettings.jvmPreset === p, preset);
     }
     await page.locator('#global-jvm-args').fill('-Dawake.global=true', {timeout:1000});
     await page.locator('#global-jvm-args').press('Tab');
     await page.waitForFunction(() => window.__nativeTest.state.launcherSettings.jvmArgs === '-Dawake.global=true');
-    await page.locator('#global-jvm-preset').selectOption('balanced');
+    await chooseDropdown(page, 'global-jvm-preset', 'balanced');
     assert.equal(await page.locator('#global-jvm-args').isDisabled(), true);
     assert.equal(await page.locator('#global-jvm-args').inputValue(), '-Dawake.global=true');
-    await page.locator('#global-jvm-preset').selectOption('custom');
+    await chooseDropdown(page, 'global-jvm-preset', 'custom');
     await page.waitForFunction(() => window.__nativeTest.state.launcherSettings.jvmPreset === 'custom');
     assert.equal(await page.locator('.installed-ram').textContent().then(text => text.includes('----- GB')), true);
     await page.locator('.ram-hint .hardware-visibility').click();
@@ -162,27 +193,33 @@ try {
     assert.equal(await page.locator('.gpu-devices li').first().textContent(), 'NVIDIA GeForce RTX 3070 Ti');
     await page.locator('.gpu-picker .hardware-visibility').click();
     await page.screenshot({path:resolve(output, `gpu-settings-private-${locale}.png`)});
+    const settingsCalls = await page.evaluate(() => window.__nativeTest.calls.filter(call => ['gpuSettings','javaSettings'].includes(call[0])).length);
+    for (let repeat = 0; repeat < 4; repeat++) {
+      for (const index of [0,1,2,3]) await page.locator('.settings-tab-btn').nth(index).click();
+    }
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => ['gpuSettings','javaSettings'].includes(call[0])).length), settingsCalls, 'Tab switching reuses Java and GPU settings');
     await page.keyboard.press('Escape');
     await page.locator('.instance-row').first().click({button:'right'});
     await page.locator('.instance-context-menu button').nth(1).click();
     await page.locator('[data-section=settings]').click();
     await page.locator('#instance-jvm-args').waitFor();
     assert.equal(await page.locator('#instance-jvm-args').isDisabled(), true);
+    assert.equal(await page.locator('#instance-jvm-preset').isDisabled(), true);
     await page.locator('.editor-settings fieldset').last().locator('input[type=checkbox]').uncheck();
-    await page.locator('#instance-jvm-preset').selectOption('custom');
+    await chooseDropdown(page, 'instance-jvm-preset', 'custom');
     await page.locator('#instance-jvm-args').fill('-Dawake.instance=true');
     await page.locator('.editor-settings .editor-save').click();
     await page.waitForFunction(() => window.__nativeTest.editor.settings.jvmArgs === '-Dawake.instance=true');
     assert.equal(await page.evaluate(() => window.__nativeTest.editor.settings.useGlobalJvmArgs), false);
     assert.equal(await page.evaluate(() => window.__nativeTest.state.launcherSettings.jvmArgs), '-Dawake.global=true');
     for (const preset of ['compatible','balanced','performance']) {
-      await page.locator('#instance-jvm-preset').selectOption(preset);
+      await chooseDropdown(page, 'instance-jvm-preset', preset);
       await page.locator('.editor-settings .editor-save').click();
       await page.waitForFunction(p => window.__nativeTest.editor.settings.jvmPreset === p, preset);
       assert.equal(await page.locator('#instance-jvm-args').isDisabled(), true);
       assert.equal(await page.locator('#instance-jvm-args').inputValue(), '-Dawake.instance=true');
     }
-    await page.locator('#instance-jvm-preset').selectOption('custom');
+    await chooseDropdown(page, 'instance-jvm-preset', 'custom');
     await page.locator('.editor-settings .editor-save').click();
     await page.waitForFunction(() => window.__nativeTest.editor.settings.jvmPreset === 'custom');
     assert.equal(await page.locator('#instance-jvm-args').isEnabled(), true);
@@ -191,12 +228,25 @@ try {
     await page.waitForFunction(() => window.__nativeTest.editor.settings.useGlobalJvmArgs);
     assert.equal(await page.locator('#instance-jvm-args').inputValue(), '-Dawake.global=true');
     await page.locator('.editor-settings fieldset').last().locator('input[type=checkbox]').uncheck();
-    assert.equal(await page.locator('#instance-jvm-preset').inputValue(), 'custom');
+    assert.equal(await page.locator('#instance-jvm-preset').getAttribute('value'), 'custom');
     assert.equal(await page.locator('#instance-jvm-args').inputValue(), '-Dawake.instance=true');
     await page.locator('.editor-settings .editor-save').click();
     await page.waitForFunction(() => !window.__nativeTest.editor.settings.useGlobalJvmArgs);
     assert.equal(await page.evaluate(() => window.__nativeTest.editor.settings.jvmArgs), '-Dawake.instance=true');
     await page.screenshot({path:resolve(output, `jvm-instance-${locale}.png`)});
+    await page.close();
+  }
+  {
+    const page = await browser.newPage({viewport:{width:1100,height:750}});
+    await page.goto(`${origin}/?deleting`);
+    await page.locator('.deletion-status[role=status]').waitFor();
+    assert.equal(await page.locator('.deletion-status p').textContent(), 'Deleting fixture instance');
+    assert.equal(await page.locator('.deletion-status progress').getAttribute('value'), null);
+    assert.equal(await page.locator('#play').isDisabled(), true);
+    await page.screenshot({path:resolve(output, 'deleting-instance.png')});
+    await page.evaluate(() => { window.__nativeTest.state.deletion.active=false; window.__nativeTest.host.stateChanged.emit(structuredClone(window.__nativeTest.state)); });
+    await page.locator('.deletion-status').waitFor({state:'detached'});
+    assert.equal(await page.locator('#play').isEnabled(), true);
     await page.close();
   }
   for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
@@ -480,7 +530,7 @@ try {
     await page.locator('.settings-tab-btn').nth(2).click();
     await page.locator('#gpu-preference').waitFor();
     assert.equal(await page.locator('.gpu-devices li').count(), 2);
-    await page.locator('#gpu-preference').selectOption('highPerformance');
+    await chooseDropdown(page, 'gpu-preference', 'highPerformance');
     await page.waitForFunction(() => window.__nativeTest.state.gpuMode === 'highPerformance');
     assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.at(-1)), ['setGpuPreference','highPerformance']);
     await page.screenshot({path:resolve(output, `gpu-global-${locale}.png`)});

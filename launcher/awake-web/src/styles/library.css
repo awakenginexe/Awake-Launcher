@@ -761,6 +761,8 @@ p, h1, h2, h3 { margin: 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-family: Consolas, monospace; max-height: 140px; overflow-y: auto; user-select: text; }
 .operation-error { color: var(--text-primary); }
 .operation-error > strong { color: var(--error); }
+.deletion-status { color: var(--text-primary); margin-bottom: var(--space-4); }
+.deletion-status progress { width: 100%; accent-color: var(--accent); }
 .connection-error { align-self: start; max-width: 520px; margin: auto; }
 
 .skip-link {

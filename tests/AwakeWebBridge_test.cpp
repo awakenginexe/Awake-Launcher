@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QBuffer>
+#include <QCloseEvent>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -18,6 +19,7 @@
 #include <QLabel>
 #include <QCryptographicHash>
 #include <QTimer>
+#include <QThread>
 #include <QComboBox>
 #include <QPlainTextEdit>
 #include <QGroupBox>
@@ -43,6 +45,10 @@
 #include "settings/SettingsObject.h"
 #include "translations/TranslationsModel.h"
 #include "ui/MainWindow.h"
+#include "ui/InstanceWindow.h"
+#include "ui/widgets/PageContainer.h"
+#include "minecraft/PackProfile.h"
+#include "minecraft/Component.h"
 #include "ui/widgets/JavaSettingsWidget.h"
 #include "ui/dialogs/BlockedModsDialog.h"
 #include "ui/dialogs/AwakePopupDialog.h"
@@ -65,6 +71,181 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void deletingInstanceReturnsToTheEventLoopAndPublishesStatus()
+    {
+        auto* instances = APPLICATION->instances();
+        const QString id = "async-delete-fixture";
+        const auto path = instances->primaryDir() + "/" + id;
+        QVERIFY(QDir().mkpath(path));
+        QFile config(path + "/instance.cfg");
+        QVERIFY(config.open(QIODevice::WriteOnly));
+        config.write("InstanceType=OneSix\nname=Async delete fixture\niconKey=grass\n");
+        config.close();
+        QFile pack(path + "/mmc-pack.json");
+        QVERIFY(pack.open(QIODevice::WriteOnly));
+        pack.write(R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.21.8","important":true},{"uid":"net.fabricmc.fabric-loader","version":"0.16.14"}]})");
+        pack.close();
+        instances->loadList();
+        QVERIFY(instances->getInstanceById(id));
+        instances->setInstanceGroup(id, "Deletion fixture group");
+        QPointer<InstanceWindow> editor = new InstanceWindow(instances->getInstanceById(id));
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* window = APPLICATION->showMainWindow();
+        QVERIFY(window);
+        QVERIFY(QMetaObject::invokeMethod(window, "instanceSelectRequest", Qt::DirectConnection, Q_ARG(QString, id)));
+        QTimer confirmation;
+        confirmation.setInterval(10);
+        connect(&confirmation, &QTimer::timeout, this, [] {
+            if (auto* dialog = QApplication::activeModalWidget(); dialog && dialog->objectName() == "awakeDeleteConfirmation")
+                if (auto* button = dialog->findChild<QPushButton*>("deleteInstance")) button->click();
+        });
+        confirmation.start();
+        QVERIFY(QMetaObject::invokeMethod(window, "on_actionDeleteInstance_triggered", Qt::DirectConnection));
+        confirmation.stop();
+        const auto deletion = bridge.snapshot().value("deletion").toMap();
+        QVERIFY2(deletion.value("active").toBool(), "Deletion must remain asynchronous after confirmation returns");
+        QCOMPARE(deletion.value("id").toString(), id);
+        QCOMPARE(deletion.value("name").toString(), QString("Async delete fixture"));
+        QVERIFY(instances->getInstanceById(id));
+        QVERIFY(!instances->getInstanceById(id)->canLaunch());
+        QVERIFY(editor);
+        QVERIFY(!editor->saveAll());
+        instances->getInstanceById(id)->settings()->set("notes", "Never flush to the removed root");
+        bool eventLoopRan = false;
+        QTimer::singleShot(0, this, [&] { eventLoopRan = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.snapshot().value("deletion").toMap().value("active").toBool(), 15000);
+        QVERIFY(eventLoopRan);
+        QVERIFY(!QFileInfo::exists(path));
+        QVERIFY(!instances->getInstanceById(id));
+        QTRY_VERIFY(editor.isNull());
+        QVERIFY(!QFileInfo::exists(path));
+        if (instances->trashedSomething()) QVERIFY(instances->undoTrashInstance());
+        QVERIFY(QDir(path).removeRecursively());
+        instances->loadList();
+    }
+    void failedDeletionPreservesTheInstanceGroupAndReportsTheError()
+    {
+#ifdef Q_OS_WIN
+        auto* instances = APPLICATION->instances();
+        const QString id = "locked-delete-fixture";
+        const auto path = instances->primaryDir() + "/" + id;
+        QVERIFY(QDir().mkpath(path));
+        QFile config(path + "/instance.cfg");
+        QVERIFY(config.open(QIODevice::WriteOnly));
+        config.write("InstanceType=OneSix\nname=Locked delete fixture\niconKey=grass\n");
+        config.close();
+        QFile pack(path + "/mmc-pack.json");
+        QVERIFY(pack.open(QIODevice::WriteOnly));
+        pack.write(R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.21.8","important":true},{"uid":"net.fabricmc.fabric-loader","version":"0.16.14"}]})");
+        pack.close();
+        const auto world = path + "/.minecraft/saves/Keep World";
+        QVERIFY(QDir().mkpath(world));
+        const QByteArray lockedContent("Locked world fixture data");
+        const QByteArray preservedContent("World fixture data to preserve");
+        QFile lockedPayload(world + "/z-locked-level.dat");
+        QVERIFY(lockedPayload.open(QIODevice::WriteOnly));
+        lockedPayload.write(lockedContent);
+        lockedPayload.close();
+        QFile preservedPayload(world + "/a-preserved-region.dat");
+        QVERIFY(preservedPayload.open(QIODevice::WriteOnly));
+        preservedPayload.write(preservedContent);
+        preservedPayload.close();
+        instances->loadList();
+        auto* instance = instances->getInstanceById(id);
+        QVERIFY(instance);
+        instances->setInstanceGroup(id, "Keep this group");
+        instance->setRunning(true);
+        QString error;
+        QVERIFY(!instances->removeInstance(id, &error));
+        QVERIFY(!error.isEmpty());
+        instance->setRunning(false);
+        QPointer<InstanceWindow> editor = new InstanceWindow(instance);
+        auto* pages = editor->findChild<PageContainer*>();
+        QVERIFY(pages);
+        QVERIFY(pages->isEnabled());
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        const auto originalConfig = config.readAll();
+        config.close();
+        const auto previousSelection = APPLICATION->settings()->get("SelectedInstance");
+        APPLICATION->settings()->set("SelectedInstance", id);
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        QSignalSpy failures(&bridge, &Bridge::operationFailed);
+        const auto nativePath = QDir::toNativeSeparators(world + "/z-locked-level.dat").toStdWString();
+        const HANDLE handle = CreateFileW(nativePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        QVERIFY(handle != INVALID_HANDLE_VALUE);
+        auto closeHandle = [](void* value) { CloseHandle(value); };
+        std::unique_ptr<void, decltype(closeHandle)> locked(handle, closeHandle);
+        QVERIFY(instances->removeInstance(id, &error));
+        QVERIFY(pack.open(QIODevice::ReadOnly));
+        const auto originalPack = pack.readAll();
+        pack.close();
+        QVERIFY(!pages->isEnabled());
+        QVERIFY(!editor->saveAll());
+        QVERIFY(!pages->saveAll());
+        QVERIFY(!pages->prepareToClose());
+        QVERIFY(!editor->requestClose());
+        QCloseEvent closeEvent;
+        QApplication::sendEvent(editor, &closeEvent);
+        QVERIFY(!closeEvent.isAccepted());
+        instance->settings()->set("notes", "Deferred while deleting");
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        QCOMPARE(config.readAll(), originalConfig);
+        config.close();
+        auto component = instance->getPackProfile()->getComponent("net.minecraft");
+        QVERIFY(component);
+        component->m_version = "1.21.9";
+        instance->getPackProfile()->buildingFromScratch();
+        instance->getPackProfile()->saveNow();
+        QVERIFY(pack.open(QIODevice::ReadOnly));
+        QCOMPARE(pack.readAll(), originalPack);
+        pack.close();
+        QVERIFY(!instances->removeInstance(id, &error));
+        QVERIFY(!error.isEmpty());
+        QVERIFY(!bridge.launchInstance(id).value("ok").toBool());
+        failures.clear();
+        QTRY_VERIFY_WITH_TIMEOUT(!instances->isRemoving(), 15000);
+        QVERIFY(QFileInfo::exists(path + "/instance.cfg"));
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        QVERIFY(config.readAll().contains("InstanceType=OneSix"));
+        config.close();
+        QVERIFY(lockedPayload.open(QIODevice::ReadOnly));
+        QCOMPARE(lockedPayload.readAll(), lockedContent);
+        lockedPayload.close();
+        QVERIFY(preservedPayload.open(QIODevice::ReadOnly));
+        QCOMPARE(preservedPayload.readAll(), preservedContent);
+        preservedPayload.close();
+        QVERIFY(instances->getInstanceById(id));
+        QVERIFY(!instances->getInstanceById(id)->isDeleting());
+        QVERIFY(editor);
+        QVERIFY(pages->isEnabled());
+        QVERIFY(QFileInfo::exists(path + "/mmc-pack.json"));
+        QVERIFY(pack.open(QIODevice::ReadOnly));
+        QVERIFY(pack.readAll().contains("1.21.9"));
+        pack.close();
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        QVERIFY(config.readAll().contains("Deferred while deleting"));
+        config.close();
+        instance->settings()->set("notes", "Settings save recovered");
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        QVERIFY(config.readAll().contains("Settings save recovered"));
+        config.close();
+        QCOMPARE(instances->getInstanceGroup(id), QString("Keep this group"));
+        QCOMPARE(APPLICATION->settings()->get("SelectedInstance").toString(), id);
+        QCOMPARE(failures.count(), 1);
+        QCOMPARE(failures.first().first().toString(), QString("delete"));
+        QVERIFY(!failures.first().at(1).toString().isEmpty());
+        locked.reset();
+        editor->close();
+        QTRY_VERIFY(editor.isNull());
+        APPLICATION->settings()->set("SelectedInstance", previousSelection);
+        QVERIFY(QDir(path).removeRecursively());
+        instances->loadList();
+#else
+        QSKIP("Windows file-sharing lock regression");
+#endif
+    }
     void gpuChoiceIsSavedOnceAndCancelDoesNotChangeIt() {
         auto* config = APPLICATION->settings();
         const auto previousMode = config->get("AwakeGpuPreference");
@@ -130,6 +311,42 @@ private slots:
         config->set("AwakeGpuPreference", previousMode);
         config->set("AwakeGpuChoiceSeen", previousSeen);
 #endif
+    }
+    void deletingInstancesRejectJavaChanges()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        const auto previous = instance->settings()->get("AwakeJavaProfile");
+        instance->setDeleting(true);
+        QVERIFY(!bridge.setJavaProfile("one", "oracle").value("ok").toBool());
+        QVERIFY(!bridge.browseJava("delete-guard", "one").value("ok").toBool());
+        QCOMPARE(instance->settings()->get("AwakeJavaProfile"), previous);
+        instance->setDeleting(false);
+    }
+    void gpuDiscoveryRunsOffUiThreadAndIsReused()
+    {
+        Assets assets;
+        std::atomic_int detections{0};
+        std::atomic_bool release{false};
+        auto detector = [&] {
+            ++detections;
+            while (!release.load()) QThread::msleep(1);
+            return QVariantMap{{"ok", true}, {"supported", true}, {"devices", QVariantList{QVariantMap{{"name", "GPU fixture"}}}}};
+        };
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; }, nullptr, detector);
+        QSignalSpy replies(&bridge, &Bridge::catalogFinished);
+        QVERIFY(bridge.gpuSettings("gpu-one").value("ok").toBool());
+        bool uiResponsive = false;
+        QTimer::singleShot(0, &bridge, [&] { uiResponsive = true; release.store(true); });
+        QTRY_COMPARE(replies.size(), 1);
+        QVERIFY(uiResponsive);
+        QCOMPARE(detections.load(), 1);
+        QVERIFY(bridge.gpuSettings("gpu-two").value("ok").toBool());
+        QTRY_COMPARE(replies.size(), 2);
+        QCOMPARE(detections.load(), 1);
+        QVERIFY(bridge.setGpuPreference("automatic").value("ok").toBool());
+        QCOMPARE(detections.load(), 1);
     }
     void globalGpuPolicyPreservesOtherGraphicsSettings() {
         using namespace Awake::Gpu;
@@ -601,6 +818,7 @@ private slots:
         QTRY_COMPARE(actions, 1);
         const auto previousSeen = APPLICATION->settings()->get("AwakeGpuChoiceSeen");
         APPLICATION->settings()->set("AwakeGpuChoiceSeen", false);
+        QTRY_VERIFY(!bridge.gpuSettings().value("loading").toBool());
         const auto gpu = bridge.gpuSettings();
         if (gpu.value("supported").toBool() && gpu.value("devices").toList().size() > 1) {
             QVERIFY(bridge.launchInstance("one").value("gpuChoiceRequired").toBool());

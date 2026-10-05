@@ -22,7 +22,8 @@ class Bridge final : public QObject {
 public:
     using Select = std::function<bool(const QString&)>;
     using Action = std::function<QVariantMap(const QString&, const QString&)>;
-    Bridge(Assets* assets, Select select, Action action, QObject* parent = nullptr);
+    using GpuDetector = std::function<QVariantMap()>;
+    Bridge(Assets* assets, Select select, Action action, QObject* parent = nullptr, GpuDetector gpuDetector = {});
     ~Bridge() override;
     void scheduleState();
     void setActive(bool active);
@@ -42,7 +43,7 @@ public:
     Q_INVOKABLE QVariantMap instanceDetails(const QString& id, const QString& section);
     Q_INVOKABLE QVariantMap instanceCommand(const QString& id, const QString& command, const QVariant& payload);
     Q_INVOKABLE QVariantMap javaSettings(const QString& id);
-    Q_INVOKABLE QVariantMap gpuSettings();
+    Q_INVOKABLE QVariantMap gpuSettings(const QString& requestId = {});
     Q_INVOKABLE QVariantMap openUpdateDownload(const QString& kind);
     Q_INVOKABLE QVariantMap setAutomaticUpdates(bool enabled);
     Q_INVOKABLE QVariantMap acknowledgeUpdateNotification();
@@ -63,6 +64,8 @@ signals:
     void accountsRequested();
 private:
     QVariantMap fail(const QString& operation, const QString& detail);
+    void discoverGpuHardware();
+    QVariantMap cachedGpuSettings() const;
     void observeInstances();
     void requestArtwork(const QString& id);
     void loadArtwork(const QString& id);
@@ -88,5 +91,9 @@ private:
     bool m_artworkFocused = false;
     bool m_modalActive = false;
     bool m_actionPending = false;
+    GpuDetector m_gpuDetector;
+    QVariantMap m_gpuHardware;
+    QSet<QString> m_gpuRequests;
+    bool m_gpuPending = false;
 };
 }  // namespace Awake::Web

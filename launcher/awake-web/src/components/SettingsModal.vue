@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { LauncherSettings } from '../features/library/model.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import '../styles/language-select.css';
@@ -30,6 +30,8 @@ const emit = defineEmits<{
 }>();
 
 const activeTab = ref<'general' | 'java' | 'window' | 'about'>('general');
+const visitedTabs = ref(new Set(['general']));
+watch(activeTab, tab => { visitedTabs.value.add(tab); closeLanguagePicker(); });
 const { ramVisible } = useHardwarePrivacy();
 const languageOptions = [
   { value: 'en', label: 'English' },
@@ -156,7 +158,7 @@ function selectResolution(w: number, h: number) {
         <!-- Settings Content Body -->
         <div class="settings-content-pane">
           <!-- General Tab -->
-          <div v-if="activeTab === 'general'" class="settings-group">
+          <div v-show="activeTab === 'general'" class="settings-group">
             <div class="setting-row">
               <div class="setting-copy">
                 <label for="settings-lang">{{ t('languageLabel') }}</label>
@@ -245,7 +247,7 @@ function selectResolution(w: number, h: number) {
           </div>
 
           <!-- Java & Memory Tab -->
-          <div v-else-if="activeTab === 'java'" class="settings-group">
+          <div v-if="visitedTabs.has('java')" v-show="activeTab === 'java'" class="settings-group">
             <JavaPicker :service="javaService" :t="t" />
             <div class="setting-block">
               <label>{{ t('maxRamLabel') }}</label>
@@ -316,7 +318,7 @@ function selectResolution(w: number, h: number) {
           </div>
 
           <!-- Game Window Tab -->
-          <div v-else-if="activeTab === 'window'" class="settings-group">
+          <div v-if="visitedTabs.has('window')" v-show="activeTab === 'window'" class="settings-group">
             <GpuPicker :service="gpuService" :t="t" />
             <div class="setting-block">
               <label>{{ t('windowSizeLabel') }}</label>
@@ -363,7 +365,7 @@ function selectResolution(w: number, h: number) {
           </div>
 
           <!-- About Tab -->
-          <div v-else-if="activeTab === 'about'" class="settings-group about-pane">
+          <div v-if="visitedTabs.has('about')" v-show="activeTab === 'about'" class="settings-group about-pane">
             <div class="about-brand">
               <img class="brand-logo" :src="logoUrl" alt="" />
               <div>
