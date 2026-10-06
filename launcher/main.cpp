@@ -47,7 +47,7 @@
 int main(int argc, char* argv[])
 {
 #ifdef AWAKE_WEB_ENABLED
-    Awake::Web::registerScheme();
+    Awake::Web::initialize();
     Q_INIT_RESOURCE(awake_web);
 #endif
 #if defined Q_OS_WIN32

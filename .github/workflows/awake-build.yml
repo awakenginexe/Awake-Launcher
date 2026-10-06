@@ -124,9 +124,7 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v0.6.0 reduces background loading work with the 1080p Minecraft wallpaper and reuses the bundled image instead of encoding and animating it again on every refresh. The renderer stays suspended when loading finishes while the launcher is minimized.
-
-          Required mod downloads are checked in both the configured download folder and the current system Downloads folder. New or changed files are rescanned automatically, including files that finish downloading without another directory notification.
+          Awake Launcher v0.7.0 uses software rendering for the Windows launcher interface, avoiding the hardware graphics path that game overlays can hook and cause focused cursor lag. Minecraft keeps its own GPU settings.
 
           Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
 

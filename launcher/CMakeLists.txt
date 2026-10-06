@@ -1270,7 +1270,7 @@ target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 if(Launcher_ENABLE_AWAKE_WEB)
     target_compile_definitions(Launcher_logic PUBLIC AWAKE_WEB_ENABLED)
-    target_link_libraries(Launcher_logic Qt6::WebEngineWidgets Qt6::WebChannel)
+    target_link_libraries(Launcher_logic Qt6::WebEngineWidgets Qt6::WebChannel Qt6::Quick)
 endif()
 
 if(${Launcher_USE_PCH})

@@ -15,6 +15,8 @@
 #include <QTest>
 #include <QTimer>
 #include <QPushButton>
+#include <QQuickWidget>
+#include <QQuickWindow>
 #include <QWebEnginePage>
 #include <QWebEngineView>
 #include <memory>
@@ -68,6 +70,13 @@ class AwakeWebShellTest : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(view->isVisible(), 20000);
         QTRY_COMPARE(evaluate("document.querySelectorAll('.instance-select').length").toInt(), 2);
         QCOMPARE(view->url(), QUrl("awake://ui/"));
+    }
+    void launcherCompositorUsesSoftwareRendering()
+    {
+        auto* compositor = view->findChild<QQuickWidget*>();
+        QVERIFY(compositor);
+        QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
+        QVERIFY(!view->grab().isNull());
     }
     void startupKeepsSuspendedRendererFrozen()
     {
@@ -357,7 +366,7 @@ int main(int argc, char** argv)
         }
     }
     qputenv("AWAKE_FRONTEND", "web");
-    Awake::Web::registerScheme();
+    Awake::Web::initialize();
     Q_INIT_RESOURCE(awake_web);
     auto directory = data.path().toUtf8();
     char dataOption[] = "-d";

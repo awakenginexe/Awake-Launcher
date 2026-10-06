@@ -4,13 +4,22 @@
 #include <QBuffer>
 #include <QFile>
 #include <QMimeDatabase>
+#ifdef Q_OS_WIN
+#include <QQuickWindow>
+#endif
 #include <QUuid>
 #include <QWebEngineUrlRequestJob>
 #include <QWebEngineUrlScheme>
 
 namespace Awake::Web {
-void registerScheme()
+void initialize()
 {
+#ifdef Q_OS_WIN
+    // Keep the desktop UI off the game's graphics path, which NVIDIA overlays can hook.
+    // WebEngine also probes Qt's RHI backend during startup, even with a software scene graph.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Null);
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+#endif
     QWebEngineUrlScheme scheme("awake");
     scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);
     scheme.setFlags(QWebEngineUrlScheme::SecureScheme | QWebEngineUrlScheme::CorsEnabled);

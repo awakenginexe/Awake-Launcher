@@ -14,5 +14,5 @@ public:
 private:
     QHash<QString, QByteArray> m_images;
 };
-void registerScheme();
+void initialize();
 }  // namespace Awake::Web
