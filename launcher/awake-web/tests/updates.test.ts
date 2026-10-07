@@ -18,3 +18,13 @@ test('old or unsupported native snapshots have an honest unavailable state', () 
   assert.equal(snapshot.updates.status, 'unavailable');
   assert.equal(snapshot.updates.presentation, 0);
 });
+
+test('installer progress survives snapshots and remains bounded', () => {
+  for (const status of ['downloading', 'installing']) {
+    const updates = parseSnapshot({ ...emptySnapshot(), updates: { status, progress: 43, canInstall: true } }).updates;
+    assert.equal(updates.status, status);
+    assert.equal(updates.progress, 43);
+    assert.equal(updates.canInstall, true);
+  }
+  assert.equal(parseSnapshot({ ...emptySnapshot(), updates: { progress: 200 } }).updates.progress, 100);
+});

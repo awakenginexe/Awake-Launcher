@@ -2,10 +2,27 @@
 
 #include <meta/Index.h>
 #include <meta/VersionList.h>
+#include <meta/Version.h>
 
 class IndexTest : public QObject {
     Q_OBJECT
    private slots:
+    void loaderSelectionMatchesNativeCreation()
+    {
+        for (const auto& uid : {QString("net.fabricmc.fabric-loader"), QString("org.quiltmc.quilt-loader"), QString("net.minecraftforge"), QString("net.neoforged")}) {
+            Meta::VersionList list(uid);
+            auto loader = std::make_shared<Meta::Version>(uid, "0.19.5");
+            loader->setType("release");
+            loader->setTime(1);
+            const bool intermediary = uid.contains("fabric") || uid.contains("quilt");
+            loader->setRequires({Meta::Require{intermediary ? "net.fabricmc.intermediary" : "net.minecraft", intermediary ? "" : "1.21.8", ""}}, {});
+            list.setVersions({loader});
+            auto selected = list.getRecommendedForMinecraft("1.21.8");
+            QVERIFY(selected);
+            QCOMPARE(selected->descriptor(), QString("0.19.5"));
+            QVERIFY(!list.getRecommendedForMinecraft("1.12.2"));
+        }
+    }
     void test_hasUid_and_getList()
     {
         Meta::Index windex({ std::make_shared<Meta::VersionList>("list1"), std::make_shared<Meta::VersionList>("list2"),

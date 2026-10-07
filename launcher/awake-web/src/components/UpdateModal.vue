@@ -12,7 +12,8 @@ const emit = defineEmits<{
 }>();
 const dialog = ref<HTMLElement>();
 const previousFocus = document.activeElement as HTMLElement | null;
-const title = computed(() => props.t(props.state.status === 'available' ? 'updateAvailable' : props.state.status === 'checking' ? 'updateChecking' : props.state.status === 'upToDate' ? 'updateCurrent' : props.state.status === 'error' ? 'updateFailed' : 'updatesTitle'));
+const updating = computed(() => ['downloading', 'installing'].includes(props.state.status));
+const title = computed(() => props.t(props.state.status === 'downloading' ? 'updateDownloading' : props.state.status === 'installing' ? 'updateInstalling' : props.state.status === 'available' ? 'updateAvailable' : props.state.status === 'checking' ? 'updateChecking' : props.state.status === 'upToDate' ? 'updateCurrent' : props.state.status === 'error' ? 'updateFailed' : 'updatesTitle'));
 const background = new Map<HTMLElement, boolean>();
 onMounted(() => {
   for (const child of dialog.value?.closest('main')?.children ?? []) {
@@ -60,7 +61,9 @@ function trapFocus(event: KeyboardEvent) {
           <p v-else-if="state.status === 'upToDate'">{{ t('updateCurrentHint') }}</p>
           <p v-else-if="state.status === 'error'">{{ t('updateFailedHint') }}</p>
           <p v-else-if="state.status === 'unavailable'">{{ t('updateUnsupported') }}</p>
+          <p v-else-if="updating">{{ t('updateSetupHint') }}</p>
         </div>
+        <div v-if="state.status === 'downloading'" class="update-progress"><progress :value="state.progress" max="100" :aria-label="t('updateDownloading')" /><span>{{ state.progress }}%</span></div>
         <dl v-if="state.currentVersion" class="update-versions">
           <div><dt>{{ t('updateInstalled') }}</dt><dd>{{ state.currentVersion }}</dd></div>
           <div v-if="state.status === 'available'"><dt>{{ t('updateLatest') }}</dt><dd>{{ state.latestVersion }}</dd></div>
@@ -69,16 +72,17 @@ function trapFocus(event: KeyboardEvent) {
           <summary>{{ t('updateNotes') }}</summary>
           <p>{{ state.notes }}</p>
         </details>
+        <p v-if="state.error && state.status === 'available'" role="alert">{{ state.error }}</p>
         <details v-if="state.status === 'error' && state.error" class="update-notes"><summary>{{ t('technicalDetails') }}</summary><p>{{ state.error }}</p></details>
-        <label v-if="state.status !== 'unavailable'" class="update-automatic"><input type="checkbox" :checked="state.automatic" :disabled="busy" @change="emit('automatic', ($event.target as HTMLInputElement).checked)" /><span>{{ t('updateAutomatic') }}</span></label>
+        <label v-if="state.status !== 'unavailable'" class="update-automatic"><input type="checkbox" :checked="state.automatic" :disabled="busy || updating" @change="emit('automatic', ($event.target as HTMLInputElement).checked)" /><span>{{ t('updateAutomatic') }}</span></label>
         <p v-if="state.status === 'available'" class="update-download-hint">{{ t(state.portable ? 'updatePortableHint' : 'updateSetupHint') }}</p>
       </div>
       <footer class="modal-footer update-footer">
         <button v-if="state.status === 'available' && state.hasRelease" class="btn-secondary" :disabled="busy" @click="emit('download', 'release')">{{ t('updateReleasePage') }}</button>
-        <button v-if="state.status === 'available' && (state.portable ? state.hasPortable : state.hasSetup)" class="btn-primary" :disabled="busy" @click="emit('download', state.portable ? 'portable' : 'setup')">{{ t(state.portable ? 'updateDownloadPortable' : 'updateDownloadSetup') }}</button>
-        <button v-else-if="state.status === 'available' && state.hasSetup" class="btn-primary" :disabled="busy" @click="emit('download', 'setup')">{{ t('updateDownloadSetup') }}</button>
-        <button v-else-if="state.status === 'available' && state.hasPortable" class="btn-primary" :disabled="busy" @click="emit('download', 'portable')">{{ t('updateDownloadPortable') }}</button>
-        <button v-else-if="state.status !== 'unavailable'" class="btn-primary" :disabled="busy || state.status === 'checking'" @click="emit('check')">{{ t(state.status === 'error' ? 'retry' : 'checkForUpdates') }}</button>
+        <button v-if="state.status === 'available' && state.canInstall" class="btn-primary" :disabled="busy" @click="emit('download', 'setup')">{{ t('updateDownloadSetup') }}</button>
+        <button v-else-if="state.status === 'available' && state.portable && state.hasPortable" class="btn-primary" :disabled="busy" @click="emit('download', 'portable')">{{ t('updateDownloadPortable') }}</button>
+        <button v-else-if="state.status === 'available' && state.hasRelease" class="btn-primary" :disabled="busy" @click="emit('download', 'release')">{{ t('updateReleasePage') }}</button>
+        <button v-else-if="state.status !== 'unavailable'" class="btn-primary" :disabled="busy || updating || state.status === 'checking'" @click="emit('check')">{{ t(updating ? state.status === 'installing' ? 'updateInstalling' : 'updateDownloading' : state.status === 'error' ? 'retry' : 'checkForUpdates') }}</button>
         <button v-else class="btn-primary" @click="emit('close')">{{ t('close') }}</button>
       </footer>
     </section>
@@ -102,6 +106,8 @@ function trapFocus(event: KeyboardEvent) {
 .update-automatic input { accent-color: var(--accent); width: 17px; height: 17px; flex-shrink: 0; }
 .update-download-hint { font-size: .85rem; }
 .update-footer { flex-wrap: wrap; }
+.update-progress { display: flex; align-items: center; gap: 12px; }
+.update-progress progress { width: 100%; accent-color: var(--accent); }
 @keyframes update-check { to { transform: rotate(360deg); } }
 :global(.reduced-motion) .is-checking { animation: none; }
 @media (prefers-reduced-motion: reduce) { .is-checking { animation: none; } }

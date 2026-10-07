@@ -9,6 +9,8 @@
 #include <QFileInfo>
 #include <QFontInfo>
 #include <QImage>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QMenu>
 #include <QPointer>
@@ -271,8 +273,27 @@ class AwakeWebShellTest : public QObject {
         evaluate("document.querySelector('.update-dialog .modal-close-btn').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.update-dialog') === null").toBool());
     }
+    void creationFailuresKeepTechnicalDetails()
+    {
+        {
+            const QString loader = "Fabric";
+            QSignalSpy failures(bridge, &Awake::Web::Bridge::operationFailed);
+            const auto payload = QJsonDocument(QJsonObject{{"name", "Failure fixture"}, {"version", "1.21.8"}, {"loader", loader}}).toJson();
+            QVERIFY(bridge->invokeAction("createQuick", QString::fromUtf8(payload)).value("ok").toBool());
+            QTRY_VERIFY_WITH_TIMEOUT(!failures.isEmpty(), 10000);
+            const auto detail = failures.last().at(1).toString();
+            QVERIFY(detail.contains("1.21.8"));
+            QVERIFY(detail.contains('\n'));
+            QVERIFY(detail.contains("Proxy connection refused"));
+            QTRY_VERIFY(evaluate("document.querySelector('.operation-error pre')?.textContent.includes('1.21.8')").toBool());
+            evaluate("document.querySelector('.operation-error .quiet').click()");
+            QTRY_VERIFY(evaluate("document.querySelector('.operation-error') === null").toBool());
+        }
+    }
     void nativeSearchShortcut()
     {
+        window->activateWindow();
+        QTRY_VERIFY(window->isActiveWindow());
         view->setFocus();
         QTest::keyClick(view, Qt::Key_F, Qt::ControlModifier);
         QTRY_COMPARE(evaluate("document.activeElement.id").toString(), QString("instance-search"));
@@ -318,6 +339,9 @@ class AwakeWebShellTest : public QObject {
         QCOMPARE(QFontInfo(title->font()).family(), QString("Bayon"));
         QCOMPARE(title->text(), QString("AWAKE LAUNCHER %1").arg(BuildConfig.versionString()));
         QVERIFY(!APPLICATION->logo().isNull());
+        auto* logo = window->findChild<QLabel*>("titleBarLogo");
+        QVERIFY(logo);
+        QVERIFY(logo->contentsRect().width() >= logo->pixmap().deviceIndependentSize().width());
         evaluate("document.querySelector('.account-actions .settings-button').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());
         evaluate("document.querySelectorAll('.settings-tab-btn')[1].click()");

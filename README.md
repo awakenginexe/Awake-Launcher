@@ -12,7 +12,9 @@ Download the **Setup.exe** from the latest release for a per-user installation w
 
 For a portable installation, download the **Windows x64 ZIP**, extract the entire package to a writable folder, and run `awakelauncher.exe`. Keep the files together and back up the folder before replacing a portable build. Release downloads include the Microsoft C++ runtime and SHA-256 checksums.
 
-Awake checks for stable updates daily. Use **Application → Check for updates** to check manually; downloads open in your browser. Close the launcher before installing the update. Versions before v0.3.0 need a manual upgrade to receive the update checker.
+Awake Launcher checks for stable updates at startup and daily. Use **Application → Check for updates** to check manually. Installed Windows builds offer **Update now**: download and verify Setup, close the launcher, install in the same folder, and restart while preserving accounts and instances. Close Minecraft before updating. Portable builds download a ZIP through your browser; close the launcher and extract it over your existing app folder. Install v1.2.0 manually once to receive the in-app installer.
+
+Setup offers **Normal** (`%APPDATA%\AwakeLauncher`), **Compact** (`AwakeLauncherData` inside the install folder), or **Custom** data storage. Updates preserve your choice. Changing the location does not move existing accounts or instances; choose their existing folder or copy the data while the launcher is closed. Portable ZIP builds keep their existing portable data layout.
 
 Add an account in **Accounts**, then choose **Create instance** to install Minecraft or a modpack. You can also import an existing instance. Awake Launcher uses its own data folder and does not move data from other launchers automatically.
 

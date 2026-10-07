@@ -45,6 +45,7 @@ class VersionList : public BaseVersionList, public BaseEntity {
 
     BaseVersion::Ptr getRecommended() const override;
     Version::Ptr getRecommendedForParent(const QString& uid, const QString& version);
+    BaseVersion::Ptr getRecommendedForMinecraft(const QString& version);
     Version::Ptr getLatestForParent(const QString& uid, const QString& version);
     Version::Ptr getLatest(bool onlyRelease = true);
 

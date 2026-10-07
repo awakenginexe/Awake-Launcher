@@ -255,8 +255,8 @@ class MainWindow : public QMainWindow {
     void showWidgetFrontend(const QString& reason = {});
 #endif
 
-    void runModalTask(Task* task);
-    void instanceFromInstanceTask(InstanceTask* task);
+    bool runModalTask(Task* task, QString* error = nullptr);
+    bool instanceFromInstanceTask(InstanceTask* task, QString* error = nullptr);
 
    private:
     Ui::MainWindow* ui;

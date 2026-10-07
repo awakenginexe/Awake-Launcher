@@ -130,13 +130,14 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v1.1.0 adds the new Awake logo and a skin and cape panel for Microsoft accounts.
+          Awake Launcher v1.2.0 adds one-click updates for installed Windows builds.
 
-          - Skin heads appear beside the welcome name and account choices.
-          - Preview and rotate your skin, search another player's skin, choose a default, or load a PNG.
-          - Select owned capes with previews. Apply saves changes to your own Minecraft: Java Edition account.
-          - Reset to default undoes pending edits. Reset to Minecraft default previews the default skin until you click Apply skin.
-          - Cape previews stay visible after saving. The window minimum is now 1320x780, with separate scrolling controls and a software-rendered 3D preview.
+          - Checks for stable releases at startup and daily, with a visible update button.
+          - Update now downloads Setup inside the app, verifies its SHA-256 and size, then closes the launcher, installs in the same folder and restarts.
+          - Accounts and instances are preserved. Close Minecraft before updating.
+          - Fixes the clipped title-bar logo.
+          - Fixes Fabric and Quilt loader selection and shows technical task errors when instance creation fails.
+          - Setup offers Normal (Roaming), Compact (inside the install folder), and Custom data folders. Updates preserve the selected location; existing data is not moved automatically.
 
           Minecraft's application review approved Awake Launcher's Microsoft application ID for the Minecraft API allow list on October 5, 2026.
 
@@ -149,7 +150,7 @@ jobs:
           Download the Windows ZIP, extract the entire folder, then run `awakelauncher.exe`.
           Keep all extracted files together. Portable builds store accounts and instances beside the app.
 
-          Update downloads open in your browser. Setup and portable downloads are selected to match your installation. Existing v0.2.0 builds need to be upgraded manually to receive the update checker.
+          Install v1.2.0 manually once to receive the in-app installer. Portable updates use the ZIP download in your browser; close the launcher and extract it over your existing app folder.
 
           Each download has a `.sha256` checksum. This release is unsigned.
           '@ | Set-Content $notes -Encoding utf8

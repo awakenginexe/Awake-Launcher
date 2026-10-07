@@ -98,20 +98,22 @@ export interface Snapshot {
   deletion: { active: boolean; id: string; name: string };
 }
 export interface UpdateState {
-  status: 'unavailable' | 'idle' | 'checking' | 'available' | 'upToDate' | 'error';
+  status: 'unavailable' | 'idle' | 'checking' | 'available' | 'upToDate' | 'error' | 'downloading' | 'installing';
   currentVersion: string; latestVersion: string; notes: string; error: string;
   automatic: boolean; portable: boolean; presentation: number;
   hasSetup: boolean; hasPortable: boolean; hasRelease: boolean;
+  canInstall: boolean; progress: number;
 }
 function parseUpdates(value: unknown): UpdateState {
   const data = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  const statuses = ['idle', 'checking', 'available', 'upToDate', 'error'];
+  const statuses = ['idle', 'checking', 'available', 'upToDate', 'error', 'downloading', 'installing'];
   return {
     status: statuses.includes(String(data.status)) ? data.status as UpdateState['status'] : 'unavailable',
     currentVersion: String(data.currentVersion || ''), latestVersion: String(data.latestVersion || ''),
     notes: String(data.notes || ''), error: String(data.error || ''), automatic: data.automatic === true,
     portable: data.portable === true, presentation: typeof data.presentation === 'number' && Number.isSafeInteger(data.presentation) && data.presentation > 0 ? data.presentation : 0,
     hasSetup: Boolean(data.setupUrl), hasPortable: Boolean(data.portableUrl), hasRelease: Boolean(data.releaseUrl),
+    canInstall: data.canInstall === true, progress: typeof data.progress === 'number' && Number.isFinite(data.progress) ? Math.max(0, Math.min(100, data.progress)) : 0,
   };
 }
 export function emptySnapshot(): Snapshot {

@@ -572,7 +572,7 @@ QString Theme::appStyleSheet()
             border-bottom: 1px solid rgba(96, 165, 250, 0.14);
         }
         QLabel#titleBarLogo {
-            margin-right: 4px;
+              margin: 0;
         }
         QLabel#titleBarText {
             font-size: 11px;

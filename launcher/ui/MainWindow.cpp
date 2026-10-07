@@ -800,7 +800,8 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
         }
         task->setName(name);
         task->setGroup(request.value("group").toString().trimmed());
-        instanceFromInstanceTask(task);
+        QString error;
+        if (!instanceFromInstanceTask(task, &error)) return fail(error);
     } else if (action == "createQuick") {
         const QJsonDocument doc = QJsonDocument::fromJson(id.toUtf8());
         const QJsonObject obj = doc.object();
@@ -814,16 +815,12 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
         auto meta = APPLICATION->metadataIndex();
         if (!meta) return fail(tr("Metadata index is not available."));
 
-        auto mcVer = meta->getLoadedVersion("net.minecraft", mcVersion);
-        if (!mcVer) {
-            auto loadTask = meta->loadVersion("net.minecraft", mcVersion);
-            if (loadTask) {
-                runModalTask(loadTask.get());
-                mcVer = meta->getLoadedVersion("net.minecraft", mcVersion);
-            }
-        }
-
-        if (!mcVer) return fail(tr("The selected Minecraft version could not be loaded."));
+        QString error;
+        auto minecraftLoadTask = meta->loadVersion("net.minecraft", mcVersion);
+        if (!minecraftLoadTask || !runModalTask(minecraftLoadTask.get(), &error))
+            return fail(tr("Could not load Minecraft %1 metadata:\n%2").arg(mcVersion, error));
+        auto mcVer = meta->get("net.minecraft", mcVersion);
+        if (!mcVer || !mcVer->isLoaded()) return fail(tr("The selected Minecraft version could not be loaded: %1").arg(mcVersion));
 
         QString loaderUid;
         if (loader.compare("Fabric", Qt::CaseInsensitive) == 0) loaderUid = "net.fabricmc.fabric-loader";
@@ -839,13 +836,15 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
             auto loaderList = meta->get(loaderUid);
             if (loaderList && !loaderList->isLoaded()) {
                 auto loadTask = loaderList->getLoadTask();
-                if (loadTask) runModalTask(loadTask.get());
+                if (!loadTask || !runModalTask(loadTask.get(), &error))
+                    return fail(tr("Could not load %1 metadata (%2):\n%3").arg(loader, loaderUid, error));
             }
-            BaseVersion::Ptr loaderVer = loaderList ? loaderList->getRecommendedForParent("net.minecraft", mcVersion) : nullptr;
+            BaseVersion::Ptr loaderVer = loaderList ? loaderList->getRecommendedForMinecraft(mcVersion) : nullptr;
             if (loaderVer) {
                 task = new VanillaCreationTask(mcVer, loaderUid, loaderVer);
             } else {
-                return fail(tr("No compatible version of the selected mod loader is available for this Minecraft version."));
+                return fail(tr("No compatible %1 version is available for Minecraft %2.\nMetadata: %3 (%4 versions loaded)")
+                                .arg(loader, mcVersion, loaderUid).arg(loaderList ? loaderList->count() : 0));
             }
         }
 
@@ -853,7 +852,7 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
             task->setName(name);
             if (!group.isEmpty()) task->setGroup(group);
             task->setIcon("default");
-            instanceFromInstanceTask(task);
+            if (!instanceFromInstanceTask(task, &error)) return fail(tr("Could not create %1 for Minecraft %2:\n%3").arg(loader, mcVersion, error));
         }
     } else if (action == "legacy") {
         showWidgetFrontend();
@@ -1366,9 +1365,9 @@ void MainWindow::updateCatState()
     setCatBackground(catVisible);
 }
 
-void MainWindow::runModalTask(Task* task)
+bool MainWindow::runModalTask(Task* task, QString* error)
 {
-    connect(task, &Task::failed, this,
+    if (!error) connect(task, &Task::failed, this,
             [this](QString reason) { CustomMessageBox::selectable(this, tr("Error"), reason, QMessageBox::Critical)->show(); });
     connect(task, &Task::succeeded, this, [this, task]() {
         QStringList warnings = task->warnings();
@@ -1379,12 +1378,17 @@ void MainWindow::runModalTask(Task* task)
     ProgressDialog loadDialog(this);
     loadDialog.showSkipButton();
     loadDialog.execWithTask(task);
+    if (error && !task->wasSuccessful()) {
+        *error = task->failReason();
+        if (error->isEmpty()) *error = tr("Task cancelled or incomplete: %1\n%2\n%3").arg(task->objectName(), task->getStatus(), task->getDetails());
+    }
+    return task->wasSuccessful();
 }
 
-void MainWindow::instanceFromInstanceTask(InstanceTask* rawTask)
+bool MainWindow::instanceFromInstanceTask(InstanceTask* rawTask, QString* error)
 {
     unique_qobject_ptr<Task> task(APPLICATION->instances()->wrapInstanceTask(rawTask));
-    runModalTask(task.get());
+    return runModalTask(task.get(), error);
 }
 
 void MainWindow::on_actionCopyInstance_triggered()

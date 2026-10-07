@@ -31,6 +31,7 @@
 #include "InstanceList.h"
 #include "awake/web/AwakeWebAssets.h"
 #include "awake/AwakeTheme.h"
+#include "awake/DataLocation.h"
 #include "awake/GpuSelection.h"
 #include "awake/web/AwakeWebBridge.h"
 #include "awake/web/AwakePackCatalog.h"
@@ -77,6 +78,28 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void installedDataLocationsPreservePortableAndCustomPaths()
+    {
+        QTemporaryDir install;
+        const QString normal = "C:/Users/Fixture/AppData/Roaming/AwakeLauncher";
+        QCOMPARE(Awake::installedDataPath(install.path(), normal), normal);
+        const auto configure = [&](QString mode, QString path = {}) {
+            QFile config(install.filePath("data-location.txt"));
+            QVERIFY(config.open(QIODevice::WriteOnly));
+            QTextStream text(&config);
+            text.setEncoding(QStringConverter::Utf16LE);
+            text.setGenerateByteOrderMark(true);
+            text << mode << '\n' << path << '\n';
+        };
+        configure("compact");
+        QCOMPARE(Awake::installedDataPath(install.path(), normal), install.filePath("AwakeLauncherData"));
+        configure("custom", "D:/Minecraft Data/我的实例");
+        QCOMPARE(Awake::installedDataPath(install.path(), normal), QString("D:/Minecraft Data/我的实例"));
+        configure("custom", "../relative");
+        QVERIFY(Awake::installedDataPath(install.path(), normal).isEmpty());
+        configure("normal");
+        QCOMPARE(Awake::installedDataPath(install.path(), normal), normal);
+    }
     void profileRefreshKeepsCapeImagesOnlyForUnchangedUrls()
     {
         MinecraftProfile profile;

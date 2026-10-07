@@ -16,7 +16,7 @@ const fixture = `(() => {
   state.totalMemoryMb = Number(options.get('ram') || 32768);
   state.deletion = {active:options.has('deleting'),id:'fixture-0',name:'Deleting fixture instance'};
   state.launcherSettings = {maxMem:8192,minMem:512,jvmPreset:'balanced',jvmArgs:'',version:'0.5.0'};
-  state.updates = {status: options.get('updateStatus') || 'idle', currentVersion:'0.3.0', latestVersion:'0.5.0', notes:'Browser test fixture: improved launcher updates. <script>window.__unsafeNotes = true</script>', error:'Network error fixture', automatic:true, portable:options.has('portable'), presentation:options.has('updates') ? 1 : 0, setupUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.5.0/Awake-Launcher-v0.5.0-Windows-x64-Setup.exe', portableUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.5.0/Awake-Launcher-v0.5.0-Windows-x64.zip', releaseUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/tag/v0.5.0'};
+  state.updates = {status: options.get('updateStatus') || 'idle', currentVersion:'0.3.0', latestVersion:'0.5.0', notes:'Browser test fixture: improved launcher updates. <script>window.__unsafeNotes = true</script>', error:'Network error fixture', automatic:true, canInstall:!options.has('portable'), progress:43, portable:options.has('portable'), presentation:options.has('updates') ? 1 : 0, setupUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.5.0/Awake-Launcher-v0.5.0-Windows-x64-Setup.exe', portableUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/download/v0.5.0/Awake-Launcher-v0.5.0-Windows-x64.zip', releaseUrl:'https://github.com/awakenginexe/Awake-Launcher/releases/tag/v0.5.0'};
   const host = {
     openUpdateDownload(kind, cb) { window.__nativeTest.calls.push(['openUpdateDownload',kind]); cb({ok:true}); },
     setAutomaticUpdates(enabled, cb) { state.updates.automatic = enabled; this.stateChanged.emit(structuredClone(state)); cb({ok:true}); },
@@ -274,14 +274,17 @@ try {
     await page.keyboard.press('Escape');
     await page.locator('.update-dialog').waitFor({state:'detached'});
     assert.equal(await page.locator('.update-dialog').count(), 0);
+    await page.locator('.update-shortcut').click();
+    await page.locator('.update-dialog').waitFor();
     await page.close();
   }
-  for (const status of ['checking','upToDate','error']) {
+  for (const status of ['checking','upToDate','error','downloading','installing']) {
     const page = await browser.newPage({viewport:{width:800,height:600}, reducedMotion:'reduce'});
     await page.goto(`${origin}/?updates&updateStatus=${status}`);
     await page.locator('.update-dialog').waitFor();
     assert.equal(await page.locator('.update-icon').evaluate(el => getComputedStyle(el).animationName), 'none');
-    if (status === 'checking') assert.equal(await page.locator('.update-footer .btn-primary').isDisabled(), true);
+    if (['checking','downloading','installing'].includes(status)) assert.equal(await page.locator('.update-footer .btn-primary').isDisabled(), true);
+    if (status === 'downloading') assert.equal(await page.locator('.update-progress progress').getAttribute('value'), '43');
     if (status === 'error') {
       await page.locator('.update-footer .btn-primary').click();
       await page.waitForFunction(() => document.activeElement?.classList.contains('modal-close-btn'));

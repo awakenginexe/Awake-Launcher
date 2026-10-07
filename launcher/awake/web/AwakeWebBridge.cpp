@@ -286,6 +286,7 @@ QVariantMap Bridge::gpuSettings(const QString& requestId)
 QVariantMap Bridge::openUpdateDownload(const QString& kind)
 {
     auto* checker = APPLICATION->awakeUpdateChecker();
+    if (kind == "setup" && !APPLICATION->updatesAreAllowed()) return fail("openUpdateDownload", tr("Close Minecraft before updating Awake Launcher."));
     if (!m_active || !checker || !checker->openDownload(kind)) return fail("openUpdateDownload", tr("Unable to open this release download."));
     return success();
 }

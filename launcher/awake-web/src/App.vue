@@ -196,6 +196,7 @@ onUnmounted(() => {
     <aside class="navigation glass" :inert="showSkins" :aria-label="t('library')">
       <header class="library-header"><button class="wordmark welcome-name" type="button" :disabled="!enabled || !activeAccount" :title="state.accountName" :aria-label="`${t('skins')}: ${state.accountName}`" @click="openSkins()"><img v-if="activeAccount?.headUrl" class="welcome-head" :src="activeAccount.headUrl" width="24" height="24" alt="" /><span>{{ state.accountName ? `${t('welcome')} ${state.accountName}` : t('welcome') }}</span></button><button :disabled="!enabled" class="quiet" @click="showAppMenu = true">{{ t('application') }}</button></header>
       <h2 class="library-heading">{{ t('library') }}</h2>
+      <button v-if="['available', 'downloading', 'installing'].includes(state.updates.status)" class="update-shortcut btn-secondary" @click="showUpdates = true">{{ t(state.updates.status === 'available' ? state.updates.portable ? 'updateDownloadPortable' : 'updateDownloadSetup' : state.updates.status === 'downloading' ? 'updateDownloading' : 'updateInstalling') }}<span v-if="state.updates.status === 'available'"> {{ state.updates.latestVersion }}</span></button>
       <div class="search-row">
         <label class="visually-hidden" for="instance-search">{{ t('search') }}</label>
         <input id="instance-search" ref="searchInput" v-model="query" type="search" :placeholder="t('search')" autocomplete="off" :disabled="status !== 'ready'" @keydown.enter="shown[0] && select(shown[0].id)" />

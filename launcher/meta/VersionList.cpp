@@ -302,6 +302,14 @@ Version::Ptr VersionList::getRecommendedForParent(const QString& uid, const QStr
     return nullptr;
 }
 
+BaseVersion::Ptr VersionList::getRecommendedForMinecraft(const QString& version)
+{
+    if (m_uid == "net.fabricmc.fabric-loader" || m_uid == "org.quiltmc.quilt-loader")
+        return ::Version(version) >= ::Version("1.14") ? getRecommended() : nullptr;
+    const auto recommended = getRecommendedForParent("net.minecraft", version);
+    return recommended ? recommended : getLatestForParent("net.minecraft", version);
+}
+
 Version::Ptr VersionList::getLatestForParent(const QString& uid, const QString& version)
 {
     Version::Ptr latestCompat = nullptr;

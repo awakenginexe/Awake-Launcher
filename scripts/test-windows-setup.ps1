@@ -26,6 +26,15 @@ try {
     if ($uninstall -ne ('"' + (Join-Path $target 'uninstall.exe') + '"')) { throw 'The uninstall command is incorrectly quoted.' }
     $sentinel = Join-Path $target 'user-preservation.txt'
     'preserve this user file' | Set-Content -LiteralPath $sentinel
+    $location = Join-Path $target 'data-location.txt'
+    if ((Get-Content -LiteralPath $location -Encoding Unicode)[0] -ne 'normal') { throw 'Setup did not default to Normal data storage.' }
+    foreach ($mode in @('compact', 'custom')) {
+        $customPath = Join-Path $target 'Custom Data 我的实例'
+        "$mode`r`n$customPath`r`n" | Set-Content -LiteralPath $location -Encoding Unicode -NoNewline
+        $before = (Get-FileHash -LiteralPath $location).Hash
+        Run-Setup
+        if ((Get-FileHash -LiteralPath $location).Hash -ne $before) { throw "Update changed $mode data location." }
+    }
     Run-Setup
     if ((Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'preserve this user file') { throw 'Upgrade changed user data.' }
     $process = Start-Process -FilePath (Join-Path $target 'uninstall.exe') -ArgumentList "/S _?=$target" -PassThru -Wait -WindowStyle Hidden

@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -11,11 +12,14 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QVersionNumber>
+#include <QProcess>
+#include <QCoreApplication>
 #include <algorithm>
 
 namespace Awake {
 namespace {
 constexpr qint64 MaxResponse = 1024 * 1024;
+constexpr qint64 MaxInstallerSize = 512 * 1024 * 1024;
 const QString Repository = "https://github.com/awakenginexe/Awake-Launcher";
 QVariantMap errorState(const QString& detail) { return {{"status", "error"}, {"error", detail}}; }
 }
@@ -48,7 +52,16 @@ QVariantMap parseUpdateRelease(const QByteArray& body, const QString& currentVer
         const auto name = asset.value("name").toString();
         const auto url = asset.value("browser_download_url").toString();
         if (url != Repository + "/releases/download/" + tag + "/" + name) continue;
-        if (name == assetBase + "-Setup.exe") result["setupUrl"] = url;
+        if (name == assetBase + "-Setup.exe") {
+            result["setupUrl"] = url;
+            const auto digest = asset.value("digest").toString();
+            const auto size = asset.value("size").toInteger();
+            static const QRegularExpression sha256("^sha256:[0-9a-f]{64}$");
+            if (sha256.match(digest).hasMatch() && size > 0 && size <= MaxInstallerSize) {
+                result["setupDigest"] = digest.mid(7);
+                result["setupSize"] = size;
+            }
+        }
         if (name == assetBase + ".zip") result["portableUrl"] = url;
     }
     return result;
@@ -65,6 +78,7 @@ UpdateChecker::UpdateChecker(QNetworkAccessManager* network, const QString& curr
     connect(&m_timer, &QTimer::timeout, this, [this] { check(false); });
     connect(&m_deadline, &QTimer::timeout, this, [this] { if (m_reply) m_reply->abort(); });
     armTimer();
+    if (getAutomaticallyChecksForUpdates()) m_timer.start(0);
 }
 
 UpdateChecker::~UpdateChecker()
@@ -79,6 +93,7 @@ QVariantMap UpdateChecker::state() const
     result.insert("automatic", m_settings.value("automatic", true).toBool());
     result.insert("portable", m_portable);
     result.insert("presentation", m_presentation);
+    result.insert("canInstall", !m_portable && !m_state.value("setupDigest").toString().isEmpty());
     return result;
 }
 
@@ -102,6 +117,7 @@ void UpdateChecker::armTimer()
 
 void UpdateChecker::check(bool manual)
 {
+    if (m_state.value("status") == "downloading" || m_state.value("status") == "installing") return;
     if (manual) { ++m_presentation; m_manual = true; }
     if (m_reply) { emit stateChanged(); return; }
     m_manual = manual;
@@ -136,8 +152,7 @@ void UpdateChecker::check(bool manual)
         m_reply = nullptr;
         reply->deleteLater();
         m_settings.setValue("last_check", QDateTime::currentSecsSinceEpoch());
-        const auto latest = m_state.value("latestVersion").toString();
-        if (!m_manual && m_state.value("status") == "available" && m_settings.value("notified_version").toString() != latest) {
+        if (!m_manual && m_state.value("status") == "available") {
             ++m_presentation;
         }
         m_settings.sync();
@@ -153,9 +168,105 @@ void UpdateChecker::check(bool manual)
 bool UpdateChecker::openDownload(const QString& kind)
 {
     if (m_state.value("status") != "available") return false;
+    if (kind == "setup" && !m_portable) return downloadInstaller();
     const QString key = kind == "setup" ? "setupUrl" : kind == "portable" ? "portableUrl" : kind == "release" ? "releaseUrl" : "";
     const auto url = m_state.value(key).toString();
     return !key.isEmpty() && !url.isEmpty() && QDesktopServices::openUrl(QUrl(url));
+}
+
+bool UpdateChecker::downloadInstaller()
+{
+    if (m_reply || !state().value("canInstall").toBool()) return false;
+    m_timer.stop();
+    m_downloadDir = std::make_unique<QTemporaryDir>(QDir::tempPath() + "/AwakeLauncher-update-XXXXXX");
+    m_installerPath = m_downloadDir->filePath(QUrl(m_state.value("setupUrl").toString()).fileName());
+    m_downloadFile = std::make_unique<QSaveFile>(m_installerPath);
+    if (!m_downloadDir->isValid() || !m_downloadFile->open(QIODevice::WriteOnly)) {
+        installationFailed("Unable to create the update download. Check available disk space.");
+        return false;
+    }
+    m_downloadHash.reset();
+    m_downloaded = 0;
+    m_state["status"] = "downloading";
+    m_state["progress"] = 0;
+    m_state["error"] = "";
+    const auto size = m_state.value("setupSize").toLongLong();
+    QNetworkRequest request(QUrl(m_state.value("setupUrl").toString()));
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(30000);
+    auto* reply = m_network->get(request);
+    m_reply = reply;
+    reply->setReadBufferSize(1024 * 1024);
+    const auto consume = [this, reply, size] {
+        const auto chunk = reply->readAll();
+        m_downloaded += chunk.size();
+        if (m_downloaded > size || m_downloadFile->write(chunk) != chunk.size()) {
+            m_state["error"] = "The update download exceeded its expected size or could not be saved.";
+            reply->abort();
+            return;
+        }
+        m_downloadHash.addData(chunk);
+        m_deadline.start(30000);
+        const int progress = static_cast<int>(m_downloaded * 100 / size);
+        if (m_state.value("progress").toInt() != progress) { m_state["progress"] = progress; emit stateChanged(); }
+    };
+    connect(reply, &QIODevice::readyRead, this, consume);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, size, consume] {
+        // A failed response must never leave an executable ready for installation.
+        if (reply->bytesAvailable()) consume();
+        m_deadline.stop();
+        m_reply = nullptr;
+        const bool verified = reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200 &&
+            m_downloaded == size && m_downloadHash.result().toHex() == m_state.value("setupDigest").toByteArray();
+        reply->deleteLater();
+        if (!verified || !m_downloadFile->commit()) {
+            installationFailed(m_state.value("error").toString().isEmpty()
+                ? "The installer download failed verification. Check your connection and retry the update."
+                : m_state.value("error").toString());
+            return;
+        }
+        m_downloadFile.reset();
+        m_state["status"] = "installing";
+        emit stateChanged();
+        emit installerReady();
+    });
+    m_deadline.start(30000);
+    emit stateChanged();
+    return true;
+}
+
+void UpdateChecker::installationFailed(const QString& error)
+{
+    m_downloadFile.reset();
+    m_downloadDir.reset();
+    m_installerPath.clear();
+    m_state["status"] = "available";
+    m_state["error"] = error;
+    armTimer();
+    emit stateChanged();
+}
+
+bool UpdateChecker::installUpdate(const QString& installDir)
+{
+    if (m_state.value("status") != "installing" || m_installerPath.isEmpty() || !m_downloadDir) return false;
+    // NSIS waits for this process to exit before replacing files, then restarts the launcher.
+    QProcess installer;
+    installer.setProgram(m_installerPath);
+#ifdef Q_OS_WIN
+    // NSIS requires /D last and unquoted, including when the directory contains spaces.
+    installer.setNativeArguments(QString("/S /AWAKEUPDATE=%1 /AWAKEDATA=\"%2\" /D=%3")
+                                    .arg(QCoreApplication::applicationPid())
+                                    .arg(QFileInfo(m_settings.fileName()).absolutePath(), QDir::toNativeSeparators(installDir)));
+#else
+    return false;
+#endif
+    if (!installer.startDetached()) {
+        installationFailed("Unable to start the installer. Retry the update.");
+        return false;
+    }
+    m_downloadDir->setAutoRemove(false);
+    return true;
 }
 
 void UpdateChecker::acknowledgeNotification()

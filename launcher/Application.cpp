@@ -114,6 +114,7 @@
 #include "net/HttpMetaCache.h"
 
 #include "updater/ExternalUpdater.h"
+#include "awake/DataLocation.h"
 #include "updater/AwakeUpdateChecker.h"
 #include <QPushButton>
 
@@ -430,6 +431,15 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
             adjustedBy = "Portable data path";
             m_portable = true;
         }
+#ifdef Q_OS_WIN
+        else {
+            dataPath = Awake::installedDataPath(m_rootPath, dataPath);
+            if (dataPath.isEmpty()) {
+                showFatalErrorMessage("Invalid launcher data location.", "Run Setup and choose a valid absolute data folder.");
+                return;
+            }
+        }
+#endif
 #endif
     }
 
@@ -1448,10 +1458,17 @@ void Application::performMainStartupAction()
                                                 isPortable());
         m_updater.reset(checker);
         connect(checker, &Awake::UpdateChecker::stateChanged, this, &Application::awakeUpdateStateChanged);
+        connect(checker, &Awake::UpdateChecker::installerReady, this, [this, checker] {
+            if (!updatesAreAllowed()) {
+                checker->installationFailed(tr("Close Minecraft before updating Awake Launcher."));
+                return;
+            }
+            if (checker->installUpdate(QCoreApplication::applicationDirPath())) quit();
+        });
         connect(checker, &Awake::UpdateChecker::stateChanged, this, [this, checker, lastPresentation = 0]() mutable {
             if (m_mainWindow && m_mainWindow->webFrontendActive()) return;
             const auto state = checker->state();
-            if (!m_mainWindow || state.value("status") == "checking" || state.value("presentation").toInt() <= lastPresentation) return;
+            if (!m_mainWindow || state.value("status") == "checking" || state.value("status") == "downloading" || state.value("status") == "installing" || state.value("presentation").toInt() <= lastPresentation) return;
             lastPresentation = state.value("presentation").toInt();
             const bool available = state.value("status") == "available";
             QMessageBox dialog(QMessageBox::Information, tr("Awake Launcher updates"),

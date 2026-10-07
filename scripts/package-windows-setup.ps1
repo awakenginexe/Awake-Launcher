@@ -17,7 +17,7 @@ $files = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File)
 foreach ($file in $files) {
     $relative = [IO.Path]::GetRelativePath($packageRoot, $file.FullName)
     if ($relative -match '[\r\n"$]' -or $relative.StartsWith('..') -or $file.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw "Unsafe package entry: $relative" }
-    if ($relative -match '^(accounts|instances|logs|secrets)([\\/]|\.)' -or $relative -eq 'awakelauncher.cfg') { throw "User data found in setup payload: $relative" }
+    if ($relative -match '^(accounts|instances|logs|secrets|AwakeLauncherData)([\\/]|\.|$)' -or $relative -in @('awakelauncher.cfg', 'data-location.txt')) { throw "User data found in setup payload: $relative" }
 }
 $deleteList = Join-Path $outputRoot 'setup-delete-files.nsh'
 $lines = @($files | ForEach-Object { 'Delete "$INSTDIR\' + [IO.Path]::GetRelativePath($packageRoot, $_.FullName) + '"' })
