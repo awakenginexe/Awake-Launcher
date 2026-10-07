@@ -3,8 +3,8 @@ import { onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
 import { projectSkin, rasterSkin } from '../features/library/skins.ts';
 import type { SkinVariant } from '../features/library/skins.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
-const props = defineProps<{ textureUrl: string; variant: SkinVariant; name: string; capeUrl?: string; t: (key: MessageKey) => string }>();
-const yaw = ref(-25), pitch = ref(-10), zoom = ref(9);
+const props = defineProps<{ textureUrl: string; variant: SkinVariant; name: string; capeUrl?: string; thumbnail?: boolean; t: (key: MessageKey) => string }>();
+const yaw = ref(-25), pitch = ref(-10), zoom = ref(props.thumbnail ? 3 : 9);
 const stage = ref<HTMLElement>(), canvas = ref<HTMLCanvasElement>();
 const texture = shallowRef<ImageData>(), cape = shallowRef<ImageData>();
 const layers: { id: string; label: MessageKey }[] = [
@@ -42,6 +42,7 @@ function draw() {
   const target = canvas.value, host = stage.value, context = target?.getContext('2d');
   if (!target || !host || !context) return;
   const ratio = window.devicePixelRatio || 1, width = host.clientWidth, height = host.clientHeight;
+  if (width < 1 || height < 1) return;
   if (target.width !== Math.round(width * ratio)) target.width = Math.round(width * ratio);
   if (target.height !== Math.round(height * ratio)) target.height = Math.round(height * ratio);
   const faces = projectSkin(props.variant, Boolean(cape.value), yaw.value, pitch.value, visible);
@@ -54,7 +55,7 @@ onMounted(() => { if (stage.value) observer.observe(stage.value); scheduleDraw()
 onUnmounted(() => { generation++; observer.disconnect(); cancelAnimationFrame(frame); });
 let drag: { x: number; y: number; id: number } | null = null;
 function pointerDown(event: PointerEvent) {
-  if (event.button !== 0) return;
+  if (props.thumbnail || event.button !== 0) return;
   drag = { x: event.clientX, y: event.clientY, id: event.pointerId };
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 }
@@ -75,39 +76,37 @@ function rotate(event: KeyboardEvent) {
 <template>
   <div class="skin-preview">
     <div class="skin-preview-layout">
-    <div ref="stage" class="skin-stage" tabindex="0" role="group" :aria-label="`${t('skinPreview')}: ${name}. ${t('skinRotateHint')}`"
+    <div ref="stage" :class="thumbnail ? 'skin-thumbnail-stage' : 'skin-stage'" :tabindex="thumbnail ? undefined : 0" :role="thumbnail ? 'img' : 'group'" :aria-label="thumbnail ? name : `${t('skinPreview')}: ${name}. ${t('skinRotateHint')}`"
       @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="drag = null" @pointercancel="drag = null" @lostpointercapture="drag = null" @keydown="rotate">
-      <canvas ref="canvas" class="skin-canvas" aria-hidden="true" />
+      <canvas ref="canvas" :class="thumbnail ? 'skin-thumbnail-canvas' : 'skin-canvas'" aria-hidden="true" />
       <span v-if="!textureUrl" class="skin-placeholder">{{ t('skinNoPreview') }}</span>
     </div>
-    <fieldset class="skin-layer-options">
+    <fieldset v-if="!thumbnail" class="skin-layer-options">
       <legend>{{ t('skinParts') }}</legend>
-      <label v-for="layer in layers" :key="layer.id"><span>{{ t(layer.label) }}</span><input v-model="visible[layer.id]" type="checkbox" role="switch" :data-skin-part="layer.id" /></label>
-      <small>{{ t('skinPartsHint') }}</small>
+      <button v-for="layer in layers" :key="layer.id" type="button" :aria-pressed="visible[layer.id]" :data-skin-part="layer.id" @click="visible[layer.id] = !visible[layer.id]">{{ t(layer.label) }}</button>
+      <small :title="t('skinPartsHint')">{{ t('skinPreviewOnly') }}</small>
     </fieldset>
     </div>
-    <div class="skin-view-controls">
+    <div v-if="!thumbnail" class="skin-view-controls">
       <button type="button" class="btn-subtle" :aria-label="t('skinRotateLeft')" @click="yaw -= 30">↶</button>
       <label>{{ t('skinZoom') }}<input v-model.number="zoom" type="range" min="5" max="11" step="0.5" /></label>
       <button type="button" class="btn-subtle" :aria-label="t('skinRotateRight')" @click="yaw += 30">↷</button>
     </div>
-    <p class="skin-rotate-hint">{{ t('skinRotateHint') }}</p>
+    <p v-if="!thumbnail" class="skin-rotate-hint">{{ t('skinRotateHint') }}</p>
   </div>
 </template>
 <style scoped>
 .skin-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; min-width: 0; }
 .skin-preview-layout { display: flex; flex: 1; min-height: 0; gap: 12px; }
-.skin-layer-options { border: 0; padding: 12px 0; margin: 0; width: 148px; flex-shrink: 0; }
+.skin-layer-options { border: 0; padding: 12px 0; margin: 0; width: 110px; flex-shrink: 0; }
 .skin-layer-options legend { font-size: 13px; font-weight: 600; padding: 0; }
-.skin-layer-options label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 9px 8px; font-size: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; background: rgba(255,255,255,.025); cursor: pointer; }
-.skin-layer-options label:has(input:checked) { border-color: rgba(70,151,255,.22); background: rgba(52,120,230,.07); }
-.skin-layer-options label:hover { border-color: rgba(70,151,255,.5); background: rgba(52,120,230,.12); }
-.skin-layer-options input { appearance: none; position: relative; width: 30px; height: 18px; flex-shrink: 0; margin: 0; border: 1px solid rgba(255,255,255,.18); border-radius: 9px; background: #182230; box-shadow: inset 0 1px 3px rgba(0,0,0,.4); cursor: pointer; }
-.skin-layer-options input::before { content: ''; position: absolute; width: 12px; height: 12px; top: 2px; left: 2px; border-radius: 50%; background: #8595a9; }
-.skin-layer-options input:checked { border-color: #4e9af8; background: linear-gradient(180deg,#398df5,#1659c5); box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
-.skin-layer-options input:checked::before { left: 14px; background: #eef6ff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
-.skin-layer-options input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.skin-layer-options button { display: block; width: 100%; margin-bottom: 6px; padding: 8px 6px; font: inherit; font-size: 12px; color: var(--text-secondary); border: 1px solid #253246; border-radius: 8px; background: #111b29; cursor: pointer; }
+.skin-layer-options button[aria-pressed="true"] { color: #eef6ff; border-color: #448fec; background: linear-gradient(180deg,#193b65,#112742); box-shadow: inset 0 1px 0 #ffffff14, 0 0 10px #318bff30; }
+.skin-layer-options button:hover { border-color: #78b4ff; }
+.skin-layer-options button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .skin-layer-options small { color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.skin-thumbnail-stage { width: 100%; height: 120px; position: relative; contain: layout paint; }
+.skin-thumbnail-canvas { display: block; width: 100%; height: 100%; }
 .skin-stage { flex: 1; min-height: 260px; position: relative; touch-action: none; cursor: grab; user-select: none; border-radius: 16px; background: rgba(0,0,0,.18); contain: layout paint; }
 .skin-stage:active { cursor: grabbing; }
 .skin-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -118,5 +117,5 @@ function rotate(event: KeyboardEvent) {
 .skin-view-controls input { width: 110px; accent-color: var(--accent); }
 .skin-rotate-hint { text-align: center; font-size: 12px; color: var(--text-secondary); margin: 10px 0 0; }
 @media (max-width: 760px) { .skin-stage { min-height: 340px; } }
-@media (max-width: 1100px) { .skin-preview-layout { flex-direction: column; } .skin-layer-options { width: auto; display: flex; flex-wrap: wrap; gap: 6px 12px; } .skin-layer-options small { width: 100%; } }
+@media (max-width: 1100px) { .skin-preview-layout { flex-direction: column; } .skin-layer-options { width: auto; display: flex; flex-wrap: wrap; gap: 6px; } .skin-layer-options button { width: auto; margin: 0; padding-inline: 10px; } .skin-layer-options small { width: 100%; } }
 </style>

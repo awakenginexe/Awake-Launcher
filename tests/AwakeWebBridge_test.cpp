@@ -30,6 +30,7 @@
 #include "Application.h"
 #include "InstanceList.h"
 #include "awake/web/AwakeWebAssets.h"
+#include "awake/web/AwakeSkinManager.h"
 #include "awake/AwakeTheme.h"
 #include "awake/DataLocation.h"
 #include "awake/GpuSelection.h"
@@ -163,6 +164,33 @@ private slots:
         QVERIFY(!bridge.skinCommand("skin-lookup-test", account->internalId(), "lookup", {{"username", "../../private"}}).value("ok").toBool());
         QVERIFY(!bridge.skinCommand("skin-cape-test", account->internalId(), "apply", {{"id", "default/steve/CLASSIC"}, {"variant", "CLASSIC"}, {"capeId", "someone-elses-cape"}}).value("ok").toBool());
         QVERIFY(!bridge.skinCommand("skin-reset-cape-test", account->internalId(), "reset", {{"capeId", "someone-elses-cape"}}).value("ok").toBool());
+        QTemporaryDir library;
+        const auto original = account->accountData()->minecraftProfile.skin.data;
+        const auto originalVariant = account->accountData()->minecraftProfile.skin.variant;
+        account->accountData()->yggdrasilToken.token.clear();
+        QString savedId;
+        {
+            Awake::Web::Skins skins(&assets, nullptr, library.path());
+            skins.state(account->internalId());
+            QSignalSpy finished(&skins, &Awake::Web::Skins::finished);
+            QVERIFY(!skins.command("save-invalid", account->internalId(), "saveLocal", {{"id", "../../private"}, {"variant", "SLIM"}, {"name", "Local"}}).value("ok").toBool());
+            QVERIFY(skins.command("save-local", account->internalId(), "saveLocal", {{"id", "current/" + account->internalId()}, {"variant", "CLASSIC"}, {"name", "My local skin 我的"}}).value("ok").toBool());
+            QTRY_COMPARE(finished.count(), 1);
+            const auto saved = finished.last().at(1).toMap().value("saved").toList();
+            QCOMPARE(saved.size(), 1);
+            savedId = saved.first().toMap().value("id").toString();
+            QCOMPARE(saved.first().toMap().value("name").toString(), QString("My local skin 我的"));
+            QCOMPARE(saved.first().toMap().value("variant").toString(), QString("CLASSIC"));
+            QVERIFY(saved.first().toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
+            QCOMPARE(account->accountData()->minecraftProfile.skin.data, original);
+            QCOMPARE(account->accountData()->minecraftProfile.skin.variant, originalVariant);
+        }
+        Awake::Web::Skins reopened(&assets, nullptr, library.path());
+        const auto restored = reopened.state("").value("saved").toList();
+        QCOMPARE(restored.size(), 1);
+        QCOMPARE(restored.first().toMap().value("id").toString(), savedId);
+        QCOMPARE(restored.first().toMap().value("name").toString(), QString("My local skin 我的"));
+        QVERIFY(!reopened.state("").value("editable").toBool());
     }
     void liveSkinLookup()
     {

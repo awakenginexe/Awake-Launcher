@@ -122,7 +122,7 @@ class AwakeWebShellTest : public QObject {
         QCOMPARE(window->minimumSize(), QSize(1320, 780));
         QTRY_VERIFY(evaluate("Boolean(document.querySelector('.skin-canvas')?.dataset.yaw)").toBool());
         QTRY_VERIFY(evaluate("getComputedStyle(document.querySelector('.welcome-name')).borderRadius === '4px'").toBool());
-        QCOMPARE(evaluate("[...document.querySelectorAll('.skins-dialog .modal-footer button')].map(button => button.textContent.trim()).join('|')").toString(), QString("Reset to default|Reset to Minecraft default|Apply skin"));
+        QCOMPARE(evaluate("[...document.querySelectorAll('.skins-dialog .modal-footer button')].map(button => button.textContent.trim()).join('|')").toString(), QString("Reset to default|Reset to Minecraft default|Save locally|Apply to account"));
         QSignalSpy skinRequests(bridge, &Awake::Web::Bridge::catalogFinished);
         const auto currentPixels = evaluate("document.querySelector('.skin-canvas').toDataURL()").toString();
         evaluate("document.querySelector('.skin-default').click(); document.querySelector('.skin-cape-choice').click()");
@@ -208,7 +208,11 @@ class AwakeWebShellTest : public QObject {
         evaluate("document.querySelector('.skin-default').click()");
         QTRY_COMPARE(evaluate("document.querySelector('.skin-canvas').dataset.variant").toString(), QString("SLIM"));
         QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
-        QTRY_VERIFY(evaluate("[...document.querySelectorAll('.skin-default img')].every(image => image.complete && image.naturalWidth === 16)").toBool());
+        QTRY_VERIFY(evaluate("document.querySelectorAll('.skin-default .skin-thumbnail-canvas').length === 9 && [...document.querySelectorAll('.skin-default .skin-thumbnail-canvas')].every(canvas => canvas.width > 0 && canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((value,index) => index % 4 === 3 && value > 0))").toBool());
+        evaluate("document.querySelector('.skin-local-save button').click()");
+        QTRY_VERIFY(evaluate("Boolean(document.querySelector('.skin-library-grid .skin-thumbnail-canvas'))").toBool());
+        QTRY_VERIFY(evaluate("(() => { const canvas = document.querySelector('.skin-library-grid .skin-thumbnail-canvas'); return canvas.width > 0 && canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((value,index) => index % 4 === 3 && value > 0); })()").toBool());
+        evaluate("document.querySelector('.skin-stage').dispatchEvent(new KeyboardEvent('keydown', {key:'Home', bubbles:true})); document.querySelector('[data-skin-part=body-overlay]').click()");
         QTRY_COMPARE(evaluate("getComputedStyle(document.querySelector('.skins-overlay')).opacity").toString(), QString("1"));
         QTest::qWait(300);
         view->repaint();

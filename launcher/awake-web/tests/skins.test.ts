@@ -47,6 +47,7 @@ test('skin results reject remote textures and keep account identity', () => {
   assert.equal(parseSkinState(state).current?.variant, 'SLIM');
   assert.equal(parseSkinState({ ...state, current: { ...entry, textureUrl: 'https://example.com/skin.png' } }).current, null);
   assert.throws(() => parseSkinState({ ...state, accountId: null }));
+  assert.equal(parseSkinState({ ...state, saved: [entry, { ...entry, textureUrl: 'https://example.com/private.png' }] }).saved.length, 1);
 });
 test('Apply requires a changed texture, model or owned cape, even across different skin IDs', () => {
   const entry = { id: 'current/account', name: 'Player', variant: 'SLIM' as const, textureHash: 'a'.repeat(64), textureUrl: 'awake://ui/images/0123456789abcdef.png', previewUrl: '' };

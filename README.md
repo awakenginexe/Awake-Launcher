@@ -30,6 +30,7 @@ Source builds disable telemetry when `POSTHOG_PROJECT_TOKEN` is empty. Supply it
 - Manage mods, resource packs, shaders, worlds, and screenshots.
 - Choose Java, memory, game settings, and Java arguments globally or per instance.
 - View logs and manage accounts from the launcher.
+- Save named skins locally with 3D library previews, independently of applying them to a Minecraft account. The library follows your selected data folder.
 - Preview and rotate Minecraft skins, load a PNG, or search another player's public skin before applying it to your own Java Edition account.
 - Select your owned capes using image previews. Your skin head appears beside the welcome name and account choices.
 

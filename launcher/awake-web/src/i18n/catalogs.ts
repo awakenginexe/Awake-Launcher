@@ -1,5 +1,6 @@
 export const en = {
-  updateNotChecked: 'Not checked yet', skinParts: 'Skin parts', skinPartsHint: 'Preview only. These switches do not change your Minecraft settings.',
+  skinLibrary: 'Local library', skinSaveLocal: 'Save locally', skinLocalSaved: 'Saved to your local library.', skinName: 'Skin name', skinApplyAccount: 'Apply to account', skinPreviewOnly: 'Preview only', skinLibraryEmpty: 'Save a skin to keep it here.',
+  updateNotChecked: 'Not checked yet', skinParts: 'Skin parts', skinPartsHint: 'Preview only. These buttons do not change your Minecraft settings.',
   skinJacket: 'Jacket', skinLeftSleeve: 'Left sleeve', skinRightSleeve: 'Right sleeve', skinLeftPantsLeg: 'Left pants leg', skinRightPantsLeg: 'Right pants leg', skinHat: 'Hat',
   skinResetMinecraft: 'Reset to Minecraft default', skinResetPending: 'Minecraft’s default skin is selected. Click Apply skin to save.',
   skins: 'Skins', skinPreview: 'Skin preview', skinRotateHint: 'Drag to rotate, or use the arrow keys.', skinRotateLeft: 'Rotate left', skinRotateRight: 'Rotate right', skinZoom: 'Zoom', skinNoPreview: 'Select a skin to preview', skinAccountChanged: 'The selected account changed. Please retry.', skinSaved: 'Your Minecraft skin has been updated.', skinUsername: 'Minecraft username', skinSearch: 'Search', skinSearchHint: 'Preview another player’s skin, then apply it to your own account.', skinSelectFile: 'Select PNG file', skinModel: 'Model type', skinClassic: 'Classic', skinSlim: 'Slim', skinModelHint: 'Classic has wider arms. Slim has thinner arms.', skinDefaults: 'Default skins', skinCurrent: 'Use current skin', skinCape: 'Cape', skinNoCape: 'No cape', skinSignInHint: 'Sign in with a Microsoft account to apply skins and capes.', skinWorking: 'Working…', skinReset: 'Reset to default', skinApply: 'Apply skin',
@@ -116,6 +117,7 @@ export const en = {
 export type MessageKey = keyof typeof en;
 type Catalog = Record<MessageKey, string>;
 export const th: Catalog = {
+  skinLibrary: 'คลังสกินในเครื่อง', skinSaveLocal: 'บันทึกในเครื่อง', skinLocalSaved: 'บันทึกสกินในเครื่องแล้ว', skinName: 'ชื่อสกิน', skinApplyAccount: 'ใช้กับบัญชี', skinPreviewOnly: 'ตัวอย่างเท่านั้น', skinLibraryEmpty: 'บันทึกสกินเพื่อเก็บไว้ที่นี่',
   updateNotChecked: 'ยังไม่ได้ตรวจสอบ', skinParts: 'ส่วนของสกิน', skinPartsHint: 'ใช้แสดงตัวอย่างเท่านั้น ไม่เปลี่ยนการตั้งค่า Minecraft',
   skinJacket: 'เสื้อแจ็กเก็ต', skinLeftSleeve: 'แขนเสื้อซ้าย', skinRightSleeve: 'แขนเสื้อขวา', skinLeftPantsLeg: 'ขากางเกงซ้าย', skinRightPantsLeg: 'ขากางเกงขวา', skinHat: 'หมวก',
   skinResetMinecraft: 'คืนค่าสกินเริ่มต้นของ Minecraft', skinResetPending: 'เลือกสกินเริ่มต้นของ Minecraft แล้ว กดใช้สกินเพื่อบันทึก',
@@ -231,6 +233,7 @@ export const th: Catalog = {
   archiveBrowseError: 'ไม่สามารถเลือกไฟล์เก็บถาวรได้',
 };
 export const zhCN: Catalog = {
+  skinLibrary: '本地皮肤库', skinSaveLocal: '保存到本地', skinLocalSaved: '已保存到本地皮肤库。', skinName: '皮肤名称', skinApplyAccount: '应用到账号', skinPreviewOnly: '仅预览', skinLibraryEmpty: '保存皮肤以收藏到这里。',
   updateNotChecked: '尚未检查', skinParts: '皮肤部件', skinPartsHint: '仅用于预览，不会更改 Minecraft 设置。',
   skinJacket: '夹克', skinLeftSleeve: '左袖', skinRightSleeve: '右袖', skinLeftPantsLeg: '左裤腿', skinRightPantsLeg: '右裤腿', skinHat: '帽子',
   skinResetMinecraft: '恢复 Minecraft 默认皮肤', skinResetPending: '已选择 Minecraft 默认皮肤。点击应用皮肤以保存。',
@@ -346,6 +349,7 @@ export const zhCN: Catalog = {
   archiveBrowseError: '无法浏览选择压缩包。',
 };
 export const zhTW: Catalog = {
+  skinLibrary: '本機外觀庫', skinSaveLocal: '儲存至本機', skinLocalSaved: '已儲存至本機外觀庫。', skinName: '外觀名稱', skinApplyAccount: '套用至帳號', skinPreviewOnly: '僅供預覽', skinLibraryEmpty: '儲存外觀以收藏到這裡。',
   updateNotChecked: '尚未檢查', skinParts: '皮膚部件', skinPartsHint: '僅用於預覽，不會更改 Minecraft 設定。',
   skinJacket: '外套', skinLeftSleeve: '左袖', skinRightSleeve: '右袖', skinLeftPantsLeg: '左褲管', skinRightPantsLeg: '右褲管', skinHat: '帽子',
   skinResetMinecraft: '恢復 Minecraft 預設外觀', skinResetPending: '已選擇 Minecraft 預設外觀。點擊套用外觀以儲存。',

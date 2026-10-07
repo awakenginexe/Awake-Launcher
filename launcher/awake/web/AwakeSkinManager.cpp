@@ -19,6 +19,8 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QTimer>
+#include <QUuid>
+#include <QDir>
 
 namespace Awake::Web {
 namespace {
@@ -50,7 +52,8 @@ QImage capeImage(const QByteArray& bytes)
 }
 }
 
-Skins::Skins(Assets* assets, QObject* parent) : QObject(parent), m_assets(assets) {}
+Skins::Skins(Assets* assets, QObject* parent, const QString& libraryDir)
+    : QObject(parent), m_assets(assets), m_libraryDir(libraryDir.isEmpty() ? QDir(APPLICATION->dataRoot()).filePath("skins/awake-library") : libraryDir) {}
 Skins::~Skins()
 {
     if (m_reply) { disconnect(m_reply, nullptr, this, nullptr); m_reply->abort(); m_reply->deleteLater(); }
@@ -133,7 +136,7 @@ QVariantMap Skins::importSkin(const QString& accountId, const QString& name, con
 QVariantMap Skins::state(const QString& accountId)
 {
     const auto acct = account(accountId);
-    if (!acct) return error(tr("Select a Minecraft account first."));
+    if (!acct && !accountId.isEmpty()) return error(tr("Select a Minecraft account first."));
     QVariantList defaults;
     for (const auto& name : {"steve", "alex", "zuri", "sunny", "noor", "ari", "efe", "makena", "kai"})
         for (const auto& variant : {"CLASSIC", "SLIM"}) {
@@ -141,6 +144,9 @@ QVariantMap Skins::state(const QString& accountId)
             auto entry = addSkin(QString("default/%1/%2").arg(name, variant), QString(name).replace(0, 1, QString(name).left(1).toUpper()), path, variant);
             if (!entry.contains("error")) defaults.append(entry);
         }
+    const auto saved = savedSkins();
+    if (!acct) return {{"ok", true}, {"accountId", accountId}, {"editable", false}, {"defaults", defaults}, {"saved", saved},
+        {"preview", m_skins.value("preview/" + accountId).view}, {"busy", m_busy}};
     const auto& profile = acct->accountData()->minecraftProfile;
     auto uuid = profile.id;
     uuid.remove('-');
@@ -171,8 +177,34 @@ QVariantMap Skins::state(const QString& accountId)
         capes.append(QVariantMap{{"id", cape.id}, {"name", cape.alias}, {"textureUrl", cached.second}});
     }
     return {{"ok", true}, {"accountId", accountId}, {"editable", acct->accountType() == AccountType::MSA && !acct->accessToken().isEmpty()},
-        {"current", current}, {"minecraftDefault", minecraftDefault}, {"defaults", defaults}, {"preview", m_skins.value("preview/" + accountId).view},
+        {"current", current}, {"minecraftDefault", minecraftDefault}, {"defaults", defaults}, {"saved", saved}, {"preview", m_skins.value("preview/" + accountId).view},
         {"capes", capes}, {"capeId", profile.currentCape}, {"busy", m_busy}};
+}
+QVariantList Skins::savedSkins()
+{
+    QVariantList saved;
+    const QDir dir(m_libraryDir);
+    static const QRegularExpression idPattern("^[a-f0-9]{32}$");
+    for (const auto& info : dir.entryInfoList({"*.json"}, QDir::Files | QDir::NoSymLinks, QDir::Time)) {
+        const auto id = info.completeBaseName();
+        if (!idPattern.match(id).hasMatch() || info.size() > 4096) continue;
+        QFile file(info.filePath());
+        if (!file.open(QIODevice::ReadOnly)) continue;
+        const auto metadata = QJsonDocument::fromJson(file.read(4097)).object();
+        const auto name = metadata.value("name").toString().trimmed(), variant = metadata.value("variant").toString();
+        const auto path = dir.filePath(id + ".png");
+        if (name.isEmpty() || name.size() > 64 || !QStringList{"CLASSIC", "SLIM"}.contains(variant) || QFileInfo(path).isSymLink()) continue;
+        auto entry = addSkin("local/" + id, name, path, variant);
+        if (!entry.contains("error")) saved.append(entry);
+    }
+    return saved;
+}
+bool Skins::validSelection(const QString& id, const QString& accountId, const QString& variant) const
+{
+    return m_skins.contains(id) && validSkin(m_skins.value(id).path)
+        && (!id.startsWith("current/") || id == "current/" + accountId)
+        && (!id.startsWith("preview/") || id == "preview/" + accountId)
+        && QStringList{"CLASSIC", "SLIM"}.contains(variant);
 }
 void Skins::download(const QUrl& url, std::function<void(QByteArray, QString)> done)
 {
@@ -234,9 +266,32 @@ QVariantMap Skins::command(const QString& requestId, const QString& accountId, c
     static const QRegularExpression requestPattern("^[A-Za-z0-9-]{1,100}$");
     if (!requestPattern.match(requestId).hasMatch()) return error(tr("Invalid skin request."));
     const auto acct = account(accountId);
-    if (!acct) return error(tr("The Minecraft account is no longer available."));
+    if (!acct && (!accountId.isEmpty() || !QStringList{"browse", "lookup", "saveLocal"}.contains(command))) return error(tr("The Minecraft account is no longer available."));
     if (m_busy) return error(tr("A skin operation is already running."));
-    if (!QStringList{"browse", "lookup", "capes", "apply", "reset"}.contains(command)) return error(tr("Unknown skin operation."));
+    if (!QStringList{"browse", "lookup", "capes", "apply", "reset", "saveLocal"}.contains(command)) return error(tr("Unknown skin operation."));
+    if (command == "saveLocal") {
+        const auto id = payload.value("id").toString(), variant = payload.value("variant").toString(), name = payload.value("name").toString().trimmed();
+        if (!validSelection(id, accountId, variant)) return error(tr("Select a valid skin and model."));
+        if (name.isEmpty() || name.size() > 64) return error(tr("Enter a skin name of up to 64 characters."));
+        const auto bytes = png(SkinModel(m_skins.value(id).path).getTexture());
+        m_busy = true;
+        QTimer::singleShot(0, this, [this, requestId, accountId, name, variant, bytes] {
+            const QDir dir(m_libraryDir);
+            const auto id = QUuid::createUuid().toString(QUuid::Id128);
+            const auto path = dir.filePath(id + ".png");
+            QSaveFile image(path), metadata(dir.filePath(id + ".json"));
+            const auto json = QJsonDocument(QJsonObject{{"name", name}, {"variant", variant}}).toJson(QJsonDocument::Compact);
+            QString problem;
+            if (!dir.mkpath(".") || bytes.isEmpty() || !image.open(QIODevice::WriteOnly) || image.write(bytes) != bytes.size() || !image.commit())
+                problem = tr("Unable to save the skin to your local library.");
+            else if (!metadata.open(QIODevice::WriteOnly) || metadata.write(json) != json.size() || !metadata.commit()) {
+                QFile::remove(path);
+                problem = tr("Unable to save the skin name to your local library.");
+            }
+            complete(requestId, accountId, problem);
+        });
+        return {{"ok", true}};
+    }
     if (command == "capes") {
         m_busy = true;
         const auto ids = acct->accountData()->minecraftProfile.capes.keys();
@@ -248,7 +303,7 @@ QVariantMap Skins::command(const QString& requestId, const QString& accountId, c
         const auto id = payload.value("id").toString();
         const auto variant = payload.value("variant").toString();
         const auto capeId = payload.value("capeId").toString();
-        if (command == "apply" && (!m_skins.contains(id) || !validSkin(m_skins[id].path) || (id.startsWith("current/") && id != "current/" + accountId) || (id.startsWith("preview/") && id != "preview/" + accountId) || !QStringList{"CLASSIC", "SLIM"}.contains(variant))) return error(tr("Select a valid skin and model."));
+        if (command == "apply" && !validSelection(id, accountId, variant)) return error(tr("Select a valid skin and model."));
         if (!capeId.isEmpty() && !acct->accountData()->minecraftProfile.capes.contains(capeId)) return error(tr("The selected cape does not belong to this account."));
         // ponytail: one skin operation at a time; per-account jobs if concurrent editing is needed.
         m_busy = true;

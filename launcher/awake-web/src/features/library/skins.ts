@@ -1,7 +1,7 @@
 import { isLocalImage } from './model.ts';
 export type SkinVariant = 'CLASSIC' | 'SLIM';
 export interface SkinEntry { id: string; name: string; variant: SkinVariant; textureHash: string; textureUrl: string; previewUrl: string }
-export interface SkinState { accountId: string; editable: boolean; current: SkinEntry | null; minecraftDefault: SkinEntry | null; preview: SkinEntry | null; defaults: SkinEntry[]; capes: { id: string; name: string; textureUrl: string }[]; capeId: string }
+export interface SkinState { accountId: string; editable: boolean; current: SkinEntry | null; minecraftDefault: SkinEntry | null; preview: SkinEntry | null; defaults: SkinEntry[]; saved: SkinEntry[]; capes: { id: string; name: string; textureUrl: string }[]; capeId: string }
 export interface SkinService { state: (id: string) => Promise<unknown>; command: (id: string, command: string, payload?: Record<string, unknown>) => Promise<unknown> }
 export interface SkinFace { side: string; width: number; height: number; uv: [number, number, number, number] }
 export interface SkinBox { id: string; width: number; height: number; depth: number; x: number; y: number; z: number; atlasHeight: number; faces: SkinFace[] }
@@ -123,6 +123,7 @@ export function parseSkinState(value: unknown): SkinState {
   return {
     accountId: data.accountId, editable: data.editable === true, current: entry(data.current), minecraftDefault: entry(data.minecraftDefault), preview: entry(data.preview),
     defaults: Array.isArray(data.defaults) ? data.defaults.map(entry).filter((item): item is SkinEntry => item !== null) : [],
+    saved: Array.isArray(data.saved) ? data.saved.map(entry).filter((item): item is SkinEntry => item !== null) : [],
     capes: Array.isArray(data.capes) ? data.capes.filter((item): item is { id: string; name: string; textureUrl?: string } => Boolean(item && typeof item === 'object' && typeof item.id === 'string' && typeof item.name === 'string')).map(item => ({ id: item.id, name: item.name, textureUrl: typeof item.textureUrl === 'string' && isLocalImage(item.textureUrl) ? item.textureUrl : '' })) : [],
     capeId: typeof data.capeId === 'string' ? data.capeId : '',
   };

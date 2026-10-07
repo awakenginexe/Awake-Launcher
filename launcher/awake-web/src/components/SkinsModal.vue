@@ -12,6 +12,8 @@ const dialog = ref<HTMLElement>();
 const state = shallowRef<SkinState | null>(null), selected = shallowRef<SkinEntry | null>(null);
 const variant = ref<SkinVariant>('CLASSIC'), capeId = ref(''), username = ref('');
 const busy = ref(false), failure = ref(''), message = ref('');
+const localName = ref('');
+watch(selected, entry => { localName.value = entry?.name ?? ''; });
 const minecraftReset = ref(false);
 const previousFocus = document.activeElement as HTMLElement | null;
 let revision = 0;
@@ -77,9 +79,14 @@ async function run(command: string) {
   const generation = ++revision, id = props.accountId;
   busy.value = true; failure.value = ''; message.value = '';
   try {
-    const result = await props.service.command(id, command, { id: selected.value?.id ?? '', variant: variant.value, capeId: capeId.value, username: username.value.trim() });
+    const result = await props.service.command(id, command, { id: selected.value?.id ?? '', variant: variant.value, capeId: capeId.value, username: username.value.trim(), name: localName.value.trim() });
     if (generation !== revision) return;
-    accept(result, id, command === 'browse' || command === 'lookup');
+    if (command === 'saveLocal') {
+      const updated = parseSkinState(result);
+      if (updated.accountId !== id) throw new Error(props.t('skinAccountChanged'));
+      state.value = updated;
+      message.value = props.t('skinLocalSaved');
+    } else accept(result, id, command === 'browse' || command === 'lookup');
     if (command === 'apply' || command === 'reset') message.value = props.t('skinSaved');
     await loadCapeTextures(generation, id);
   } catch (error) { if (generation === revision) failure.value = error instanceof Error ? error.message : String(error); }
@@ -109,7 +116,8 @@ onUnmounted(() => { revision++; if (previousFocus?.isConnected) previousFocus.fo
           <p class="skin-search-hint">{{ t('skinSearchHint') }}</p>
           <button type="button" class="btn-subtle skin-select-file" :disabled="busy" @click="run('browse')">{{ t('skinSelectFile') }}</button>
           <div class="skin-model-field"><span>{{ t('skinModel') }}</span><div class="skin-model-options" role="group" :aria-label="t('skinModel')"><button type="button" class="btn-subtle" :aria-pressed="variant === 'CLASSIC'" :disabled="busy" @click="changeModel('CLASSIC')">{{ t('skinClassic') }}</button><button type="button" class="btn-subtle" :aria-pressed="variant === 'SLIM'" :disabled="busy" @click="changeModel('SLIM')">{{ t('skinSlim') }}</button></div><small>{{ t('skinModelHint') }}</small></div>
-          <div class="skin-defaults"><h3>{{ t('skinDefaults') }}</h3><div class="skin-default-grid"><button v-for="entry in defaults" :key="entry.id" type="button" class="skin-default" :class="{ selected: selected?.id === entry.id }" :aria-pressed="selected?.id === entry.id" :disabled="busy" @click="pick(entry)"><img :src="entry.previewUrl" alt="" width="32" height="72" /><span>{{ entry.name }}</span></button></div></div>
+          <div class="skin-defaults"><h3>{{ t('skinLibrary') }}</h3><div v-if="state?.saved.length" class="skin-library-grid"><button v-for="entry in state.saved" :key="entry.id" type="button" class="skin-default" :class="{ selected: selected?.id === entry.id }" :aria-pressed="selected?.id === entry.id" :disabled="busy" @click="pick(entry)"><SkinPreview thumbnail :texture-url="entry.textureUrl" :variant="entry.variant" :name="entry.name" :t="t" /><span>{{ entry.name }}</span></button></div><p v-else class="skin-search-hint">{{ t('skinLibraryEmpty') }}</p></div>
+          <div class="skin-defaults"><h3>{{ t('skinDefaults') }}</h3><div class="skin-default-grid"><button v-for="entry in defaults" :key="entry.id" type="button" class="skin-default" :class="{ selected: selected?.id === entry.id }" :aria-pressed="selected?.id === entry.id" :disabled="busy" @click="pick(entry)"><SkinPreview thumbnail :texture-url="entry.textureUrl" :variant="entry.variant" :name="entry.name" :t="t" /><span>{{ entry.name }}</span></button></div></div>
           <button v-if="state?.current" type="button" class="btn-subtle" :disabled="busy" @click="pick(state.current)">{{ t('skinCurrent') }}</button>
           <div class="skin-capes"><h3>{{ t('skinCape') }}</h3><div class="skin-cape-grid" role="group" :aria-label="t('skinCape')">
             <button type="button" class="skin-cape-choice" :aria-pressed="capeId === ''" :disabled="busy || !state?.editable" @click="capeId = ''"><span class="skin-cape-none" aria-hidden="true">⊘</span><span>{{ t('skinNoCape') }}</span></button>
@@ -118,7 +126,7 @@ onUnmounted(() => { revision++; if (previousFocus?.isConnected) previousFocus.fo
         </div>
         <div class="skin-display"><SkinPreview :texture-url="selected?.textureUrl ?? ''" :variant="variant" :name="selected?.name ?? ''" :cape-url="capeUrl" :t="t" /><p class="skin-selected-name">{{ selected?.name ?? t('skinNoPreview') }}</p><p v-if="busy" class="skin-feedback" role="status">{{ t('skinWorking') }}</p><p v-if="failure" class="skin-feedback skin-error" role="alert">{{ failure }}</p><p v-if="message" class="skin-feedback" role="status">{{ message }}</p></div>
       </div>
-      <footer class="modal-footer"><div class="skin-reset-actions"><button type="button" class="btn-subtle skin-reset-current" :disabled="busy || !hasChanges" @click="resetCurrent">{{ t('skinReset') }}</button><button type="button" class="btn-subtle skin-reset-minecraft" :disabled="busy || !state?.editable || !state?.minecraftDefault" @click="resetMinecraft">{{ t('skinResetMinecraft') }}</button></div><button type="button" class="btn-primary" :disabled="!canApply" @click="run('apply')">{{ t('skinApply') }}</button></footer>
+      <footer class="modal-footer"><div class="skin-reset-actions"><button type="button" class="btn-subtle skin-reset-current" :disabled="busy || !hasChanges" @click="resetCurrent">{{ t('skinReset') }}</button><button type="button" class="btn-subtle skin-reset-minecraft" :disabled="busy || !state?.editable || !state?.minecraftDefault" @click="resetMinecraft">{{ t('skinResetMinecraft') }}</button></div><div class="skin-local-save"><input v-model="localName" class="styled-input" maxlength="64" :aria-label="t('skinName')" :placeholder="t('skinName')" :disabled="busy || !selected" /><button type="button" class="btn-subtle" :disabled="busy || !selected || !localName.trim()" @click="run('saveLocal')">{{ t('skinSaveLocal') }}</button></div><button type="button" class="btn-primary" :disabled="!canApply" @click="run('apply')">{{ t('skinApplyAccount') }}</button></footer>
     </section>
   </div>
 </template>
@@ -140,9 +148,9 @@ onUnmounted(() => { revision++; if (previousFocus?.isConnected) previousFocus.fo
 .skin-model-field small, .skin-readonly, .skin-search-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .skin-search-hint { margin-top: -8px; }
 .skin-defaults h3, .skin-capes h3 { font-size: 14px; margin: 0 0 12px; }
-.skin-default-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.skin-default-grid, .skin-library-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .skin-default { padding: 12px 6px 8px; display: grid; justify-items: center; gap: 6px; color: inherit; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; font: inherit; font-size: 12px; }
-.skin-default img { image-rendering: pixelated; object-fit: contain; }
+.skin-default span { max-width: 100%; overflow-wrap: anywhere; }
 .skin-default.selected { border-color: var(--accent); background: rgba(160,221,204,.1); }
 .skin-default:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .skin-cape-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -153,7 +161,9 @@ onUnmounted(() => { revision++; if (previousFocus?.isConnected) previousFocus.fo
 .skin-selected-name { text-align: center; font-weight: 600; margin: 20px 0 0; }
 .skin-feedback { font-size: 13px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
 .skin-error { color: var(--danger, #ff9d9d); }
-.skins-dialog .modal-footer { justify-content: space-between; }
+.skins-dialog .modal-footer { justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.skin-local-save { display: flex; gap: 8px; }
+.skin-local-save input { width: 140px; min-width: 0; }
 .skin-reset-actions { display: flex; gap: 10px; }
 .skins-dialog .btn-primary:disabled { box-shadow: none; background: rgba(255,255,255,.08); color: var(--text-secondary); }
 @media (max-width: 760px) { .skins-dialog { width: calc(100vw - 24px); } .skins-body { grid-template-columns: 1fr; overflow-y: auto; } .skin-tools { overflow: visible; } .skin-display { grid-row: 1; overflow: visible; } }

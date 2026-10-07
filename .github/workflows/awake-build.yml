@@ -131,27 +131,10 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v1.3.0 improves update information and skin previews.
-
-          - Settings > About shows current/latest versions, release notes, update checks and Update now.
-          - Cape and skin preview depth is resolved per pixel, with a cape that hangs away from the back.
-          - Preview switches for Cape, Jacket, Left/Right Sleeve, Left/Right Pants Leg and Hat. They do not change Minecraft's settings.
-          - One anonymous app_started event per launcher session goes to PostHog EU with app version and OS. Session IDs are random and never saved; no account or instance data is sent. PostHog infers country from the request.
-
-          Minecraft's application review approved Awake Launcher's Microsoft application ID for the Minecraft API allow list on October 5, 2026.
-
-          Release builds receive Awake's application ID through GitHub Actions configuration. Source builds and forks must supply their own application ID; no Microsoft client secret is used.
-
-          The launcher interface uses software rendering to avoid the hardware graphics path that game overlays can hook. Minecraft keeps its own GPU settings.
-
-          Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
-
-          Download the Windows ZIP, extract the entire folder, then run `awakelauncher.exe`.
-          Keep all extracted files together. Portable builds store accounts and instances beside the app.
-
-          Install v1.2.0 manually once to receive the in-app installer. Portable updates use the ZIP download in your browser; close the launcher and extract it over your existing app folder.
-
-          Each download has a `.sha256` checksum. This release is unsigned.
+          - Compact glowing buttons for skin parts: glow means visible, click to hide.
+          - A local skin library with 3D previews, saved names and Classic/Slim models.
+          - Separate Save locally and Apply to account actions.
+          - Your skin library stays in your selected launcher data folder.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

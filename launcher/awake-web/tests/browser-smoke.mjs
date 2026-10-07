@@ -618,12 +618,14 @@ try {
     const {host,state} = window.__nativeTest;
     const entry = {id:'current/skin-fixture',name:'Saved skin',variant:'SLIM',textureHash:'a'.repeat(64),textureUrl:'awake://ui/images/0123456789abcdef.png',previewUrl:''};
     const minecraftDefault = {...entry,id:'default/steve/CLASSIC',name:'Steve',variant:'CLASSIC',textureHash:'b'.repeat(64)};
-    const skin = {ok:true,accountId:'skin-fixture',editable:true,current:entry,minecraftDefault,defaults:[minecraftDefault],capes:[{id:'pan',name:'Pan',textureUrl:entry.textureUrl}],capeId:'pan'};
+    const skin = {ok:true,accountId:'skin-fixture',editable:true,current:entry,minecraftDefault,defaults:[minecraftDefault],saved:[],capes:[{id:'pan',name:'Pan',textureUrl:entry.textureUrl}],capeId:'pan'};
     window.__nativeTest.skinCalls = [];
     host.skinState = (id,cb) => cb(structuredClone(skin));
     host.skinCommand = (request,id,command,payload,cb) => {
       window.__nativeTest.skinCalls.push([command,payload]);
-      if (command === 'reset') {
+      if (command === 'saveLocal') {
+        skin.saved.push({...skin.current,id:'local/fixture',name:payload.name,variant:payload.variant});
+      } else if (command === 'reset') {
         skin.current = {...minecraftDefault,id:entry.id,name:'Saved Minecraft default'};
         skin.capeId = payload.capeId;
         skin.capes[0].textureUrl = '';
@@ -638,16 +640,30 @@ try {
   assert.equal(await page.locator('[data-skin-part]').count(), 7);
   for (const part of ['cape', 'body-overlay', 'left-arm-overlay', 'right-arm-overlay', 'left-leg-overlay', 'right-leg-overlay', 'head-overlay']) {
     const control = page.locator(`[data-skin-part="${part}"]`);
-    assert.equal(await control.isChecked(), true);
-    await control.uncheck();
+    assert.equal(await control.getAttribute('aria-pressed'), 'true');
+    await control.click();
     await page.waitForFunction(part => JSON.parse(document.querySelector('.skin-canvas').dataset.layers)[part] === false, part);
     assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls), []);
     assert.equal(await page.locator('.skins-dialog .btn-primary').isDisabled(), true);
-    await control.check();
+    await control.click();
   }
   const stageBounds = await page.locator('.skin-stage').boundingBox(), optionsBounds = await page.locator('.skin-layer-options').boundingBox();
   assert.ok(stageBounds && optionsBounds && optionsBounds.x >= stageBounds.x + stageBounds.width);
   await page.screenshot({path:resolve(output, 'skin-parts.png')});
+  await page.getByRole('button',{name:'Classic',exact:true}).click();
+  await page.locator('.skin-local-save input').fill('My local skin');
+  await page.getByRole('button',{name:'Save locally',exact:true}).click();
+  await page.getByText('Saved to your local library.',{exact:true}).waitFor();
+  assert.equal(await page.locator('.skin-library-grid .skin-thumbnail-canvas').count(), 1);
+  assert.equal(await page.locator('.skin-selected-name').textContent(), 'Saved skin');
+  assert.equal(await page.locator('.skin-canvas').getAttribute('data-variant'), 'CLASSIC');
+  assert.equal(await page.locator('.skins-dialog .btn-primary').isEnabled(), true);
+  assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls.map(call => call[0])), ['saveLocal']);
+  await page.locator('.skin-library-grid button').click();
+  assert.equal(await page.locator('.skin-selected-name').textContent(), 'My local skin');
+  await page.locator('.skin-reset-current').click();
+  await page.evaluate(() => window.__nativeTest.skinCalls.length = 0);
+
   await page.locator('.skin-reset-minecraft').click();
   assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls), []);
   assert.equal(await page.locator('.skins-dialog .btn-primary').isEnabled(), true);
