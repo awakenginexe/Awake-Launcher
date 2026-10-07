@@ -291,6 +291,44 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(evaluate("window.__backgroundBeforeRefresh === document.querySelector('.artwork-image')").toBool());
         evaluate("document.querySelectorAll('.instance-select')[0].click()");
     }
+    void startupReplaysCachedFallbackWithoutSelectingInstance_data()
+    {
+        QTest::addColumn<bool>("suspended");
+        QTest::newRow("visible") << false;
+        QTest::newRow("suspended") << true;
+    }
+    void startupReplaysCachedFallbackWithoutSelectingInstance()
+    {
+        QFETCH(bool, suspended);
+        const auto previousSelection = APPLICATION->settings()->get("SelectedInstance");
+        auto* previousView = view;
+        auto restore = qScopeGuard([&] {
+            view = previousView;
+            APPLICATION->settings()->set("SelectedInstance", previousSelection);
+            window->activateWindow();
+            bridge->setArtworkFocused(true);
+        });
+        APPLICATION->settings()->set("SelectedInstance", "two");
+        QWidget host;
+        auto* shell = new Awake::Web::Shell(&host);
+        auto* native = new Awake::Web::Bridge(shell->assets(), [](const QString&) { return true; },
+            [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; }, shell);
+        host.show();
+        shell->show();
+        native->setArtworkFocused(true);
+        QSignalSpy artwork(native, &Awake::Web::Bridge::artworkChanged);
+        native->scheduleState();
+        QTRY_VERIFY_WITH_TIMEOUT(!artwork.isEmpty(), 5000);
+        QCOMPARE(artwork.last().at(1).toString(), QString("awake://ui/assets/minecraft-background.png"));
+        shell->setSuspended(suspended);
+        shell->start(native);
+        view = shell->findChild<QWebEngineView*>();
+        QTRY_VERIFY_WITH_TIMEOUT(shell->isReady(), 20000);
+        if (suspended) shell->setSuspended(false);
+        QTRY_VERIFY_WITH_TIMEOUT(evaluate("(() => { const image = document.querySelector('.artwork-image'); return image && image.complete && image.naturalWidth === 1920 && image.src === 'awake://ui/assets/minecraft-background.png'; })()").toBool(), 5000);
+        QVERIFY(!evaluate("Boolean(document.querySelector('.artwork-caption[role=status]'))").toBool());
+        host.close();
+    }
     void updateCheckThroughNativeBridge()
     {
         auto* checker = APPLICATION->awakeUpdateChecker();

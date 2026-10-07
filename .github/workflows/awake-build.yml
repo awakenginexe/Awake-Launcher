@@ -134,10 +134,8 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Fixed choppy launcher fades and scrolling on Windows by enabling Chromium's compositor through the Microsoft WARP software device. Local settings-fade samples improved from roughly 100 ms frame gaps to 16.7 ms, with no gaps over 50 ms in the measured run. No NVIDIA overlay hooks were found in that run.
-          - Replaced the native Download mods window with an Awake-themed browser: CurseForge and Modrinth search, compatible version selection, a shared download queue, and a dependency review before installation.
-          - Added download progress, cancellation, and retry after partial failure. Completed downloads are kept.
-          - Fixed matching of dependencies pinned to a specific provider file ID and retained the launcher's dependency and metadata preferences.
+          - Fixed a startup race that left the selected instance's background blank and stuck on "Loading screenshot..." until the instance was clicked.
+          - The bundled Minecraft wallpaper now appears when an instance has no screenshots, including when the native artwork finishes loading before the web interface connects.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

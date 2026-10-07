@@ -689,6 +689,9 @@ QVariantMap Bridge::instanceCommand(const QString& id, const QString& command, c
 void Bridge::frontendReady()
 {
     emit ready();
+    if (!m_artworkUrl.isEmpty() && !m_artworkId.isEmpty() &&
+        m_artworkId == APPLICATION->settings()->get("SelectedInstance").toString())
+        emit artworkChanged(m_artworkId, m_artworkUrl, {});
     scheduleState();
 }
 
