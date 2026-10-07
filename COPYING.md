@@ -29,6 +29,25 @@ Attribution-ShareAlike 4.0 International license in [program_info/LICENSE](progr
 That asset license does not change the launcher code's GPL license or imply
 endorsement by any upstream project or trademark owner.
 
+The current Awake logo and Windows icon were supplied by the Awake Launcher
+maintainer for version 1.1.0. Upstream branding files remain attributed to their
+respective contributors.
+
+## Service registrations
+
+Official Awake Launcher builds use Awake's own Microsoft application registration
+and Minecraft API allow-list approval. This service configuration does not change
+the launcher code's GPL license or grant forks permission to reuse that
+registration. Forks must configure their own approved application ID. No Microsoft
+client secret is distributed with this desktop application.
+
+## Minecraft skin textures
+
+The default player textures in `launcher/resources/skins/` are Minecraft: Java
+Edition game assets, copyright Mojang Studios / Microsoft. They were extracted
+from the official 1.21.8 client and are separate from the launcher code's GPL
+license. Awake Launcher is not affiliated with Mojang or Microsoft.
+
 ## Bundled translations
 
     Derived from PrismLauncher/Translations, revision

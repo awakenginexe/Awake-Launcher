@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QTest>
+#include <QUuid>
 #include "NativeTestAccounts.h"
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -151,7 +152,7 @@ private slots:
     }
     void awakeIdentity()
     {
-        QCOMPARE(BuildConfig.MSA_CLIENT_ID, QString("9f3c5cb3-82af-4a3e-ad36-2970397c2395"));
+        QVERIFY(BuildConfig.MSA_CLIENT_ID.isEmpty() || !QUuid(BuildConfig.MSA_CLIENT_ID).isNull());
         APPLICATION->settings()->reset("MSAClientIDOverride");
         QCOMPARE(APPLICATION->getMSAClientID(), BuildConfig.MSA_CLIENT_ID);
         APPLICATION->settings()->set("MSAClientIDOverride", "developer-override");

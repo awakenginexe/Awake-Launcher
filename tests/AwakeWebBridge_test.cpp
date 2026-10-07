@@ -62,6 +62,9 @@
 #include "FileSystem.h"
 #include "java/download/ArchiveDownloadTask.h"
 #include "net/HttpMetaCache.h"
+#include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/Parsers.h"
+#include <QScopeGuard>
 
 #if defined(Q_OS_WIN) && !defined(Q_MOC_RUN)
 #ifndef NOMINMAX
@@ -74,6 +77,101 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void profileRefreshKeepsCapeImagesOnlyForUnchangedUrls()
+    {
+        MinecraftProfile profile;
+        profile.capes.insert("cape", Cape{"cape", "https://textures.minecraft.net/texture/old", "Pan", "cached-png"});
+        QByteArray response = R"({"id":"0123456789abcdef0123456789abcdef","name":"Fixture","skins":[],"capes":[{"id":"cape","state":"ACTIVE","url":"http://textures.minecraft.net/texture/old","alias":"Pan"}]})";
+        QVERIFY(Parsers::parseMinecraftProfile(response, profile));
+        QCOMPARE(profile.capes["cape"].data, QByteArray("cached-png"));
+        response.replace("texture/old", "texture/new");
+        QVERIFY(Parsers::parseMinecraftProfile(response, profile));
+        QVERIFY(profile.capes["cape"].data.isEmpty());
+    }
+    void skinsUseLocalImagesAndRejectUntrustedCommands()
+    {
+        auto accounts = APPLICATION->accounts();
+        auto previous = accounts->defaultAccount();
+        auto account = MinecraftAccount::createBlankMSA();
+        account->accountData()->minecraftProfile.name = "Skin fixture";
+        account->accountData()->minecraftProfile.id = "0123456789abcdef0123456789abcdef";
+        account->accountData()->yggdrasilToken.token = "private-skin-test-token";
+        account->accountData()->minecraftProfile.skin.variant = "SLIM";
+        QImage skin(64, 64, QImage::Format_ARGB32);
+        skin.fill(Qt::transparent);
+        skin.setPixelColor(8, 8, Qt::red);
+        QBuffer bytes(&account->accountData()->minecraftProfile.skin.data);
+        QVERIFY(bytes.open(QIODevice::WriteOnly));
+        QVERIFY(skin.save(&bytes, "PNG"));
+        accounts->addAccount(account);
+        accounts->setDefaultAccount(account);
+        auto cleanup = qScopeGuard([&] {
+            for (int i = 0; i < accounts->count(); ++i)
+                if (accounts->at(i) == account) { accounts->removeAccount(accounts->index(i, 0)); break; }
+            accounts->setDefaultAccount(previous);
+        });
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        QVariantMap result;
+        QVERIFY(QMetaObject::invokeMethod(&bridge, "skinState", Qt::DirectConnection,
+            Q_RETURN_ARG(QVariantMap, result), Q_ARG(QString, account->internalId())));
+        QVERIFY(result.value("ok").toBool());
+        QCOMPARE(result.value("defaults").toList().size(), 18);
+        QCOMPARE(result.value("minecraftDefault").toMap().value("id").toString(), QString("default/alex/SLIM"));
+        account->accountData()->minecraftProfile.id = "ffffffff000000000000000000000000";
+        QCOMPARE(bridge.skinState(account->internalId()).value("minecraftDefault").toMap().value("id").toString(), QString("default/zuri/CLASSIC"));
+        account->accountData()->minecraftProfile.id = "0123456789abcdef0123456789abcdef";
+        QCOMPARE(result.value("current").toMap().value("textureHash").toString().size(), 64);
+        QVERIFY(result.value("current").toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
+        const auto snapshot = bridge.snapshot();
+        const auto exposed = QJsonDocument::fromVariant(snapshot).toJson();
+        QVERIFY(!exposed.contains("private-skin-test-token"));
+        bool foundHead = false;
+        for (const auto& item : snapshot.value("accounts").toList())
+            if (item.toMap().value("id") == account->internalId())
+                foundHead = item.toMap().value("headUrl").toString().startsWith("awake://ui/images/");
+        QVERIFY(foundHead);
+        const QVariantMap payload{{"id", "../../secret.png"}, {"variant", "CLASSIC"}, {"capeId", ""}};
+        QVERIFY(QMetaObject::invokeMethod(&bridge, "skinCommand", Qt::DirectConnection,
+            Q_RETURN_ARG(QVariantMap, result), Q_ARG(QString, QString("skin-test")),
+            Q_ARG(QString, account->internalId()), Q_ARG(QString, QString("apply")),
+            Q_ARG(QVariantMap, payload)));
+        QVERIFY(!result.value("ok").toBool());
+        QVERIFY(!bridge.skinCommand("skin-lookup-test", account->internalId(), "lookup", {{"username", "../../private"}}).value("ok").toBool());
+        QVERIFY(!bridge.skinCommand("skin-cape-test", account->internalId(), "apply", {{"id", "default/steve/CLASSIC"}, {"variant", "CLASSIC"}, {"capeId", "someone-elses-cape"}}).value("ok").toBool());
+        QVERIFY(!bridge.skinCommand("skin-reset-cape-test", account->internalId(), "reset", {{"capeId", "someone-elses-cape"}}).value("ok").toBool());
+    }
+    void liveSkinLookup()
+    {
+        if (!qEnvironmentVariableIsSet("AWAKE_SKIN_LIVE")) QSKIP("Live public skin lookup was not requested");
+        auto accounts = APPLICATION->accounts();
+        auto account = MinecraftAccount::createOffline("Skin lookup fixture");
+        accounts->addAccount(account);
+        const auto proxy = APPLICATION->network()->proxy();
+        APPLICATION->network()->setProxy(QNetworkProxy::NoProxy);
+        auto cleanup = qScopeGuard([&] {
+            APPLICATION->network()->setProxy(proxy);
+            for (int i = 0; i < accounts->count(); ++i)
+                if (accounts->at(i) == account) { accounts->removeAccount(accounts->index(i, 0)); break; }
+        });
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        QSignalSpy finished(&bridge, &Bridge::catalogFinished);
+        const auto result = bridge.skinCommand("live-skin-check", account->internalId(), "lookup", {{"username", "ChronogenEx"}});
+        QVERIFY(result.value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 90000);
+        const auto response = finished.first().at(1).toMap();
+        QVERIFY2(response.value("ok").toBool(), qPrintable(response.value("error").toString()));
+        QVERIFY(response.value("preview").toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
+        account->accountData()->minecraftProfile.capes.insert("public-pan-fixture", Cape{
+            "public-pan-fixture", "https://textures.minecraft.net/texture/28de4a81688ad18b49e735a273e086c18f1e3966956123ccb574034c06f5d336", "Pan", {}});
+        finished.clear();
+        QVERIFY(bridge.skinCommand("live-cape-check", account->internalId(), "capes", {}).value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 35000);
+        const auto capeResponse = finished.first().at(1).toMap();
+        QVERIFY2(capeResponse.value("ok").toBool(), qPrintable(capeResponse.value("error").toString()));
+        QVERIFY(capeResponse.value("capes").toList().first().toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
+    }
     void deletingInstanceReturnsToTheEventLoopAndPublishesStatus()
     {
         auto* instances = APPLICATION->instances();

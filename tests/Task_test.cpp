@@ -6,6 +6,9 @@
 #include <tasks/MultipleOptionsTask.h>
 #include <tasks/SequentialTask.h>
 #include <tasks/Task.h>
+#include <net/NetJob.h>
+#include <QNetworkAccessManager>
+#include <QSignalSpy>
 
 #include <array>
 
@@ -32,6 +35,12 @@ class BasicTask_MultiStep : public Task {
     auto isMultiStep() const -> bool override { return true; }
 
     void executeTask() override {}
+};
+
+class FailedAccountRefresh : public Task {
+public:
+    int attempts = 0;
+    void executeTask() override { ++attempts; emitFailed("Account refresh failed"); }
 };
 
 class BigConcurrentTask : public ConcurrentTask {
@@ -88,6 +97,21 @@ class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void netJobReportsFailedAccountTasksWithoutNetworkRetries()
+    {
+        QNetworkAccessManager network;
+        NetJob job("Skin refresh failure", &network, 1);
+        job.setAskRetry(false);
+        auto refresh = makeShared<FailedAccountRefresh>();
+        job.addTask(refresh);
+        QSignalSpy failed(&job, &Task::failed);
+        job.start();
+        QTRY_COMPARE(failed.count(), 1);
+        QCOMPARE(refresh->attempts, 1);
+        QCOMPARE(job.failReason(), QString("Account refresh failed"));
+        QVERIFY(job.getFailedActions().isEmpty());
+        QVERIFY(job.getFailedFiles().isEmpty());
+    }
     void test_SetStatus_NoMultiStep()
     {
         BasicTask t;

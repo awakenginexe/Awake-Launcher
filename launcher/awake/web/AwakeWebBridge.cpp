@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "AwakeWebBridge.h"
+#include "AwakeSkinManager.h"
 #include "AwakeWebAssets.h"
 #include "AwakeWebPolicy.h"
 #include "AwakePackCatalog.h"
@@ -52,6 +53,10 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent, Gp
       m_gpuDetector(gpuDetector ? std::move(gpuDetector) : Awake::Gpu::hardwareSettings)
 {
     m_packCatalog = new PackCatalog(assets, this);
+    m_skins = new Skins(assets, this);
+    connect(m_skins, &Skins::finished, this, &Bridge::catalogFinished);
+    connect(m_skins, &Skins::changed, this, &Bridge::scheduleState);
+    connect(m_skins, &Skins::modalChanged, this, &Bridge::setModalActive);
     m_artworkTimer = new QTimer(this);
     m_artworkTimer->setObjectName("awakeArtworkTimer");
     m_artworkTimer->setInterval(60'000);
@@ -99,6 +104,11 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent, Gp
 }
 
 Bridge::~Bridge() { if (m_canceled) m_canceled->store(true); }
+QVariantMap Bridge::skinState(const QString& accountId) { return m_skins->state(accountId); }
+QVariantMap Bridge::skinCommand(const QString& requestId, const QString& accountId, const QString& command, const QVariantMap& payload)
+{
+    return m_skins->command(requestId, accountId, command, payload);
+}
 
 void Bridge::observeInstances()
 {
@@ -195,6 +205,7 @@ QVariantMap Bridge::snapshot()
         QVariantMap accMap;
         accMap.insert("id", acc->internalId());
         accMap.insert("name", acc->displayName());
+        accMap.insert("headUrl", m_skins->headUrl(acc));
         accMap.insert("type", acc->accountType() == AccountType::Offline ? QString("offline") : QString("microsoft"));
         accMap.insert("active", acc == accounts->defaultAccount());
         accMap.insert("valid", acc->accountState() != AccountState::Errored);

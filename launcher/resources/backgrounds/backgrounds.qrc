@@ -34,4 +34,24 @@
         <file alias="teawie-spooky">teawie-spooky.png</file>
         <!-- https://commons.wikimedia.org/wiki/File:Teawie_Halloween.png -->
     </qresource>
+    <qresource prefix="/awake-skins">
+        <file alias="wide/kai.png">../skins/wide/kai.png</file>
+        <file alias="wide/steve.png">../skins/wide/steve.png</file>
+        <file alias="wide/efe.png">../skins/wide/efe.png</file>
+        <file alias="wide/zuri.png">../skins/wide/zuri.png</file>
+        <file alias="wide/alex.png">../skins/wide/alex.png</file>
+        <file alias="wide/noor.png">../skins/wide/noor.png</file>
+        <file alias="wide/sunny.png">../skins/wide/sunny.png</file>
+        <file alias="wide/makena.png">../skins/wide/makena.png</file>
+        <file alias="wide/ari.png">../skins/wide/ari.png</file>
+        <file alias="slim/kai.png">../skins/slim/kai.png</file>
+        <file alias="slim/steve.png">../skins/slim/steve.png</file>
+        <file alias="slim/efe.png">../skins/slim/efe.png</file>
+        <file alias="slim/zuri.png">../skins/slim/zuri.png</file>
+        <file alias="slim/alex.png">../skins/slim/alex.png</file>
+        <file alias="slim/noor.png">../skins/slim/noor.png</file>
+        <file alias="slim/sunny.png">../skins/slim/sunny.png</file>
+        <file alias="slim/makena.png">../skins/slim/makena.png</file>
+        <file alias="slim/ari.png">../skins/slim/ari.png</file>
+    </qresource>
 </RCC>

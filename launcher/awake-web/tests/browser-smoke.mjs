@@ -601,8 +601,47 @@ try {
   }
   const page = await browser.newPage();
   await page.goto(`${origin}/?count=0`); await page.locator('.empty-state').waitFor();
+  await page.setViewportSize({width:1320,height:780});
+  await page.evaluate(() => {
+    const {host,state} = window.__nativeTest;
+    const entry = {id:'current/skin-fixture',name:'Saved skin',variant:'SLIM',textureHash:'a'.repeat(64),textureUrl:'awake://ui/images/0123456789abcdef.png',previewUrl:''};
+    const minecraftDefault = {...entry,id:'default/steve/CLASSIC',name:'Steve',variant:'CLASSIC',textureHash:'b'.repeat(64)};
+    const skin = {ok:true,accountId:'skin-fixture',editable:true,current:entry,minecraftDefault,defaults:[minecraftDefault],capes:[{id:'pan',name:'Pan',textureUrl:entry.textureUrl}],capeId:'pan'};
+    window.__nativeTest.skinCalls = [];
+    host.skinState = (id,cb) => cb(structuredClone(skin));
+    host.skinCommand = (request,id,command,payload,cb) => {
+      window.__nativeTest.skinCalls.push([command,payload]);
+      if (command === 'reset') {
+        skin.current = {...minecraftDefault,id:entry.id,name:'Saved Minecraft default'};
+        skin.capeId = payload.capeId;
+        skin.capes[0].textureUrl = '';
+      } else if (command === 'capes') skin.capes[0].textureUrl = entry.textureUrl;
+      cb({ok:true}); host.catalogFinished.emit(request,structuredClone(skin));
+    };
+    state.accounts = [{id:'skin-fixture',name:'Fixture',active:true,valid:true,type:'microsoft'}];
+    state.accountName = 'Fixture'; host.stateChanged.emit(structuredClone(state));
+  });
+  await page.locator('.welcome-name').click();
+  await page.locator('.skin-reset-minecraft').click();
+  assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls), []);
+  assert.equal(await page.locator('.skins-dialog .btn-primary').isEnabled(), true);
+  await page.locator('.skin-reset-current').click();
+  assert.equal(await page.locator('.skin-selected-name').textContent(), 'Saved skin');
+  assert.equal(await page.locator('.skins-dialog .btn-primary').isDisabled(), true);
+  await page.locator('.skin-reset-minecraft').click();
+  await page.locator('.skins-dialog .btn-primary').click();
+  await page.getByText('Your Minecraft skin has been updated.').waitFor();
+  assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls.map(call => call[0])), ['reset','capes']);
+  assert.equal(await page.locator('.skin-cape-image').evaluate(el => el.style.backgroundImage.includes('awake://ui/images/')), true);
+  await page.getByRole('button',{name:'Slim',exact:true}).click();
+  await page.getByRole('button',{name:'No cape',exact:true}).click();
+  await page.locator('.skin-reset-current').click();
+  assert.equal(await page.locator('.skin-selected-name').textContent(), 'Saved Minecraft default');
+  assert.equal(await page.getByRole('button',{name:'Pan',exact:true}).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('.skins-dialog .btn-primary').isDisabled(), true);
+  await page.keyboard.press('Escape');
   await page.goto(`${origin}/?disconnected=1`); await page.locator('.connection-error').waitFor();
   assert.equal(await page.locator('.instance-select').count(),0); await page.close();
   assert.deepEqual(errors, []); assert.deepEqual(requests, []);
-  console.log('Browser checks passed: Vue instance editor actions, console focus polling, notes/settings persistence, inline discard/remove confirmations, keyboard/focus/layout, hover clipping, context actions, languages, provider routes, stale replies, import and disconnected state.');
+  console.log('Browser checks passed: skin reset staging/save/undo and cape recovery, Vue instance editor actions, console focus polling, notes/settings persistence, inline discard/remove confirmations, keyboard/focus/layout, hover clipping, context actions, languages, provider routes, stale replies, import and disconnected state.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

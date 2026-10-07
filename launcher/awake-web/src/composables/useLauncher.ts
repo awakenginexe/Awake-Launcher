@@ -191,6 +191,10 @@ export function useLauncher() {
     select: (id: string, profile: string) => javaCall('setJavaProfile', [id, profile]),
     browse: (id: string) => queryCatalog('browseJava', [id]),
   };
+  const skinService = {
+    state: (id: string) => javaCall('skinState', [id]),
+    command: (id: string, command: string, payload: Record<string, unknown> = {}) => queryCatalog('skinCommand', [id, command, payload]),
+  };
   async function javaCall(method: string, args: unknown[]): Promise<unknown> {
     if (!native || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
     return callNative(native, method, args);
@@ -221,5 +225,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, gpuService, gpuChoice, continueGpuLaunch, updateService };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService };
 }

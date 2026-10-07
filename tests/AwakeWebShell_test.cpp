@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QAction>
+#include <QBuffer>
 #include <QDialog>
 #include <QDesktopServices>
 #include <QDir>
@@ -14,6 +15,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QScopeGuard>
+#include <QSignalSpy>
 #include <QPushButton>
 #include <QQuickWidget>
 #include <QQuickWindow>
@@ -77,6 +80,134 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(compositor);
         QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
         QVERIFY(!view->grab().isNull());
+    }
+    void welcomeHeadOpensTheSkinsPanelWithSoftwarePreview()
+    {
+        auto accounts = APPLICATION->accounts();
+        auto previous = accounts->defaultAccount();
+        auto account = MinecraftAccount::createBlankMSA();
+        account->accountData()->minecraftProfile.name = "Skin preview fixture";
+        account->accountData()->minecraftProfile.id = "c0123456789abcdef0123456789abcdef";
+        account->accountData()->yggdrasilToken.token = "private-skin-ui-fixture";
+        Cape cape{"cape-fixture", {}, "Test cape", {}};
+        QImage capeImage(64, 32, QImage::Format_ARGB32); capeImage.fill(Qt::cyan);
+        for (int y = 1; y < 17; ++y)
+            for (int x = 1; x < 11; ++x) capeImage.setPixelColor(x, y, QColor(255, 128, 0));
+        QBuffer capeBytes(&cape.data); QVERIFY(capeBytes.open(QIODevice::WriteOnly)); QVERIFY(capeImage.save(&capeBytes, "PNG"));
+        account->accountData()->minecraftProfile.capes.insert(cape.id, cape);
+        account->accountData()->minecraftProfile.currentCape = cape.id;
+        QFile texture(":/awake-skins/wide/steve.png");
+        QVERIFY(texture.open(QIODevice::ReadOnly));
+        account->accountData()->minecraftProfile.skin.data = texture.readAll();
+        account->accountData()->minecraftProfile.skin.variant = "CLASSIC";
+        accounts->addAccount(account);
+        accounts->setDefaultAccount(account);
+        const auto size = window->size();
+        auto cleanup = qScopeGuard([&] {
+            evaluate("document.querySelector('.skins-dialog .modal-close-btn')?.click()");
+            for (int i = 0; i < accounts->count(); ++i)
+                if (accounts->at(i) == account) { accounts->removeAccount(accounts->index(i, 0)); break; }
+            accounts->setDefaultAccount(previous);
+            window->resize(size);
+        });
+        window->resize(1320, 780);
+        window->raise();
+        window->activateWindow();
+        bridge->scheduleState();
+        QTRY_VERIFY(evaluate("Boolean(document.querySelector('.welcome-head')?.complete && document.querySelector('.welcome-head')?.naturalWidth === 8)").toBool());
+        evaluate("document.querySelector('.welcome-name').click()");
+        QTRY_COMPARE(evaluate("document.querySelectorAll('.skin-default').length").toInt(), 9);
+        QCOMPARE(window->minimumSize(), QSize(1320, 780));
+        QTRY_VERIFY(evaluate("Boolean(document.querySelector('.skin-canvas')?.dataset.yaw)").toBool());
+        QTRY_VERIFY(evaluate("getComputedStyle(document.querySelector('.welcome-name')).borderRadius === '4px'").toBool());
+        QCOMPARE(evaluate("[...document.querySelectorAll('.skins-dialog .modal-footer button')].map(button => button.textContent.trim()).join('|')").toString(), QString("Reset to default|Reset to Minecraft default|Apply skin"));
+        QSignalSpy skinRequests(bridge, &Awake::Web::Bridge::catalogFinished);
+        const auto currentPixels = evaluate("document.querySelector('.skin-canvas').toDataURL()").toString();
+        evaluate("document.querySelector('.skin-default').click(); document.querySelector('.skin-cape-choice').click()");
+        QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        evaluate("document.querySelector('.skin-reset-current').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        QTRY_COMPARE(evaluate("document.querySelector('.skin-canvas').toDataURL()").toString(), currentPixels);
+        QVERIFY(evaluate("document.querySelectorAll('.skin-cape-choice')[1].getAttribute('aria-pressed') === 'true'").toBool());
+        evaluate("document.querySelector('.skin-reset-minecraft').click()");
+        QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        QVERIFY(evaluate("document.querySelector('.skin-feedback').textContent.includes('Apply skin')").toBool());
+        QVERIFY(evaluate("document.querySelector('.skin-cape-image').style.backgroundImage.includes('awake://ui/images/')").toBool());
+        evaluate("document.querySelector('.skin-reset-current').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        QCOMPARE(skinRequests.count(), 0);
+        if (qEnvironmentVariableIsSet("AWAKE_SKIN_MEASURE")) {
+            QFile styles(qEnvironmentVariable("AWAKE_SKIN_STYLE"));
+            if (styles.open(QIODevice::ReadOnly)) {
+                const auto css = styles.read(4096).toBase64();
+                evaluate(QString("(() => {const style=document.createElement('style');style.textContent=atob('%1');document.head.append(style)})()").arg(QString::fromLatin1(css)));
+            }
+            QTest::qWait(400);
+            for (const auto& mode : {QString("idle"), QString("scroll")}) {
+                evaluate(QString(R"JS((() => {
+                    const scroller = document.querySelector('.skin-tools').scrollHeight > document.querySelector('.skin-tools').clientHeight ? document.querySelector('.skin-tools') : document.querySelector('.skins-body');
+                    window.__skinFrames = { done:false, deltas:[] };
+                    let start, last;
+                    requestAnimationFrame(function frame(now) {
+                        start ??= now;
+                        if (last) window.__skinFrames.deltas.push(now - last);
+                        last = now;
+                        if ('%1' === 'scroll') scroller.scrollTop = (scroller.scrollHeight - scroller.clientHeight) * (0.5 - 0.5 * Math.cos((now - start) / 1000 * Math.PI));
+                        if (now - start < 1600) requestAnimationFrame(frame);
+                        else { scroller.scrollTop = 0; window.__skinFrames.done = true; }
+                    });
+                })())JS").arg(mode));
+                QTRY_VERIFY_WITH_TIMEOUT(evaluate("window.__skinFrames.done").toBool(), 10000);
+                qInfo().noquote() << "Skin scroll frames" << mode << evaluate("JSON.stringify((() => {const values=window.__skinFrames.deltas.sort((a,b)=>a-b);return {frames:values.length,p95:values[Math.floor(values.length*.95)],max:values.at(-1)}})())").toString();
+            }
+        }
+        QVERIFY(evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        evaluate("document.querySelector('.skin-default').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        QVERIFY(evaluate("document.querySelector('.navigation').inert && document.querySelector('.stage').inert").toBool());
+        const auto before = evaluate("document.querySelector('.skin-canvas').dataset.yaw").toString();
+        const auto pixelsBefore = evaluate("document.querySelector('.skin-canvas').toDataURL()").toString();
+        evaluate("document.querySelector('.skin-stage').dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true}))");
+        QTRY_VERIFY(evaluate("document.querySelector('.skin-canvas').dataset.yaw").toString() != before);
+        QTRY_VERIFY(evaluate("document.querySelector('.skin-canvas').toDataURL()").toString() != pixelsBefore);
+        evaluate("document.querySelector('#skin-account').click()");
+        QTRY_VERIFY(evaluate("[...document.querySelectorAll('.themed-select-menu [role=option] img')].every(image => image.complete && image.naturalWidth === 8)").toBool());
+        QVERIFY(evaluate("document.querySelectorAll('.themed-select-menu [role=option] img').length === document.querySelectorAll('.themed-select-menu [role=option]').length").toBool());
+        evaluate("document.querySelector('#skin-account').dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}))");
+        QTRY_VERIFY(!evaluate("Boolean(document.querySelector('.themed-select-menu'))").toBool());
+        const auto canvasBeforeScroll = evaluate("document.querySelector('.skin-canvas').getBoundingClientRect().top").toDouble();
+        evaluate("document.querySelector('.skin-tools').scrollTop = document.querySelector('.skin-tools').scrollHeight");
+        QCOMPARE(evaluate("document.querySelector('.skin-canvas').getBoundingClientRect().top").toDouble(), canvasBeforeScroll);
+        QCOMPARE(evaluate("document.querySelectorAll('.skin-cape-choice').length").toInt(), 2);
+        QVERIFY(evaluate("document.querySelector('.skin-cape-image').style.backgroundImage.startsWith('url(\"awake://ui/images/')").toBool());
+        QCOMPARE(evaluate("getComputedStyle(document.querySelector('.skin-cape-image')).backgroundPosition").toString(), QString("-4px -4px"));
+        evaluate("for (let i=0;i<13;i++) document.querySelector('.skin-stage').dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true}))");
+        QTRY_VERIFY(evaluate(R"JS((() => {
+            const canvas = document.querySelector('.skin-canvas');
+            const pixels = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+            let orange = 0;
+            for (let i=0;i<pixels.length;i+=4) if (pixels[i]===255 && pixels[i+1]===128 && pixels[i+2]===0) orange++;
+            return orange > 1000;
+        })())JS").toBool());
+        evaluate("document.querySelector('.skin-cape-choice').click()");
+        QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        evaluate("document.querySelectorAll('.skin-cape-choice')[1].click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        QCOMPARE(evaluate("getComputedStyle(document.querySelector('.skins-dialog .btn-primary')).boxShadow").toString(), QString("none"));
+        evaluate("document.querySelector('.skin-tools').scrollTop = 0");
+        evaluate("[...document.querySelectorAll('.skin-model-options button')].find(button => button.textContent.trim() === 'Slim').click()");
+        evaluate("document.querySelector('.skin-default').click()");
+        QTRY_COMPARE(evaluate("document.querySelector('.skin-canvas').dataset.variant").toString(), QString("SLIM"));
+        QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        QTRY_VERIFY(evaluate("[...document.querySelectorAll('.skin-default img')].every(image => image.complete && image.naturalWidth === 16)").toBool());
+        QTRY_COMPARE(evaluate("getComputedStyle(document.querySelector('.skins-overlay')).opacity").toString(), QString("1"));
+        QTest::qWait(300);
+        view->repaint();
+        const auto output = QDir(QCoreApplication::applicationDirPath()).filePath(".validation");
+        QVERIFY(QDir().mkpath(output));
+        QVERIFY(view->grab().save(output + "/skins-native-preview.png"));
+        evaluate("document.querySelector('.skins-dialog .modal-close-btn').click()");
+        QTRY_VERIFY(!evaluate("Boolean(document.querySelector('.skins-dialog'))").toBool());
     }
     void startupKeepsSuspendedRendererFrozen()
     {

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import '../styles/language-select.css';
 
-const props = defineProps<{ id: string; label: string; modelValue: string; options: { value: string; label: string }[]; disabled?: boolean }>();
+const props = defineProps<{ id: string; label: string; modelValue: string; options: { value: string; label: string; imageUrl?: string }[]; disabled?: boolean }>();
 const emit = defineEmits<{ (event: 'update:modelValue', value: string): void }>();
 const trigger = ref<HTMLButtonElement>();
 const menu = ref<HTMLElement>();
@@ -89,13 +89,13 @@ onUnmounted(() => {
 
 <template>
   <button :id="id" ref="trigger" type="button" class="language-picker-trigger themed-select-trigger" role="combobox" :value="modelValue" :aria-label="label" aria-haspopup="listbox" :aria-controls="`${id}-listbox`" :aria-expanded="open" :aria-activedescendant="open ? `${id}-option-${active}` : undefined" :disabled="disabled" @click="open ? close() : show()" @keydown="keyboard" @blur="close">
-    <span>{{ selected?.label }}</span>
+    <span class="themed-select-copy"><img v-if="selected?.imageUrl" :src="selected.imageUrl" alt="" width="28" height="28" />{{ selected?.label }}</span>
     <svg class="language-picker-chevron" :class="{ 'is-open': open }" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
   </button>
   <Teleport to="body">
     <div v-if="open" :id="`${id}-listbox`" ref="menu" class="language-picker-menu themed-select-menu" :style="position" role="listbox" :aria-label="label" @pointerdown.prevent>
       <div v-for="(option, index) in options" :id="`${id}-option-${index}`" :key="option.value" :data-value="option.value" class="language-picker-option" role="option" :aria-selected="modelValue === option.value" :class="{ 'is-active': active === index, 'is-selected': modelValue === option.value }" @pointermove="active = index" @click="choose(index)">
-        <span>{{ option.label }}</span>
+        <span class="themed-select-copy"><img v-if="option.imageUrl" :src="option.imageUrl" alt="" width="28" height="28" />{{ option.label }}</span>
         <svg v-if="modelValue === option.value" class="language-picker-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8 3 3 6-6" /></svg>
       </div>
     </div>
@@ -105,6 +105,8 @@ onUnmounted(() => {
 <style>
 .themed-select-trigger { font-size: 0.9rem; }
 .themed-select-trigger > span { min-width: 0; overflow-wrap: anywhere; }
+.themed-select-copy { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.themed-select-copy img { flex: 0 0 28px; image-rendering: pixelated; border-radius: 3px; }
 .themed-select-menu { position: fixed; right: auto; z-index: 1100; overflow-y: auto; font-size: 0.9rem; }
 .themed-select-menu .language-picker-option { gap: 12px; }
 </style>

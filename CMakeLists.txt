@@ -191,7 +191,7 @@ set(Launcher_LEGACY_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" 
 
 ######## Set version numbers ########
 set(Launcher_VERSION_MAJOR 1)
-set(Launcher_VERSION_MINOR 0)
+set(Launcher_VERSION_MINOR 1)
 set(Launcher_VERSION_PATCH 0)
 
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")
@@ -271,7 +271,7 @@ endif()
 
 # By using this key in your builds you accept the terms of use laid down in
 # https://docs.microsoft.com/en-us/legal/microsoft-identity-platform/terms-of-use
-set(Launcher_MSA_CLIENT_ID "9f3c5cb3-82af-4a3e-ad36-2970397c2395" CACHE STRING "Public Microsoft OAuth application ID for Awake Launcher")
+set(Launcher_MSA_CLIENT_ID "$ENV{AWAKE_MSA_CLIENT_ID}" CACHE STRING "Microsoft OAuth application ID supplied by the build environment")
 
 # By using this key in your builds you accept the terms and conditions laid down in
 # https://support.curseforge.com/en/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions

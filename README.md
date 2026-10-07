@@ -1,5 +1,7 @@
 # Awake Launcher
 
+<img src="program_info/awake-launcher.png" width="96" height="96" alt="Awake Launcher logo" />
+
 Awake Launcher is a desktop launcher for Minecraft: Java Edition. It keeps your Minecraft installations in separate instances and combines Awake's interface with Prism Launcher's C++ and Qt foundation.
 
 [Download for Windows x64](https://github.com/awakenginexe/Awake-Launcher/releases/latest) · [Build from source](BUILDING.md) · [Report a bug](https://github.com/awakenginexe/Awake-Launcher/issues)
@@ -10,11 +12,7 @@ Download the **Setup.exe** from the latest release for a per-user installation w
 
 For a portable installation, download the **Windows x64 ZIP**, extract the entire package to a writable folder, and run `awakelauncher.exe`. Keep the files together and back up the folder before replacing a portable build. Release downloads include the Microsoft C++ runtime and SHA-256 checksums.
 
-From v0.5.0, JVM and GPU dropdown menus match the app theme. Instance deletion shows its status while the launcher remains responsive, and switching settings tabs reuses loaded controls and GPU details.
-
-From v0.4.0, choose **Compatible**, **Balanced**, **Performance**, or **Custom** JVM presets in **Settings → Java & Memory**. Each instance can inherit the global preset or select its own in **Edit instance → Settings**. Custom argument text is retained across preset changes. GPU models and installed RAM start hidden behind eye controls for screen sharing.
-
-From v0.3.0, Awake Launcher checks for stable updates daily and supports manual checks from **Application**. Downloads open in your browser. Upgrade v0.2.0 manually to receive the update checker.
+Awake checks for stable updates daily. Use **Application → Check for updates** to check manually; downloads open in your browser. Close the launcher before installing the update. Versions before v0.3.0 need a manual upgrade to receive the update checker.
 
 Add an account in **Accounts**, then choose **Create instance** to install Minecraft or a modpack. You can also import an existing instance. Awake Launcher uses its own data folder and does not move data from other launchers automatically.
 
@@ -25,12 +23,22 @@ Add an account in **Accounts**, then choose **Create instance** to install Minec
 - Manage mods, resource packs, shaders, worlds, and screenshots.
 - Choose Java, memory, game settings, and Java arguments globally or per instance.
 - View logs and manage accounts from the launcher.
+- Preview and rotate Minecraft skins, load a PNG, or search another player's public skin before applying it to your own Java Edition account.
+- Select your owned capes using image previews. Your skin head appears beside the welcome name and account choices.
+
+## Version 1.1.0
+
+This release adds the new Awake logo and the **Skins** panel. **Reset to default** discards pending skin, model, and cape edits and returns to the latest saved account appearance. **Reset to Minecraft default** previews Minecraft's default skin. Changes are saved only when you click **Apply skin**.
+
+The minimum window size is **1320×780**. Skin controls scroll separately from the software-rendered 3D preview. Cape previews remain visible after saving.
 
 ## Development status
 
 Awake Launcher is under active development. Windows x64 is the current build and validation platform. Linux and macOS need Awake-specific validation before release.
 
 Minecraft's application review approved Awake Launcher's Microsoft application ID on October 5, 2026 for the Minecraft API allow list. Add your Microsoft account in **Accounts** to sign in.
+
+Official builds use Awake's own Microsoft application registration. Release builds receive the application ID through GitHub Actions configuration; it is absent from the current tracked source. Source builds and forks must supply their own approved application ID. No Microsoft client secret or Microsoft password is embedded in the launcher. Approval covers API allow-list access and does not imply endorsement by Mojang or Microsoft.
 
 ## Help and contributions
 

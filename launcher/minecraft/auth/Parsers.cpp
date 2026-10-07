@@ -204,6 +204,8 @@ bool parseMinecraftProfile(QByteArray& data, MinecraftProfile& output)
             continue;
         }
 
+        const auto previous = output.capes.value(capeOut.id);
+        if (previous.url == capeOut.url) capeOut.data = previous.data;
         output.capes[capeOut.id] = capeOut;
     }
     output.currentCape = currentCape;

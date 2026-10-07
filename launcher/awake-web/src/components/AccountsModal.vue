@@ -15,6 +15,7 @@ const emit = defineEmits<{
   (e: 'set-active', id: string): void;
   (e: 'remove', id: string): void;
   (e: 'refresh', id: string): void;
+  (e: 'skins', id: string): void;
 }>();
 
 const offlineUsername = ref('');
@@ -69,7 +70,7 @@ function submitOffline() {
         <ul v-else class="account-card-list">
           <li v-for="acc in accounts" :key="acc.id" class="account-card" :class="{ 'is-active': acc.active }">
             <div class="account-avatar">
-              <span class="avatar-letter">{{ acc.name.slice(0, 1).toUpperCase() }}</span>
+              <img v-if="acc.headUrl" class="account-skin-head" :src="acc.headUrl" alt="" width="36" height="36" /><span v-else class="avatar-letter">{{ acc.name.slice(0, 1).toUpperCase() }}</span>
             </div>
             <div class="account-details">
               <div class="account-title-row">
@@ -79,6 +80,7 @@ function submitOffline() {
               <span class="account-type-badge" :class="acc.type">{{ acc.type === 'microsoft' ? 'Microsoft' : 'Offline' }}</span>
             </div>
             <div class="account-card-actions">
+              <button class="btn-subtle" @click="emit('skins', acc.id)">{{ t('skins') }}</button>
               <button v-if="!acc.active" class="btn-subtle" @click="emit('set-active', acc.id)">{{ t('setActive') }}</button>
               <button class="btn-icon" :title="t('refreshAccount')" @click="emit('refresh', acc.id)">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -123,3 +125,4 @@ function submitOffline() {
     </div>
   </div>
 </template>
+<style scoped>.account-skin-head { image-rendering: pixelated; object-fit: contain; }</style>

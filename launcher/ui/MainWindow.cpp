@@ -552,8 +552,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->mainToolBar->hide();
     ui->newsToolBar->hide();
     ui->instanceToolBar->hide();
-    setMinimumSize(m_webMode ? QSize(880, 520) : QSize(900, 620));
-    resize(1024, 580);
+    setMinimumSize(m_webMode ? QSize(1320, 780) : QSize(900, 620));
+    resize(m_webMode ? QSize(1320, 780) : QSize(1024, 580));
 
 #if defined(Q_OS_WIN)
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);

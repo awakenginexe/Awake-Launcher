@@ -11,8 +11,9 @@ import InstanceEditorModal from './components/InstanceEditorModal.vue';
 import AppMenuModal from './components/AppMenuModal.vue';
 import UpdateModal from './components/UpdateModal.vue';
 import GpuLaunchModal from './components/GpuLaunchModal.vue';
+import SkinsModal from './components/SkinsModal.vue';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, gpuService, gpuChoice, continueGpuLaunch, updateService } = useLauncher();
+const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -26,10 +27,19 @@ const failedIcons = ref(new Set<string>());
 const isHidden = ref(typeof document !== 'undefined' && document.visibilityState === 'hidden');
 
 const showAccounts = ref(false);
+const showSkins = ref(false);
+const skinAccountId = ref('');
+const activeAccount = computed(() => state.value.accounts.find(account => account.active));
+function openSkins(id = activeAccount.value?.id ?? '') {
+  if (!id) return;
+  closePopovers(); closeContextMenu(); showAccounts.value = false;
+  skinAccountId.value = id; showSkins.value = true;
+}
 watch(accountsRequest, () => {
   closePopovers(); closeContextMenu();
   showSettings.value = false; showCreate.value = false; showAppMenu.value = false;
   editingInstance.value = null; showAccounts.value = true;
+  showSkins.value = false;
 });
 const showSettings = ref(false);
 const showCreate = ref(false);
@@ -38,8 +48,8 @@ const showAppMenu = ref(false);
 const showUpdates = ref(false);
 let updatePresentation = 0;
 const editingInstance = ref<Instance | null>(null);
-watch(() => [state.value.updates.presentation, showAccounts.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive], () => {
-  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive) return;
+watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive], () => {
+  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive) return;
   updatePresentation = state.value.updates.presentation;
   closePopovers(); closeContextMenu(); showUpdates.value = true;
 }, { immediate: true });
@@ -132,6 +142,7 @@ function toggleContextPin(instance: Instance) {
 }
 
 function keydown(event: KeyboardEvent) {
+  if (showSkins.value) return;
   if (gpuChoice.value) return;
   if (showUpdates.value) { if (event.key === 'Escape') { event.preventDefault(); showUpdates.value = false; } return; }
   if (editingInstance.value) return;
@@ -182,8 +193,8 @@ onUnmounted(() => {
       <div class="artwork-scrim"></div>
     </div>
 
-    <aside class="navigation glass" :aria-label="t('library')">
-      <header class="library-header"><span class="wordmark" :title="state.accountName">{{ state.accountName ? `${t('welcome')} ${state.accountName}` : t('welcome') }}</span><button :disabled="!enabled" class="quiet" @click="showAppMenu = true">{{ t('application') }}</button></header>
+    <aside class="navigation glass" :inert="showSkins" :aria-label="t('library')">
+      <header class="library-header"><button class="wordmark welcome-name" type="button" :disabled="!enabled || !activeAccount" :title="state.accountName" :aria-label="`${t('skins')}: ${state.accountName}`" @click="openSkins()"><img v-if="activeAccount?.headUrl" class="welcome-head" :src="activeAccount.headUrl" width="24" height="24" alt="" /><span>{{ state.accountName ? `${t('welcome')} ${state.accountName}` : t('welcome') }}</span></button><button :disabled="!enabled" class="quiet" @click="showAppMenu = true">{{ t('application') }}</button></header>
       <h2 class="library-heading">{{ t('library') }}</h2>
       <div class="search-row">
         <label class="visually-hidden" for="instance-search">{{ t('search') }}</label>
@@ -230,12 +241,13 @@ onUnmounted(() => {
       </div>
 
       <footer class="navigation-footer">
+        <button class="quiet" :disabled="!enabled || !activeAccount" @click="openSkins()">{{ t('skins') }}</button>
         <div class="creation-actions"><button :disabled="!enabled" @click="openCreate('custom')">{{ t('create') }}</button><button class="quiet" :disabled="!enabled" @click="openCreate('import')">{{ t('import') }}</button></div>
         <div class="account-actions"><button class="quiet account-button" :disabled="!enabled" @click="showAccounts = true"><span>{{ t('accounts') }}</span><span class="account-name">{{ state.accountName || t('accountUnavailable') }}</span></button><button class="settings-button" :disabled="!enabled" :title="t('settings')" :aria-label="t('settings')" @click="showSettings = true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg></button></div>
       </footer>
     </aside>
 
-    <section class="stage" :aria-label="t('selected')">
+    <section class="stage" :inert="showSkins" :aria-label="t('selected')">
       <div v-if="state.deletion.active" class="deletion-status notice" role="status" aria-live="polite"><strong>{{ t('deletingInstance') }}</strong><p>{{ state.deletion.name }}</p><progress :aria-label="t('deletingInstance')"></progress></div>
       <div v-if="status === 'error' && failure" class="connection-error notice" role="alert"><h1>{{ t('connectionTitle') }}</h1><p>{{ t(failure.code) }}</p><p v-if="failure.code === 'disconnected'" class="secondary">{{ t('openLauncher') }}</p><details><summary>{{ t('technicalDetails') }}</summary><pre>{{ failure.detail }}</pre></details><button @click="failure.retry">{{ t('retry') }}</button></div>
       <div v-else-if="status === 'ready' && !state.instances.length" class="empty-state"><h1>{{ t('emptyTitle') }}</h1><p class="secondary">{{ t('emptyBody') }}</p><div class="empty-actions"><button :disabled="!enabled" @click="openCreate('custom')">{{ t('create') }}</button><button :disabled="!enabled" @click="openCreate('import')">{{ t('import') }}</button></div></div>
@@ -305,8 +317,11 @@ onUnmounted(() => {
         @set-active="id => action('setDefaultAccount', id)"
         @remove="id => action('removeAccount', id)"
         @refresh="id => action('refreshAccount', id)"
+        @skins="id => openSkins(id)"
       />
     </Transition>
+
+    <Transition name="skins"><SkinsModal v-if="showSkins" :accounts="state.accounts" :account-id="skinAccountId" :service="skinService" :t="t" @close="showSkins = false" @account="id => skinAccountId = id" /></Transition>
 
     <Transition name="modal">
       <SettingsModal
@@ -366,3 +381,12 @@ onUnmounted(() => {
     </Transition>
   </main>
 </template>
+<style scoped>
+.library-header .welcome-name { overflow: visible; border-radius: 4px; display: inline-flex; align-items: center; gap: 8px; min-width: 0; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
+.welcome-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-head { image-rendering: pixelated; flex: 0 0 24px; border-radius: 0; }
+.welcome-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
+.skins-enter-active, .skins-leave-active { transition: opacity 120ms ease-out; }
+.skins-enter-from, .skins-leave-to { opacity: 0; }
+.reduced-motion .skins-enter-active, .reduced-motion .skins-leave-active { transition: none; }
+</style>

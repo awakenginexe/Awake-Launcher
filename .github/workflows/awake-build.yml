@@ -28,9 +28,14 @@ jobs:
       - name: Validate release configuration
         env:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
+          AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:AWAKE_CURSEFORGE_API_KEY)) {
             throw 'Set the AWAKE_CURSEFORGE_API_KEY repository secret before releasing.'
+          }
+          $clientGuid = [guid]::Empty
+          if (![guid]::TryParse($env:AWAKE_MSA_CLIENT_ID, [ref]$clientGuid) -or $clientGuid -eq [guid]::Empty) {
+            throw 'Set AWAKE_MSA_CLIENT_ID to the approved Application (client) ID before releasing.'
           }
           if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+$') {
             throw 'Release tags must use vMAJOR.MINOR.PATCH, such as v0.1.0.'
@@ -70,8 +75,9 @@ jobs:
       - name: Configure
         env:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
+          AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
         run: |
-          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY"
+          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
       - name: Build
         run: cmake --build --preset windows_msvc --config Release --parallel 4
       - name: Test
@@ -124,9 +130,17 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v1.0.0 is the first 1.0 release for Windows x64. It includes separate Minecraft instances, modpack installation, Microsoft account sign-in, Java and memory settings, and stable update checks.
+          Awake Launcher v1.1.0 adds the new Awake logo and a skin and cape panel for Microsoft accounts.
+
+          - Skin heads appear beside the welcome name and account choices.
+          - Preview and rotate your skin, search another player's skin, choose a default, or load a PNG.
+          - Select owned capes with previews. Apply saves changes to your own Minecraft: Java Edition account.
+          - Reset to default undoes pending edits. Reset to Minecraft default previews the default skin until you click Apply skin.
+          - Cape previews stay visible after saving. The window minimum is now 1320x780, with separate scrolling controls and a software-rendered 3D preview.
 
           Minecraft's application review approved Awake Launcher's Microsoft application ID for the Minecraft API allow list on October 5, 2026.
+
+          Release builds receive Awake's application ID through GitHub Actions configuration. Source builds and forks must supply their own application ID; no Microsoft client secret is used.
 
           The launcher interface uses software rendering to avoid the hardware graphics path that game overlays can hook. Minecraft keeps its own GPU settings.
 

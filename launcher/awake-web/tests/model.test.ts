@@ -9,6 +9,14 @@ test('snapshot retains deletion status even after the instance disappears from t
   assert.deepEqual(parseSnapshot({ ...emptySnapshot(), deletion }).deletion, deletion);
   assert.deepEqual(parseSnapshot({ ...emptySnapshot(), deletion: undefined }).deletion, { active: false, id: '', name: '' });
 });
+test('account heads accept only native local images', () => {
+  const account = { id: 'skin-account', name: 'Player', type: 'microsoft', active: true, valid: true };
+  const headUrl = 'awake://ui/images/0123456789abcdef.png';
+  const head = (url: string) => (parseSnapshot({ ...emptySnapshot(), accounts: [{ ...account, headUrl: url }] }).accounts[0] as unknown as { headUrl: string }).headUrl;
+  assert.equal(head(headUrl), headUrl);
+  assert.equal(head('file:///C:/private.png'), '');
+  assert.equal(head('https://example.com/tracking.png'), '');
+});
 test('locale conventions and four complete independent catalogs', () => {
   for (const [input, expected] of [['en_US', 'en'], ['th_TH', 'th'], ['zh_CN', 'zh-CN'], ['zh-Hans', 'zh-CN'], ['zh_TW', 'zh-TW'], ['zh_Hant_HK', 'zh-TW'], ['fr_FR', 'en']]) assert.equal(normalizeLocale(input), expected);
   for (const catalog of Object.values(catalogs)) assert.deepEqual(Object.keys(catalog).sort(), Object.keys(catalogs.en).sort());

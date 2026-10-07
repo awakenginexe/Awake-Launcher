@@ -17,6 +17,7 @@ namespace Awake::Web {
 class Assets;
 class PackCatalog;
 class InstanceEditor;
+class Skins;
 class Bridge final : public QObject {
     Q_OBJECT
 public:
@@ -32,6 +33,8 @@ public:
     bool isModalActive() const { return m_modalActive; }
 
     Q_INVOKABLE QVariantMap snapshot();
+    Q_INVOKABLE QVariantMap skinState(const QString& accountId);
+    Q_INVOKABLE QVariantMap skinCommand(const QString& requestId, const QString& accountId, const QString& command, const QVariantMap& payload);
     Q_INVOKABLE QVariantMap selectInstance(const QString& id);
     Q_INVOKABLE QVariantMap launchInstance(const QString& id);
     Q_INVOKABLE QVariantMap invokeAction(const QString& action, const QString& id);
@@ -74,6 +77,7 @@ private:
     QPointer<Assets> m_assets;
     PackCatalog* m_packCatalog = nullptr;
     InstanceEditor* m_instanceEditor = nullptr;
+    Skins* m_skins = nullptr;
     Task::Ptr m_minecraftTask;
     Task::Ptr m_javaTask;
     bool m_javaPending = false;

@@ -65,6 +65,7 @@ export type PreferenceKey =
 export interface AccountItem {
   id: string;
   name: string;
+  headUrl: string;
   type: 'microsoft' | 'offline';
   active: boolean;
   valid: boolean;
@@ -156,6 +157,7 @@ export function parseSnapshot(value: unknown): Snapshot {
         .map(a => ({
           id: String(a.id || ''),
           name: String(a.name || ''),
+          headUrl: typeof a.headUrl === 'string' && isLocalImage(a.headUrl) ? a.headUrl : '',
           type: a.type === 'offline' ? ('offline' as const) : ('microsoft' as const),
           active: Boolean(a.active),
           valid: Boolean(a.valid),
