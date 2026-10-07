@@ -48,6 +48,7 @@ const showUpdates = ref(false);
 let updatePresentation = 0;
 function markUpdatePresentation(presentation: number) { updatePresentation = Math.max(updatePresentation, presentation); }
 const editingInstance = ref<Instance | null>(null);
+const editorInstance = computed(() => state.value.instances.find(instance => instance.id === editingInstance.value?.id) || editingInstance.value);
 watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive], () => {
   if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive) return;
   updatePresentation = state.value.updates.presentation;
@@ -365,7 +366,7 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="modal">
-      <InstanceEditorModal v-if="editingInstance" :key="editingInstance.id" :instance="editingInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" @close="editingInstance = null" />
+      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" @close="editingInstance = null" />
     </Transition>
 
     <Transition name="modal">

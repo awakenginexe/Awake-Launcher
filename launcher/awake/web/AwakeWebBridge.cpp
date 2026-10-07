@@ -66,6 +66,7 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent, Gp
     connect(m_packCatalog, &PackCatalog::finished, this, &Bridge::catalogFinished);
     m_instanceEditor = new InstanceEditor(assets, this);
     connect(m_instanceEditor, &InstanceEditor::changed, this, &Bridge::editorChanged);
+    connect(m_instanceEditor, &InstanceEditor::modalChanged, this, &Bridge::setModalActive);
     connect(m_instanceEditor, &InstanceEditor::failed, this, [this](const QString& detail) { fail("instanceCommand", detail); });
     const auto changed = [this] { observeInstances(); scheduleState(); };
     auto* instances = APPLICATION->instances();
@@ -354,7 +355,7 @@ QVariantMap Bridge::selectInstance(const QString& id)
 
 QVariantMap Bridge::launchInstance(const QString& id)
 {
-    if (!m_active || m_actionPending) return fail("launchInstance", tr("Finish the current native action first."));
+    if (!m_active || m_actionPending || m_modalActive) return fail("launchInstance", tr("Finish the current native action first."));
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!instance) return fail("launchInstance", tr("This instance no longer exists."));
     if (instance->isRunning() || !instance->canLaunch()) return fail("launchInstance", tr("This instance cannot be launched right now."));

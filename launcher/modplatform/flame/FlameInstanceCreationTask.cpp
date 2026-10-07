@@ -62,7 +62,6 @@
 #include <QFileInfo>
 #include <utility>
 
-#include "HardwareInfo.h"
 #include "meta/Index.h"
 #include "minecraft/World.h"
 #include "minecraft/mod/tasks/LocalResourceParse.h"
@@ -484,24 +483,6 @@ void FlameCreationTask::createInstance()
         } else {
             m_newInstance->setIconKey("flame");
         }
-    }
-
-    int recommendedRAM = m_pack.minecraft.recommendedRAM;
-
-    // only set memory if this is a fresh instance
-    if (!m_oldInstance && recommendedRAM > 0) {
-        const auto sysMiB = HardwareInfo::totalRamMiB();
-        const auto max = static_cast<double>(sysMiB) * 0.9;
-
-        if (static_cast<double>(recommendedRAM) > max) {
-            logWarning(tr("The recommended memory of the modpack exceeds 90% of your system RAM—reducing it from %1 MiB to %2 MiB!")
-                           .arg(recommendedRAM)
-                           .arg(max));
-            recommendedRAM = static_cast<int>(max);
-        }
-
-        m_newInstance->settings()->set("OverrideMemory", true);
-        m_newInstance->settings()->set("MaxMemAlloc", recommendedRAM);
     }
 
     QString jarmodsPath = FS::PathCombine(m_stagingPath, m_rootPath, "jarmods");

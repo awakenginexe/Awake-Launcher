@@ -134,10 +134,12 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Compact glowing buttons for skin parts: glow means visible, click to hide.
-          - A local skin library with 3D previews, saved names and Classic/Slim models.
-          - Separate Save locally and Apply to account actions.
-          - Your skin library stays in your selected launcher data folder.
+          - Fixed per-instance RAM saves, including changing an existing allocation to 12000 MiB.
+          - Game settings are locked while the instance is running; new instances inherit global memory settings.
+          - Settings errors appear beside the affected field and move focus to it after a failed save.
+          - Save sits beside Close; unsaved edits show Save & Close and a themed confirmation popup.
+          - Download mods from the instance editor using the CurseForge and Modrinth browser.
+          - Reduced expensive blur and scaling effects. GPU acceleration remains disabled to avoid NVIDIA overlay hooks; loading and occasional scrolling stalls remain under investigation.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

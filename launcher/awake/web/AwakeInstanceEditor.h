@@ -19,10 +19,11 @@ public:
 signals:
     void changed(QString instanceId, QString section);
     void failed(QString detail);
+    void modalChanged(bool active);
 private:
     void observe(QAbstractItemModel* model, const QString& id, const QString& section);
     QPointer<Assets> m_assets;
     QSet<QAbstractItemModel*> m_observed;
-    bool m_choosingFiles = false;
+    bool m_contentDialogActive = false;
 };
 }

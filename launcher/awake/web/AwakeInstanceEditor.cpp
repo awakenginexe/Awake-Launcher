@@ -14,6 +14,11 @@
 #include "launch/LogModel.h"
 #include "settings/SettingsObject.h"
 #include "settings/Setting.h"
+#include "ui/MainWindow.h"
+#include "ui/dialogs/ResourceDownloadDialog.h"
+#include "ui/dialogs/ProgressDialog.h"
+#include "ResourceDownloadTask.h"
+#include "tasks/ConcurrentTask.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDesktopServices>
@@ -23,10 +28,11 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrl>
+#include <cmath>
 
 namespace Awake::Web {
 namespace {
-QVariantMap failure(const QString& message) { return {{"ok", false}, {"error", message}}; }
+QVariantMap failure(const QString& message, const QString& field = {}) { return {{"ok", false}, {"error", message}, {"field", field}}; }
 const QStringList sections{"overview", "log", "versions", "mods", "resourcepacks", "shaderpacks", "notes", "worlds", "screenshots", "settings", "otherlogs"};
 ResourceFolderModel* resources(MinecraftInstance* instance, const QString& section)
 {
@@ -94,9 +100,9 @@ QVariantMap InstanceEditor::details(const QString& instanceId, const QString& se
                 {"jvmArgs", settings->getSetting("JvmArgs")->Setting::get().toString()}}},
             {"global", QVariantMap{{"jvmPreset", APPLICATION->settings()->get("AwakeJvmPreset")},
                 {"jvmArgs", APPLICATION->settings()->get("JvmArgs").toString()}}}});
-        result.insert("settings", QVariantMap{{"minMemory", settings->get("MinMemAlloc")}, {"maxMemory", settings->get("MaxMemAlloc")},
-            {"width", settings->get("MinecraftWinWidth")}, {"height", settings->get("MinecraftWinHeight")},
-            {"fullscreen", settings->get("LaunchMaximized")}, {"overrideMemory", settings->get("OverrideMemory")}, {"overrideWindow", settings->get("OverrideWindow")},
+        result.insert("settings", QVariantMap{{"minMemory", settings->get("MinMemAlloc").toInt()}, {"maxMemory", settings->get("MaxMemAlloc").toInt()},
+            {"width", settings->get("MinecraftWinWidth").toInt()}, {"height", settings->get("MinecraftWinHeight").toInt()},
+            {"fullscreen", settings->get("LaunchMaximized").toBool()}, {"overrideMemory", settings->get("OverrideMemory").toBool()}, {"overrideWindow", settings->get("OverrideWindow").toBool()},
             {"jvmArgs", settings->get("JvmArgs").toString()}, {"jvmPreset", instance->jvmPreset()},
             {"useGlobalJvmArgs", !settings->get("OverrideJavaArgs").toBool()}});
     } else if (section == "versions" || section == "overview") {
@@ -141,20 +147,26 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
             return failure(tr("Notes must be text shorter than one megabyte."));
         instance->setNotes(payload.toString());
     } else if (name == "saveSettings") {
-        if (instance->isRunning()) return failure(tr("Stop the game before changing its settings."));
+        if (instance->isRunning()) return failure(tr("Stop the game before changing its settings."), "overrideMemory");
         const QStringList numberKeys{"minMemory", "maxMemory", "width", "height"};
         const QStringList boolKeys{"overrideMemory", "overrideWindow", "fullscreen", "useGlobalJvmArgs"};
-        if (payload.metaType().id() != QMetaType::QVariantMap || options.size() != 10 || !preferenceAllowed("jvmArgs", options.value("jvmArgs")) ||
-            !preferenceAllowed("jvmPreset", options.value("jvmPreset")))
-            return failure(tr("Invalid game settings."));
+        if (payload.metaType().id() != QMetaType::QVariantMap || options.size() != 10)
+            return failure(tr("Invalid game settings."), "overrideMemory");
+        if (!preferenceAllowed("jvmArgs", options.value("jvmArgs"))) return failure(tr("JVM arguments must be text shorter than 8193 characters without null characters."), "jvmArgs");
+        if (!preferenceAllowed("jvmPreset", options.value("jvmPreset"))) return failure(tr("Choose a supported JVM preset."), "jvmPreset");
+        for (const auto& key : boolKeys) if (options.value(key).metaType().id() != QMetaType::Bool) return failure(tr("Invalid game setting switches."), key);
         for (const auto& key : numberKeys) {
             bool valid = false;
-            const auto number = options.value(key).toInt(&valid);
-            if (!valid || number < (key.endsWith("Memory") ? 128 : 320) || number > (key.endsWith("Memory") ? 1048576 : 16384))
-                return failure(tr("Memory or window size is outside the supported range."));
+            const auto value = options.value(key);
+            const auto number = value.toDouble(&valid);
+            if (!valid || value.metaType().id() == QMetaType::QString || value.metaType().id() == QMetaType::Bool || !std::isfinite(number) || std::floor(number) != number)
+                return failure(tr("Use a whole number for memory or window size."), key);
+            const bool memory = key.endsWith("Memory");
+            if (!options.value(memory ? "overrideMemory" : "overrideWindow").toBool()) continue;
+            if (number < (memory ? 128 : 320) || number > (memory ? 1048576 : 16384))
+                return failure(tr("Memory or window size is outside the supported range."), key);
         }
-        for (const auto& key : boolKeys) if (options.value(key).metaType().id() != QMetaType::Bool) return failure(tr("Invalid game setting switches."));
-        if (options.value("minMemory").toInt() > options.value("maxMemory").toInt()) return failure(tr("Minimum memory cannot exceed maximum memory."));
+        if (options.value("overrideMemory").toBool() && options.value("minMemory").toInt() > options.value("maxMemory").toInt()) return failure(tr("Minimum memory cannot exceed maximum memory."), "minMemory");
         auto* settings = instance->settings();
         settings->set("OverrideMemory", options.value("overrideMemory"));
         settings->set("OverrideWindow", options.value("overrideWindow"));
@@ -202,10 +214,48 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
             if (!model->setResourceEnabled({model->index(index, 0)}, options.value("enabled").toBool() ? EnableAction::ENABLE : EnableAction::DISABLE))
                 return failure(tr("The mod could not be changed."));
         } else if (!model->deleteResources({model->index(index, 0)})) return failure(tr("The selected file could not be removed."));
+    } else if (name == "downloadMods") {
+        if (instance->isRunning()) return failure(tr("Stop the game before adding files."));
+        if (m_contentDialogActive) return failure(tr("Finish the current file selection first."));
+        if (!instance->getPackProfile()->getModLoaders()) return failure(tr("Install a mod loader before downloading mods."));
+        m_contentDialogActive = true;
+        emit modalChanged(true);
+        QTimer::singleShot(0, this, [this, instanceId] {
+            QPointer<MinecraftInstance> target = APPLICATION->instances()->getInstanceById(instanceId);
+            if (!target || target->isRunning()) {
+                m_contentDialogActive = false;
+                emit modalChanged(false);
+                emit failed(tr("Stop the game before adding files."));
+                return;
+            }
+            auto* window = APPLICATION->showMainWindow(false);
+            auto* browser = ResourceDownload::ResourceDownloadDialog::createMod(window, target->loaderModList(), target);
+            connect(browser, &QDialog::finished, this, [this, instanceId, target, browser, window](int result) {
+                QString error;
+                if (result == QDialog::Accepted && target && !target->isRunning()) {
+                    ConcurrentTask tasks(tr("Download Mods"), APPLICATION->settings()->get("NumberOfConcurrentDownloads").toInt());
+                    for (const auto& task : browser->getTasks()) tasks.addTask(task);
+                    connect(&tasks, &Task::failed, this, [&error](const QString& message) { error = message; });
+                    ProgressDialog progress(window);
+                    progress.showSkipButton();
+                    progress.execWithTask(&tasks);
+                    if (error.isEmpty()) error = tasks.warnings().join('\n');
+                    if (target) target->loaderModList()->update();
+                } else if (result == QDialog::Accepted) error = tr("Stop the game before adding files.");
+                browser->deleteLater();
+                m_contentDialogActive = false;
+                emit modalChanged(false);
+                emit changed(instanceId, "mods");
+                if (!error.isEmpty()) emit failed(error);
+            });
+            browser->open();
+        });
+        return {{"ok", true}, {"pending", true}};
     } else if (name == "addFiles") {
         if (instance->isRunning()) return failure(tr("Stop the game before adding files."));
-        if (!resources(instance, section) || m_choosingFiles) return failure(tr("Finish the current file selection first."));
-        m_choosingFiles = true;
+        if (!resources(instance, section) || m_contentDialogActive) return failure(tr("Finish the current file selection first."));
+        m_contentDialogActive = true;
+        emit modalChanged(true);
         QTimer::singleShot(0, this, [this, instanceId, section] {
             const auto files = QFileDialog::getOpenFileNames(QApplication::activeWindow(), tr("Add files to the instance"), {},
                 section == "mods" ? tr("Mods (*.jar *.zip)") : tr("Packs (*.zip)"));
@@ -220,7 +270,8 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
                 }
                 model->update();
             } else if (!files.isEmpty()) failed = true;
-            m_choosingFiles = false;
+            m_contentDialogActive = false;
+            emit modalChanged(false);
             emit changed(instanceId, section);
             if (failed) emit this->failed(tr("Some files could not be added. Files already in this instance were kept. Check the file names and try again."));
         });

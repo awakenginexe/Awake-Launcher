@@ -2,11 +2,13 @@ export type ErrorCode = 'disconnected' | 'timeout' | 'protocol' | 'operation' | 
 export class BridgeError extends Error {
   readonly code: ErrorCode;
   readonly detail: string;
-  constructor(code: ErrorCode, detail: string) {
+  readonly field?: string;
+  constructor(code: ErrorCode, detail: string, field?: string) {
     super(detail);
     this.name = 'BridgeError';
     this.code = code;
     this.detail = detail;
+    this.field = field;
   }
 }
 
@@ -44,7 +46,7 @@ export function callNative(native: NativeObject, method: string, args: unknown[]
         if (!value || typeof value !== 'object' || !('ok' in value) || typeof value.ok !== 'boolean') {
           finish(new BridgeError('protocol', `${method}: invalid operation result`));
         } else if (!value.ok) {
-          finish(new BridgeError('operation', 'error' in value && typeof value.error === 'string' ? value.error : `${method}: operation rejected`));
+          finish(new BridgeError('operation', 'error' in value && typeof value.error === 'string' ? value.error : `${method}: operation rejected`, 'field' in value && typeof value.field === 'string' ? value.field : undefined));
         } else finish(undefined, value);
       }]);
     } catch (error) {

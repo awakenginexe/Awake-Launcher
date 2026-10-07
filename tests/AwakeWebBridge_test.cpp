@@ -53,6 +53,7 @@
 #include "minecraft/Component.h"
 #include "ui/widgets/JavaSettingsWidget.h"
 #include "ui/dialogs/BlockedModsDialog.h"
+#include "ui/dialogs/ResourceDownloadDialog.h"
 #include <QStandardPaths>
 #include <QTemporaryFile>
 #include "ui/dialogs/AwakePopupDialog.h"
@@ -557,6 +558,61 @@ private slots:
         QVERIFY(!bridge.instanceCommand("one", "saveSettings", settings).value("ok").toBool());
         QVERIFY(!bridge.instanceCommand("one", "toggleMod", QVariantMap{{"id", "file.jar"}, {"enabled", false}}).value("ok").toBool());
         instance->setRunning(false);
+    }
+    void persistedInstanceSettingsCanChangeOnlyMemory()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* instance = APPLICATION->instances()->getInstanceById("two");
+        auto* config = instance->settings();
+        config->set("OverrideMemory", QString("true"));
+        config->set("OverrideWindow", QString("false"));
+        config->set("LaunchMaximized", QString("false"));
+        config->set("MaxMemAlloc", QString("16834"));
+        auto options = bridge.instanceDetails("two", "settings").value("settings").toMap();
+        for (const auto& key : {"overrideMemory", "overrideWindow", "fullscreen", "useGlobalJvmArgs"})
+            QCOMPARE(options.value(key).metaType().id(), QMetaType::Bool);
+        QCOMPARE(options.value("maxMemory").metaType().id(), QMetaType::Int);
+        options["maxMemory"] = 12000;
+        QVERIFY(bridge.instanceCommand("two", "saveSettings", options).value("ok").toBool());
+        QCOMPARE(config->get("MaxMemAlloc").toInt(), 12000);
+        options["maxMemory"] = 127;
+        auto rejected = bridge.instanceCommand("two", "saveSettings", options);
+        QVERIFY(!rejected.value("ok").toBool());
+        QCOMPARE(rejected.value("field").toString(), QString("maxMemory"));
+        QCOMPARE(config->get("MaxMemAlloc").toInt(), 12000);
+        instance->setRunning(true);
+        options["maxMemory"] = 11000;
+        QVERIFY(!bridge.instanceCommand("two", "saveSettings", options).value("ok").toBool());
+        instance->setRunning(false);
+        QCOMPARE(config->get("MaxMemAlloc").toInt(), 12000);
+        config->set("OverrideMemory", false);
+        config->set("OverrideWindow", false);
+    }
+    void downloadModsOpensExistingProviderBrowser()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* instance = APPLICATION->instances()->getInstanceById("two");
+        instance->setRunning(true);
+        QVERIFY(!bridge.instanceCommand("two", "downloadMods", {}).value("ok").toBool());
+        instance->setRunning(false);
+        const auto result = bridge.instanceCommand("two", "downloadMods", {});
+        QVERIFY(result.value("ok").toBool());
+        QVERIFY(result.value("pending").toBool());
+        QPointer<ResourceDownload::ResourceDownloadDialog> browser;
+        const auto findBrowser = [&] {
+            for (auto* widget : QApplication::topLevelWidgets())
+                if (auto* dialog = qobject_cast<ResourceDownload::ResourceDownloadDialog*>(widget)) browser = dialog;
+            return !browser.isNull();
+        };
+        QTRY_VERIFY(findBrowser());
+        QVERIFY(browser->isVisible());
+        QVERIFY(!browser->getPages().isEmpty());
+        QVERIFY(!bridge.instanceCommand("two", "downloadMods", {}).value("ok").toBool());
+        browser->reject();
+        QTRY_VERIFY(browser.isNull());
+        QVERIFY(bridge.instanceCommand("two", "saveNotes", "After mod browser closes").value("ok").toBool());
     }
     void nativeJvmEditsActivateCustomPreset()
     {

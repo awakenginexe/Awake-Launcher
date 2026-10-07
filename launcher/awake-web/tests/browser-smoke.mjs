@@ -46,11 +46,12 @@ const fixture = `(() => {
       window.__nativeTest.calls.push(['instanceDetails', id, section]);
       const editor = window.__nativeTest.editor;
       if (editor.failSection === section) { cb({ok:false,error:'Fixture editor read failed'}); return; }
-      cb({ok:true, name:'Test fixture', section, running:section === 'log', rows:section === 'mods' ? editor.mods : section === 'versions' ? [{id:'minecraft',name:'Minecraft',detail:'1.21.1'}] : [], text:section === 'notes' ? editor.notes : section === 'log' ? editor.log : '', settings:section === 'settings' ? editor.settings : undefined,jvmConfig:{local:editor.localJvm || {jvmPreset:'custom',jvmArgs:''},global:{jvmPreset:state.launcherSettings.jvmPreset,jvmArgs:state.launcherSettings.jvmArgs}}});
+      cb({ok:true, name:'Test fixture', section, running:Boolean(editor.running) || section === 'log', rows:section === 'mods' ? editor.mods : section === 'versions' ? [{id:'minecraft',name:'Minecraft',detail:'1.21.1'}] : [], text:section === 'notes' ? editor.notes : section === 'log' ? editor.log : '', settings:section === 'settings' ? editor.settings : undefined,jvmConfig:{local:editor.localJvm || {jvmPreset:'custom',jvmArgs:''},global:{jvmPreset:state.launcherSettings.jvmPreset,jvmArgs:state.launcherSettings.jvmArgs}}});
     },
     instanceCommand(id, command, payload, cb) {
       window.__nativeTest.calls.push(['instanceCommand', id, command, payload]);
       const editor = window.__nativeTest.editor;
+      if (command === 'saveSettings' && editor.saveFailure) { cb(editor.saveFailure); return; }
       if (command === 'saveNotes') editor.notes = payload;
       if (command === 'saveSettings') {
         if (!payload.useGlobalJvmArgs) editor.localJvm = {jvmPreset:payload.jvmPreset,jvmArgs:payload.jvmArgs};
@@ -208,29 +209,29 @@ try {
     await page.locator('.editor-settings fieldset').last().locator('input[type=checkbox]').uncheck();
     await chooseDropdown(page, 'instance-jvm-preset', 'custom');
     await page.locator('#instance-jvm-args').fill('-Dawake.instance=true');
-    await page.locator('.editor-settings .editor-save').click();
+    await page.locator('.editor-footer .editor-save').click();
     await page.waitForFunction(() => window.__nativeTest.editor.settings.jvmArgs === '-Dawake.instance=true');
     assert.equal(await page.evaluate(() => window.__nativeTest.editor.settings.useGlobalJvmArgs), false);
     assert.equal(await page.evaluate(() => window.__nativeTest.state.launcherSettings.jvmArgs), '-Dawake.global=true');
     for (const preset of ['compatible','balanced','performance']) {
       await chooseDropdown(page, 'instance-jvm-preset', preset);
-      await page.locator('.editor-settings .editor-save').click();
+      await page.locator('.editor-footer .editor-save').click();
       await page.waitForFunction(p => window.__nativeTest.editor.settings.jvmPreset === p, preset);
       assert.equal(await page.locator('#instance-jvm-args').isDisabled(), true);
       assert.equal(await page.locator('#instance-jvm-args').inputValue(), '-Dawake.instance=true');
     }
     await chooseDropdown(page, 'instance-jvm-preset', 'custom');
-    await page.locator('.editor-settings .editor-save').click();
+    await page.locator('.editor-footer .editor-save').click();
     await page.waitForFunction(() => window.__nativeTest.editor.settings.jvmPreset === 'custom');
     assert.equal(await page.locator('#instance-jvm-args').isEnabled(), true);
     await page.locator('.editor-settings fieldset').last().locator('input[type=checkbox]').check();
-    await page.locator('.editor-settings .editor-save').click();
+    await page.locator('.editor-footer .editor-save').click();
     await page.waitForFunction(() => window.__nativeTest.editor.settings.useGlobalJvmArgs);
     assert.equal(await page.locator('#instance-jvm-args').inputValue(), '-Dawake.global=true');
     await page.locator('.editor-settings fieldset').last().locator('input[type=checkbox]').uncheck();
     assert.equal(await page.locator('#instance-jvm-preset').getAttribute('value'), 'custom');
     assert.equal(await page.locator('#instance-jvm-args').inputValue(), '-Dawake.instance=true');
-    await page.locator('.editor-settings .editor-save').click();
+    await page.locator('.editor-footer .editor-save').click();
     await page.waitForFunction(() => !window.__nativeTest.editor.settings.useGlobalJvmArgs);
     assert.equal(await page.evaluate(() => window.__nativeTest.editor.settings.jvmArgs), '-Dawake.instance=true');
     await page.screenshot({path:resolve(output, `jvm-instance-${locale}.png`)});
@@ -348,6 +349,8 @@ try {
     await page.waitForFunction(() => window.__nativeTest.editor.mods.length === 0);
     await page.locator('.editor-toolbar button').first().click();
     await page.waitForFunction(() => window.__nativeTest.calls.some(call => call[0] === 'instanceCommand' && call[2] === 'addFiles'));
+    await page.locator('.editor-download-mods').click();
+    await page.waitForFunction(() => window.__nativeTest.calls.some(call => call[0] === 'instanceCommand' && call[2] === 'downloadMods'));
     await page.locator('.editor-sidebar button[data-section="notes"]').click();
     await page.locator('#editor-notes').fill('Saved notes from the editor');
     await page.locator('.editor-save').click();
@@ -355,10 +358,48 @@ try {
     await page.locator('#editor-notes').fill('Unwanted unsaved notes');
     await page.keyboard.press('Escape');
     await page.locator('.editor-discard-confirm').waitFor();
+    assert.equal(await page.locator('.editor-discard-confirm').getAttribute('role'), 'alertdialog');
+    assert.equal(await page.locator('.editor-workspace').evaluate(el => el.inert), true);
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.locator('.editor-discard-confirm button').last().evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.editor-discard-confirm button').first().evaluate(el => el === document.activeElement), true);
+    await page.screenshot({path:resolve(output, `discard-${locale}.png`)});
     await page.locator('.editor-discard-confirm button').first().click();
     assert.equal(await page.locator('#editor-notes').inputValue(), 'Unwanted unsaved notes');
     await page.locator('.editor-sidebar button[data-section="settings"]').click();
     await page.locator('.editor-discard-confirm button').last().click();
+    if (locale === 'en_US') {
+      const maximum = page.locator('.editor-fields input').nth(1);
+      await maximum.fill('12000');
+      assert.equal(await page.locator('.editor-footer button').last().textContent(), 'Save & Close');
+      assert.equal(await page.locator('.editor-footer .editor-save').count(), 1);
+      const saveButton = await page.locator('.editor-footer .editor-save').boundingBox();
+      const closeButton = await page.locator('.editor-footer button').last().boundingBox();
+      assert.ok(saveButton.x + saveButton.width <= closeButton.x);
+      await maximum.fill('127');
+      await page.locator('.editor-footer .editor-save').click();
+      assert.equal(await maximum.getAttribute('aria-invalid'), 'true');
+      assert.equal(await maximum.evaluate(el => el === document.activeElement), true);
+      assert.equal(await page.evaluate(() => window.__nativeTest.editor.settings.maxMemory), 4096);
+      await maximum.fill('12000');
+      await page.evaluate(() => { window.__nativeTest.editor.saveFailure = {ok:false,error:'Fixture JVM argument rejected',field:'jvmArgs'}; });
+      await page.locator('.editor-footer button').last().click();
+      assert.equal(await page.locator('.instance-editor-window').count(), 1);
+      await page.locator('[data-setting="jvmArgs"] .editor-field-error').waitFor();
+      await page.waitForFunction(() => { const el=document.querySelector('[data-setting="jvmArgs"]'); const a=el.getBoundingClientRect(); const b=el.closest('.editor-content').getBoundingClientRect(); return a.top >= b.top && a.top < b.bottom; });
+      await page.evaluate(() => { delete window.__nativeTest.editor.saveFailure; });
+      await page.locator('.editor-footer .editor-save').click();
+      await page.waitForFunction(() => window.__nativeTest.editor.settings.maxMemory === 12000);
+      await maximum.fill('12500');
+      await page.evaluate(() => { const {state,host}=window.__nativeTest; state.instances.find(item => item.id === 'fixture-1').running=true; host.stateChanged.emit(structuredClone(state)); });
+      await page.waitForFunction(() => document.querySelector('[data-setting="maxMemory"] input').disabled);
+      assert.equal(await page.locator('[data-setting="overrideMemory"] input').isDisabled(), true);
+      assert.equal(await maximum.inputValue(), '12500');
+      await page.evaluate(() => { const {state,host}=window.__nativeTest; state.instances.find(item => item.id === 'fixture-1').running=false; host.stateChanged.emit(structuredClone(state)); });
+      await page.waitForFunction(() => !document.querySelector('[data-setting="maxMemory"] input').disabled);
+      assert.equal(await maximum.inputValue(), '12500');
+    }
     await page.locator('.editor-fields input').first().fill('1024');
     await page.locator('.editor-save').click();
     await page.waitForFunction(() => window.__nativeTest.editor.settings.minMemory === 1024);
@@ -422,6 +463,15 @@ try {
     await page.keyboard.press('Escape');
     await page.locator('.instance-editor-window').waitFor({state:'detached'});
     await page.waitForFunction(() => document.querySelectorAll('.instance-select')[1] === document.activeElement);
+    if (locale === 'en_US') {
+      await page.locator('.instance-select').nth(1).click({button:'right'});
+      await page.locator('.instance-context-menu button').nth(1).click();
+      await page.locator('.editor-sidebar button[data-section="notes"]').click();
+      await page.locator('#editor-notes').fill('Saved and closed');
+      await page.locator('.editor-footer button').last().click();
+      await page.locator('.instance-editor-window').waitFor({state:'detached'});
+      assert.equal(await page.evaluate(() => window.__nativeTest.editor.notes), 'Saved and closed');
+    }
     const readsBeforeClose = await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length);
     await page.waitForTimeout(2700);
     assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length), readsBeforeClose);
@@ -685,5 +735,5 @@ try {
   await page.goto(`${origin}/?disconnected=1`); await page.locator('.connection-error').waitFor();
   assert.equal(await page.locator('.instance-select').count(),0); await page.close();
   assert.deepEqual(errors, []); assert.deepEqual(requests, []);
-  console.log('Browser checks passed: skin reset staging/save/undo and cape recovery, Vue instance editor actions, console focus polling, notes/settings persistence, inline discard/remove confirmations, keyboard/focus/layout, hover clipping, context actions, languages, provider routes, stale replies, import and disconnected state.');
+  console.log('Browser checks passed: skin reset staging/save/undo and cape recovery, Vue instance editor actions, console focus polling, notes/settings persistence, field errors and save navigation, themed discard/remove confirmations, keyboard/focus/layout, hover clipping, context actions, languages, provider routes, stale replies, import and disconnected state.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

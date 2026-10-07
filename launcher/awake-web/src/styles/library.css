@@ -65,9 +65,8 @@ p, h1, h2, h3 { margin: 0; }
     linear-gradient(90deg, rgba(4, 7, 13, 0.90) 0%, rgba(4, 7, 13, 0.58) 35%, rgba(4, 7, 13, 0.12) 68%, rgba(4, 7, 13, 0.35) 100%),
     linear-gradient(0deg, rgba(4, 7, 13, 0.96) 0%, rgba(4, 7, 13, 0.75) 28%, rgba(4, 7, 13, 0.25) 55%, transparent 100%);
 }
-.artwork-enter-active, .artwork-leave-active { transition: opacity var(--duration-artwork) var(--ease), transform 450ms var(--ease); }
-.artwork-enter-from { opacity: 0; transform: scale(1.02); }
-.artwork-leave-to { opacity: 0; transform: scale(0.99); }
+.artwork-enter-active, .artwork-leave-active { transition: opacity var(--duration-artwork) var(--ease); }
+.artwork-enter-from, .artwork-leave-to { opacity: 0; }
 
 /* Restrained Glassmorphism Tokens */
 .glass {
@@ -826,14 +825,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   .play-button { border: 1px solid ButtonText; }
 }
 
-/* Modal Blurred Backdrop Scrim */
+/* Tint keeps the modal foreground clear without filtering the full scrolling scene. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 999;
   background: rgba(3, 7, 14, 0.65);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
   pointer-events: all;
 }
 .backdrop-enter-active, .backdrop-leave-active {
@@ -885,12 +882,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
 /* Modal Transitions */
 .modal-enter-active,
 .modal-leave-active {
-  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
-  transform: scale(0.96);
 }
 .reduced-motion .modal-enter-active,
 .reduced-motion .modal-leave-active {
@@ -904,8 +900,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   inset: 0;
   z-index: 1000;
   background: rgba(3, 7, 14, 0.78);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1810,7 +1804,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   font-weight: 500;
   cursor: pointer;
   text-align: left;
-  transition: all 0.14s ease;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 
 .platform-tab:hover {
@@ -2196,7 +2190,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   border-radius: 7px;
   padding: 8px 12px;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
 }
 
 .modpack-card:hover {
