@@ -124,7 +124,11 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          Awake Launcher v0.7.0 uses software rendering for the Windows launcher interface, avoiding the hardware graphics path that game overlays can hook and cause focused cursor lag. Minecraft keeps its own GPU settings.
+          Awake Launcher v1.0.0 is the first 1.0 release for Windows x64. It includes separate Minecraft instances, modpack installation, Microsoft account sign-in, Java and memory settings, and stable update checks.
+
+          Minecraft's application review approved Awake Launcher's Microsoft application ID for the Minecraft API allow list on October 5, 2026.
+
+          The launcher interface uses software rendering to avoid the hardware graphics path that game overlays can hook. Minecraft keeps its own GPU settings.
 
           Windows x64: download the Setup.exe for a per-user installation with a Start Menu shortcut and uninstaller. Close Awake Launcher before updating. Installed accounts and instances are preserved.
 

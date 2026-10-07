@@ -30,7 +30,7 @@ Add an account in **Accounts**, then choose **Create instance** to install Minec
 
 Awake Launcher is under active development. Windows x64 is the current build and validation platform. Linux and macOS need Awake-specific validation before release.
 
-Microsoft account linking currently reaches Minecraft Services but can be rejected there with HTTP 403. Until the application is approved, an account may not be added successfully.
+Minecraft's application review approved Awake Launcher's Microsoft application ID on October 5, 2026 for the Minecraft API allow list. Add your Microsoft account in **Accounts** to sign in.
 
 ## Help and contributions
 
