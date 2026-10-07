@@ -15,10 +15,12 @@ namespace Awake::Web {
 void initialize()
 {
 #ifdef Q_OS_WIN
-    // Keep the desktop UI off the game's graphics path, which NVIDIA overlays can hook.
-    // WebEngine also probes Qt's RHI backend during startup, even with a software scene graph.
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::Null);
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+    // WARP keeps Chromium's compositor active without opening the game's GPU adapter.
+    qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "1");
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
+    auto flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+    if (!flags.split(' ').contains("--ignore-gpu-blocklist"))
+        qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags + " --ignore-gpu-blocklist");
 #endif
     QWebEngineUrlScheme scheme("awake");
     scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);

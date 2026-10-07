@@ -39,6 +39,7 @@
 #include <QQueue>
 #include <QSet>
 #include <QUuid>
+#include <atomic>
 #include <memory>
 
 #include "tasks/Task.h"
@@ -105,4 +106,5 @@ class ConcurrentTask : public Task {
     QHash<QUuid, std::shared_ptr<TaskStepProgress>> m_task_progress;
 
     int m_total_max_size;
+    std::shared_ptr<std::atomic_bool> m_queuedStartsCanceled = std::make_shared<std::atomic_bool>(false);
 };

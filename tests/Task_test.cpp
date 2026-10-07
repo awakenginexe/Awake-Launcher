@@ -43,6 +43,10 @@ public:
     void executeTask() override { ++attempts; emitFailed("Account refresh failed"); }
 };
 
+class QueuedChildTask : public ConcurrentTask {
+    void executeTask() override { ConcurrentTask::executeTask(); executeNextSubTask(); }
+};
+
 class BigConcurrentTask : public ConcurrentTask {
     Q_OBJECT
 
@@ -97,6 +101,42 @@ class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void canceledParentDoesNotStartQueuedChild_data()
+    {
+        QTest::addColumn<bool>("restart");
+        QTest::newRow("cancel") << false;
+        QTest::newRow("cancel-then-restart") << true;
+    }
+    void canceledParentDoesNotStartQueuedChild()
+    {
+        QFETCH(bool, restart);
+        auto child = makeShared<ConcurrentTask>();
+        child->addTask(makeShared<BasicTask>());
+        QSignalSpy started(child.get(), &Task::started);
+        QueuedChildTask parent;
+        parent.addTask(child);
+        parent.start();
+        QVERIFY(parent.abort());
+        QVERIFY(!parent.isRunning());
+        if (restart) parent.start();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QCOMPARE(started.count(), 0);
+        if (restart) QVERIFY(parent.abort());
+    }
+    void canceledNetJobFinishesBeforeQueuedDispatch()
+    {
+        QNetworkAccessManager network;
+        NetJob job("Canceled network dispatch", &network, 1);
+        job.setAskRetry(false);
+        auto child = makeShared<BasicTask>();
+        job.addTask(child);
+        QSignalSpy started(child.get(), &Task::started);
+        job.start();
+        QVERIFY(job.abort());
+        QVERIFY(job.isFinished());
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QCOMPARE(started.count(), 0);
+    }
     void netJobReportsFailedAccountTasksWithoutNetworkRetries()
     {
         QNetworkAccessManager network;

@@ -36,6 +36,8 @@
 #include "awake/GpuSelection.h"
 #include "awake/web/AwakeWebBridge.h"
 #include "awake/web/AwakePackCatalog.h"
+#include "awake/web/AwakeModCatalog.h"
+#include "minecraft/mod/tasks/GetModDependenciesTask.h"
 #include "InstanceImportTask.h"
 #include "modplatform/atlauncher/ATLPackInstallTask.h"
 #include "modplatform/ftb/FTBPackInstallTask.h"
@@ -80,6 +82,99 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void pendingPinnedDependenciesAreDeduplicated()
+    {
+        auto* instance = dynamic_cast<MinecraftInstance*>(APPLICATION->instances()->getInstanceById("one"));
+        QVERIFY(instance);
+        instance->getPackProfile()->buildingFromScratch();
+        instance->getPackProfile()->setComponentVersion("net.minecraft", "1.21.8", true);
+        instance->getPackProfile()->setComponentVersion("net.fabricmc.fabric-loader", "0.16.14");
+        auto makeSelection = [](QString project, QString requiredFile) {
+            auto pack = std::make_shared<ModPlatform::IndexedPack>();
+            pack->addonId = project;
+            pack->provider = ModPlatform::ResourceProvider::MODRINTH;
+            ModPlatform::IndexedVersion version;
+            version.dependencies.append({{"shared-project"}, ModPlatform::DependencyType::REQUIRED, requiredFile});
+            return std::make_shared<GetModDependenciesTask::PackDependency>(pack, version);
+        };
+        GetModDependenciesTask same(instance, instance->loaderModList(),
+            {makeSelection("first", "shared-file"), makeSelection("second", "shared-file")}, false);
+        QCOMPARE(same.getDependecies().size(), 1);
+        GetModDependenciesTask conflicting(instance, instance->loaderModList(),
+            {makeSelection("first", "shared-file"), makeSelection("second", "different-file")}, false);
+        QCOMPARE(conflicting.getDependecies().size(), 2);
+    }
+    void pinnedDependenciesMatchProviderFileIds()
+    {
+        const ModPlatform::Dependency pinned{{"project"}, ModPlatform::DependencyType::REQUIRED, "file-2"};
+        QVERIFY(GetModDependenciesTask::matchesDependencyVersion(pinned, "project", "file-2"));
+        QVERIFY(!GetModDependenciesTask::matchesDependencyVersion(pinned, "project", "file-1"));
+        QVERIFY(!GetModDependenciesTask::matchesDependencyVersion(pinned, "other", "file-2"));
+        const ModPlatform::Dependency versionOnly{{""}, ModPlatform::DependencyType::REQUIRED, "file-2"};
+        QVERIFY(GetModDependenciesTask::matchesDependencyVersion(versionOnly, "project", "file-2"));
+        QVERIFY(!GetModDependenciesTask::matchesDependencyVersion(versionOnly, "project", "2.0.0"));
+        const ModPlatform::Dependency projectOnly{{"project"}, ModPlatform::DependencyType::REQUIRED, {}};
+        QVERIFY(GetModDependenciesTask::matchesDependencyVersion(projectOnly, "project", "file-1"));
+        QVERIFY(!GetModDependenciesTask::matchesDependencyVersion(projectOnly, "other", "file-1"));
+    }
+    void modVersionValidationRejectsIncompatibleAndUnsafeDownloads()
+    {
+        ModPlatform::IndexedVersion version;
+        version.fileId = "version-1";
+        version.fileName = "fixture.jar";
+        version.downloadUrl = "https://cdn.modrinth.com/data/fixture.jar";
+        version.mcVersion = {"1.21.8"};
+        version.loaders = ModPlatform::Fabric;
+        QVERIFY(ModCatalog::safeVersion(version, "1.21.8", ModPlatform::Fabric));
+        QVERIFY(!ModCatalog::safeVersion(version, "1.20.1", ModPlatform::Fabric));
+        QVERIFY(!ModCatalog::safeVersion(version, "1.21.8", ModPlatform::Forge));
+        QVERIFY(!ModCatalog::safeVersion(version, "1.21.8", ModPlatform::ModLoaderTypes(0)));
+        for (const auto& filename : {"../escape.jar", "..\\escape.jar", "C:escape.jar", "fixture.jar:stream", "fixture.exe", "fixture.jar "}) {
+            version.fileName = filename;
+            QVERIFY(!ModCatalog::safeVersion(version, "1.21.8", ModPlatform::Fabric));
+        }
+        version.fileName = "fixture.jar";
+        for (const auto& url : {"file:///C:/fixture.jar", "http://cdn.modrinth.com/fixture.jar", "https://user:pass@example.com/fixture.jar"}) {
+            version.downloadUrl = url;
+            QVERIFY(!ModCatalog::safeVersion(version, "1.21.8", ModPlatform::Fabric));
+        }
+    }
+    void modCatalogRequiresTrustedSelectionAndReview()
+    {
+        Assets assets;
+        ModCatalog catalog(&assets);
+        QSignalSpy completed(&catalog, &ModCatalog::finished);
+        catalog.prepare("untrusted-selection", "one", {QVariantMap{{"provider", "modrinth"}, {"projectId", "invented"}, {"versionId", "invented"}}});
+        QCOMPARE(completed.size(), 1);
+        QCOMPARE(completed.first().first().toString(), QString("untrusted-selection"));
+        QVERIFY(!completed.first().at(1).toMap().value("ok").toBool());
+        QVERIFY(!catalog.busy());
+        completed.clear();
+        catalog.install("untrusted-review", "one", "invented-review");
+        QCOMPARE(completed.size(), 1);
+        QVERIFY(!completed.first().at(1).toMap().value("ok").toBool());
+        QVERIFY(!catalog.busy());
+        QVERIFY(!catalog.cancel("already-finished"));
+        QVERIFY(!catalog.hasRequest("untrusted-review"));
+    }
+    void modCatalogRejectsRunningInstanceAndUnknownProvider()
+    {
+        Assets assets;
+        ModCatalog catalog(&assets);
+        QSignalSpy completed(&catalog, &ModCatalog::finished);
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        QVERIFY(instance);
+        instance->setRunning(true);
+        const auto restore = qScopeGuard([instance] { instance->setRunning(false); });
+        catalog.search("running-mods", "one", "modrinth", {}, {}, 0);
+        QCOMPARE(completed.size(), 1);
+        QVERIFY(!completed.first().at(1).toMap().value("ok").toBool());
+        instance->setRunning(false);
+        completed.clear();
+        catalog.search("unknown-provider", "one", "invented", {}, {}, 0);
+        QCOMPARE(completed.size(), 1);
+        QVERIFY(!completed.first().at(1).toMap().value("ok").toBool());
+    }
     void installedDataLocationsPreservePortableAndCustomPaths()
     {
         QTemporaryDir install;

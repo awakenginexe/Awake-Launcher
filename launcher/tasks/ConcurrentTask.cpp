@@ -45,6 +45,7 @@ ConcurrentTask::ConcurrentTask(QString task_name, int max_concurrent) : Task(), 
 
 ConcurrentTask::~ConcurrentTask()
 {
+    m_queuedStartsCanceled->store(true);
     for (auto task : m_doing) {
         if (task)
             task->disconnect(this);
@@ -63,12 +64,15 @@ void ConcurrentTask::addTask(Task::Ptr task)
 
 void ConcurrentTask::executeTask()
 {
+    m_queuedStartsCanceled->store(true);
+    m_queuedStartsCanceled = std::make_shared<std::atomic_bool>(false);
     for (auto i = 0; i < m_total_max_size; i++)
         QMetaObject::invokeMethod(this, &ConcurrentTask::executeNextSubTask, Qt::QueuedConnection);
 }
 
 bool ConcurrentTask::abort()
 {
+    m_queuedStartsCanceled->store(true);
     m_queue.clear();
 
     if (m_doing.isEmpty()) {
@@ -168,7 +172,9 @@ void ConcurrentTask::startSubTask(Task::Ptr next)
 
     updateState();
 
-    QMetaObject::invokeMethod(next.get(), &Task::start, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(next.get(), [canceled = m_queuedStartsCanceled, next] {
+        if (!canceled->load()) next->start();
+    }, Qt::QueuedConnection);
 }
 
 void ConcurrentTask::subTaskFinished(Task::Ptr task, TaskStepState state)

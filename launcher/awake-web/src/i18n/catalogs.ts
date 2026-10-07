@@ -1,4 +1,10 @@
 export const en = {
+  modSearch: 'Search mods…', modRecommended: 'Recommended', modSearching: 'Searching…', modNoResults: 'No compatible mods found. Try another search or provider.',
+  modQueued: 'Queued', modProjectPage: 'Open project page', modCompatibleVersion: 'Compatible version', modNoVersions: 'No downloadable compatible version', modAddQueue: 'Add to queue',
+  modSelectHint: 'Select a mod to see its compatible versions and add it to your download queue.', modQueue: 'Download queue', modQueueEmpty: 'Add mods from either provider, then review the downloads.', modRemoveQueue: 'Remove {name} from queue',
+  modReviewTitle: 'Review downloads', modReviewHint: 'Check the files and any dependency warnings before installing.', modDownloading: 'Downloading mods…', modCanceled: 'Download canceled', modInstalled: 'Mods installed', modPartialFailure: 'Some downloads need attention',
+  modRequiredBy: 'Required by {names}', modDependency: 'Required dependency', modExistingFile: 'Existing file', modSelected: 'Selected', modInstalledCount: 'Installed {count} files. They are ready in this instance’s Mods list.',
+  modCompatibilityHint: 'Showing mods for {compatibility}', modBack: 'Back to browsing', modReviewQueue: 'Review {count} selections', modInstallCount: 'Install {count} files', modStopGame: 'Stop the game before downloading mods into this instance.',
   skinLibrary: 'Local library', skinSaveLocal: 'Save locally', skinLocalSaved: 'Saved to your local library.', skinName: 'Skin name', skinApplyAccount: 'Apply to account', skinPreviewOnly: 'Preview only', skinLibraryEmpty: 'Save a skin to keep it here.',
   updateNotChecked: 'Not checked yet', skinParts: 'Skin parts', skinPartsHint: 'Preview only. These buttons do not change your Minecraft settings.',
   skinJacket: 'Jacket', skinLeftSleeve: 'Left sleeve', skinRightSleeve: 'Right sleeve', skinLeftPantsLeg: 'Left pants leg', skinRightPantsLeg: 'Right pants leg', skinHat: 'Hat',
@@ -125,6 +131,12 @@ export const en = {
 export type MessageKey = keyof typeof en;
 type Catalog = Record<MessageKey, string>;
 export const th: Catalog = {
+  modSearch: 'ค้นหาม็อด…', modRecommended: 'แนะนำ', modSearching: 'กำลังค้นหา…', modNoResults: 'ไม่พบม็อดที่เข้ากันได้ ลองคำค้นหรือผู้ให้บริการอื่น',
+  modQueued: 'อยู่ในคิวแล้ว', modProjectPage: 'เปิดหน้าโครงการ', modCompatibleVersion: 'เวอร์ชันที่เข้ากันได้', modNoVersions: 'ไม่มีเวอร์ชันที่เข้ากันได้ให้ดาวน์โหลด', modAddQueue: 'เพิ่มเข้าคิว',
+  modSelectHint: 'เลือกม็อดเพื่อดูเวอร์ชันที่เข้ากันได้และเพิ่มเข้าคิวดาวน์โหลด', modQueue: 'คิวดาวน์โหลด', modQueueEmpty: 'เพิ่มม็อดจากผู้ให้บริการใดก็ได้ แล้วตรวจสอบก่อนดาวน์โหลด', modRemoveQueue: 'นำ {name} ออกจากคิว',
+  modReviewTitle: 'ตรวจสอบรายการดาวน์โหลด', modReviewHint: 'ตรวจสอบไฟล์และคำเตือนเกี่ยวกับม็อดที่จำเป็นก่อนติดตั้ง', modDownloading: 'กำลังดาวน์โหลดม็อด…', modCanceled: 'ยกเลิกการดาวน์โหลดแล้ว', modInstalled: 'ติดตั้งม็อดแล้ว', modPartialFailure: 'บางรายการดาวน์โหลดมีปัญหา',
+  modRequiredBy: 'จำเป็นสำหรับ {names}', modDependency: 'ม็อดที่จำเป็น', modExistingFile: 'มีไฟล์อยู่แล้ว', modSelected: 'เลือกไว้', modInstalledCount: 'ติดตั้งแล้ว {count} ไฟล์ ดูได้ในหน้าม็อดของอินสแตนซ์นี้',
+  modCompatibilityHint: 'แสดงม็อดสำหรับ {compatibility}', modBack: 'กลับไปเลือกม็อด', modReviewQueue: 'ตรวจสอบ {count} รายการ', modInstallCount: 'ติดตั้ง {count} ไฟล์', modStopGame: 'ปิดเกมก่อนดาวน์โหลดม็อดเข้าอินสแตนซ์นี้',
   skinLibrary: 'คลังสกินในเครื่อง', skinSaveLocal: 'บันทึกในเครื่อง', skinLocalSaved: 'บันทึกสกินในเครื่องแล้ว', skinName: 'ชื่อสกิน', skinApplyAccount: 'ใช้กับบัญชี', skinPreviewOnly: 'ตัวอย่างเท่านั้น', skinLibraryEmpty: 'บันทึกสกินเพื่อเก็บไว้ที่นี่',
   updateNotChecked: 'ยังไม่ได้ตรวจสอบ', skinParts: 'ส่วนของสกิน', skinPartsHint: 'ใช้แสดงตัวอย่างเท่านั้น ไม่เปลี่ยนการตั้งค่า Minecraft',
   skinJacket: 'เสื้อแจ็กเก็ต', skinLeftSleeve: 'แขนเสื้อซ้าย', skinRightSleeve: 'แขนเสื้อขวา', skinLeftPantsLeg: 'ขากางเกงซ้าย', skinRightPantsLeg: 'ขากางเกงขวา', skinHat: 'หมวก',
@@ -249,6 +261,12 @@ export const th: Catalog = {
   archiveBrowseError: 'ไม่สามารถเลือกไฟล์เก็บถาวรได้',
 };
 export const zhCN: Catalog = {
+  modSearch: '搜索模组…', modRecommended: '推荐', modSearching: '正在搜索…', modNoResults: '未找到兼容模组，请尝试其他关键词或平台。',
+  modQueued: '已加入队列', modProjectPage: '打开项目页面', modCompatibleVersion: '兼容版本', modNoVersions: '没有可下载的兼容版本', modAddQueue: '加入队列',
+  modSelectHint: '选择模组以查看兼容版本并加入下载队列。', modQueue: '下载队列', modQueueEmpty: '从任一平台添加模组，然后检查下载列表。', modRemoveQueue: '从队列移除 {name}',
+  modReviewTitle: '检查下载列表', modReviewHint: '请在安装前检查文件及依赖警告。', modDownloading: '正在下载模组…', modCanceled: '已取消下载', modInstalled: '模组已安装', modPartialFailure: '部分下载需要处理',
+  modRequiredBy: '{names} 的必需依赖', modDependency: '必需依赖', modExistingFile: '现有文件', modSelected: '已选择', modInstalledCount: '已安装 {count} 个文件，可在此实例的模组列表中查看。',
+  modCompatibilityHint: '显示适用于 {compatibility} 的模组', modBack: '返回浏览', modReviewQueue: '检查 {count} 项选择', modInstallCount: '安装 {count} 个文件', modStopGame: '请先停止游戏，再向此实例下载模组。',
   skinLibrary: '本地皮肤库', skinSaveLocal: '保存到本地', skinLocalSaved: '已保存到本地皮肤库。', skinName: '皮肤名称', skinApplyAccount: '应用到账号', skinPreviewOnly: '仅预览', skinLibraryEmpty: '保存皮肤以收藏到这里。',
   updateNotChecked: '尚未检查', skinParts: '皮肤部件', skinPartsHint: '仅用于预览，不会更改 Minecraft 设置。',
   skinJacket: '夹克', skinLeftSleeve: '左袖', skinRightSleeve: '右袖', skinLeftPantsLeg: '左裤腿', skinRightPantsLeg: '右裤腿', skinHat: '帽子',
@@ -373,6 +391,12 @@ export const zhCN: Catalog = {
   archiveBrowseError: '无法浏览选择压缩包。',
 };
 export const zhTW: Catalog = {
+  modSearch: '搜尋模組…', modRecommended: '推薦', modSearching: '正在搜尋…', modNoResults: '找不到相容模組，請嘗試其他關鍵字或平台。',
+  modQueued: '已加入佇列', modProjectPage: '開啟專案頁面', modCompatibleVersion: '相容版本', modNoVersions: '沒有可下載的相容版本', modAddQueue: '加入佇列',
+  modSelectHint: '選擇模組以查看相容版本並加入下載佇列。', modQueue: '下載佇列', modQueueEmpty: '從任一平台加入模組，然後檢查下載清單。', modRemoveQueue: '從佇列移除 {name}',
+  modReviewTitle: '檢查下載清單', modReviewHint: '請在安裝前檢查檔案及依賴警告。', modDownloading: '正在下載模組…', modCanceled: '已取消下載', modInstalled: '模組已安裝', modPartialFailure: '部分下載需要處理',
+  modRequiredBy: '{names} 的必要依賴', modDependency: '必要依賴', modExistingFile: '現有檔案', modSelected: '已選擇', modInstalledCount: '已安裝 {count} 個檔案，可在此實例的模組清單中查看。',
+  modCompatibilityHint: '顯示適用於 {compatibility} 的模組', modBack: '返回瀏覽', modReviewQueue: '檢查 {count} 項選擇', modInstallCount: '安裝 {count} 個檔案', modStopGame: '請先停止遊戲，再向此實例下載模組。',
   skinLibrary: '本機外觀庫', skinSaveLocal: '儲存至本機', skinLocalSaved: '已儲存至本機外觀庫。', skinName: '外觀名稱', skinApplyAccount: '套用至帳號', skinPreviewOnly: '僅供預覽', skinLibraryEmpty: '儲存外觀以收藏到這裡。',
   updateNotChecked: '尚未檢查', skinParts: '皮膚部件', skinPartsHint: '僅用於預覽，不會更改 Minecraft 設定。',
   skinJacket: '外套', skinLeftSleeve: '左袖', skinRightSleeve: '右袖', skinLeftPantsLeg: '左褲管', skinRightPantsLeg: '右褲管', skinHat: '帽子',

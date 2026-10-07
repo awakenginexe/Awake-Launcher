@@ -62,8 +62,7 @@ ResourceDownloadTask::ResourceDownloadTask(ModPlatform::IndexedPack::Ptr pack,
     if (isIndexed) {
         m_update_task.reset(new LocalResourceUpdateTask(m_pack_model->indexDir(), *m_pack, m_pack_version));
         connect(m_update_task.get(), &LocalResourceUpdateTask::hasOldResource, this, &ResourceDownloadTask::hasOldResource);
-
-        addTask(m_update_task);
+        connect(m_update_task.get(), &Task::succeeded, this, &ResourceDownloadTask::downloadSucceeded);
     }
 
     m_filesNetJob.reset(new NetJob(tr("Resource download"), APPLICATION->network()));
@@ -94,12 +93,13 @@ ResourceDownloadTask::ResourceDownloadTask(ModPlatform::IndexedPack::Ptr pack,
         }
     }
     m_filesNetJob->addNetAction(action);
-    connect(m_filesNetJob.get(), &NetJob::succeeded, this, &ResourceDownloadTask::downloadSucceeded);
+    if (!isIndexed) connect(m_filesNetJob.get(), &NetJob::succeeded, this, &ResourceDownloadTask::downloadSucceeded);
     connect(m_filesNetJob.get(), &NetJob::progress, this, &ResourceDownloadTask::downloadProgressChanged);
     connect(m_filesNetJob.get(), &NetJob::stepProgress, this, &ResourceDownloadTask::propagateStepProgress);
     connect(m_filesNetJob.get(), &NetJob::failed, this, &ResourceDownloadTask::downloadFailed);
 
     addTask(m_filesNetJob);
+    if (m_update_task) addTask(m_update_task);
 }
 
 void ResourceDownloadTask::downloadSucceeded()

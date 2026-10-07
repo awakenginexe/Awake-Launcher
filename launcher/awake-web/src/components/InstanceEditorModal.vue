@@ -8,6 +8,8 @@ import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
 import JvmPresetPicker from './JvmPresetPicker.vue';
 import { jvmPresets, type JvmPreset } from '../features/library/jvm.ts';
+import ModBrowserModal from './ModBrowserModal.vue';
+import type { ModService } from '../bridge/mods.ts';
 
 interface Row { id: string; name: string; detail?: string; enabled?: boolean; status?: string }
 interface EditorSettings { minMemory: number; maxMemory: number; width: number; height: number; fullscreen: boolean; overrideMemory: boolean; overrideWindow: boolean; jvmArgs: string; jvmPreset: JvmPreset; useGlobalJvmArgs: boolean }
@@ -18,6 +20,7 @@ const props = defineProps<{
   details: (id: string, section: string) => Promise<unknown>;
   command: (id: string, command: string, payload?: unknown) => Promise<unknown>;
   javaService: JavaService;
+  modService: ModService;
 }>();
 const emit = defineEmits<{ (event: 'close'): void }>();
 const sections: { id: string; label: MessageKey }[] = [
@@ -44,6 +47,7 @@ const wrap = ref(true);
 const filter = ref('');
 const pendingRemoval = ref<Row | null>(null);
 const pendingNavigation = ref<string | null>(null);
+const showModBrowser = ref(false);
 const dialog = ref<HTMLElement>();
 const confirmation = ref<HTMLElement>();
 let navigationInvoker: HTMLElement | null = null;
@@ -203,6 +207,7 @@ function activity() {
   if (document.visibilityState === 'visible' && document.hasFocus()) void load(true);
 }
 function keyboard(event: KeyboardEvent) {
+  if (showModBrowser.value) return;
   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (pendingNavigation.value) pendingNavigation.value = null; else if (pendingRemoval.value) pendingRemoval.value = null; else close(); }
   if (event.key !== 'Tab') return;
   const scope = pendingNavigation.value ? confirmation.value : dialog.value;
@@ -214,6 +219,12 @@ function keyboard(event: KeyboardEvent) {
 watch(() => props.instance.id, () => { pendingRemoval.value = null; void load(); });
 watch(() => props.revision, () => { if (!working.value && !dirty.value) void load(); });
 watch(settings, () => { fieldErrors.value = {}; }, { deep: true });
+watch(showModBrowser, async value => {
+  if (value) return;
+  await load();
+  await nextTick();
+  if (!closed) dialog.value?.querySelector<HTMLButtonElement>('.editor-download-mods')?.focus();
+});
 watch(pendingNavigation, async value => {
   if (value) navigationInvoker = document.activeElement as HTMLElement | null;
   await nextTick();
@@ -233,7 +244,7 @@ onUnmounted(() => {
 
 <template>
   <div class="modal-overlay" @click.self="close">
-    <section ref="dialog" class="modal-dialog create-instance-window instance-editor-window" role="dialog" aria-modal="true" aria-labelledby="editor-title" @keydown="keyboard">
+    <section ref="dialog" class="modal-dialog create-instance-window instance-editor-window" role="dialog" aria-modal="true" aria-labelledby="editor-title" :inert="showModBrowser" @keydown="keyboard">
       <header class="create-modal-header" :inert="pendingNavigation !== null">
         <div class="create-header-left">
           <img v-if="instance.iconUrl" :src="instance.iconUrl" alt="" class="editor-instance-icon" />
@@ -289,7 +300,7 @@ onUnmounted(() => {
               </div><p v-else class="editor-message">{{ t('editorSettingsUnavailable') }}</p>
             </template>
             <template v-else>
-              <div class="editor-toolbar"><input v-if="data.rows?.length" v-model="filter" class="glass-input editor-filter" type="search" :aria-label="t('editorSearchAria').replace('{section}', title)" :placeholder="t('editorSearchPlaceholder').replace('{section}', title.toLowerCase())" /><button v-if="fileSection" class="btn-subtle" :disabled="disabled || data.running" @click="run('addFiles', { section })">{{ t('editorImportFiles') }}</button><button v-if="section === 'mods'" class="btn-subtle editor-download-mods" :disabled="disabled || data.running" @click="run('downloadMods', undefined, false)">{{ t('editorDownloadMods') }}</button><button v-if="section !== 'versions'" class="btn-subtle" :disabled="disabled" @click="run('openFolder', { section }, false)">{{ t('folder') }}</button></div>
+              <div class="editor-toolbar"><input v-if="data.rows?.length" v-model="filter" class="glass-input editor-filter" type="search" :aria-label="t('editorSearchAria').replace('{section}', title)" :placeholder="t('editorSearchPlaceholder').replace('{section}', title.toLowerCase())" /><button v-if="fileSection" class="btn-subtle" :disabled="disabled || instance.running" @click="run('addFiles', { section })">{{ t('editorImportFiles') }}</button><button v-if="section === 'mods'" class="btn-subtle editor-download-mods" :disabled="disabled || instance.running" @click="showModBrowser = true">{{ t('editorDownloadMods') }}</button><button v-if="section !== 'versions'" class="btn-subtle" :disabled="disabled" @click="run('openFolder', { section }, false)">{{ t('folder') }}</button></div>
               <div v-if="pendingRemoval" class="editor-remove-confirm" role="alert"><p>{{ t('editorRemoveConfirm').replace('{name}', pendingRemoval.name) }}</p><button class="btn-subtle" :disabled="disabled" @click="pendingRemoval = null">{{ t('cancel') }}</button><button class="btn-subtle" :disabled="disabled" @click="run('removeFile', { section, id: pendingRemoval.id })">{{ t('editorRemoveFile') }}</button></div>
               <ul v-if="rows.length" class="editor-file-list"><li v-for="row in rows" :key="row.id" class="editor-file-row"><label v-if="section === 'mods' && typeof row.enabled === 'boolean'" class="editor-mod-toggle"><input type="checkbox" :checked="row.enabled" :disabled="disabled" :aria-label="t('editorEnableMod').replace('{name}', row.name)" @change="run('toggleMod', { id: row.id, enabled: ($event.target as HTMLInputElement).checked })" /></label><div class="editor-file-copy"><strong>{{ row.name }}</strong><p v-if="row.detail">{{ row.detail }}</p></div><span v-if="row.status" class="editor-file-status">{{ row.status }}</span><button v-if="fileSection" class="btn-subtle" :disabled="disabled" :aria-label="t('editorRemoveAria').replace('{name}', row.name)" @click="pendingRemoval = row">{{ t('editorRemove') }}</button></li></ul>
               <p v-else class="editor-message">{{ filter ? t('editorNoMatchingItems') : t('editorNoItems').replace('{section}', title.toLowerCase()) }}</p>
@@ -308,5 +319,6 @@ onUnmounted(() => {
         </section>
       </div>
     </section>
+    <ModBrowserModal v-if="showModBrowser" :instance="instance" :service="modService" :t="t" @close="showModBrowser = false" />
   </div>
 </template>

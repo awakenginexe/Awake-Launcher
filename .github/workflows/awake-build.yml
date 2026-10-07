@@ -134,12 +134,10 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Fixed per-instance RAM saves, including changing an existing allocation to 12000 MiB.
-          - Game settings are locked while the instance is running; new instances inherit global memory settings.
-          - Settings errors appear beside the affected field and move focus to it after a failed save.
-          - Save sits beside Close; unsaved edits show Save & Close and a themed confirmation popup.
-          - Download mods from the instance editor using the CurseForge and Modrinth browser.
-          - Reduced expensive blur and scaling effects. GPU acceleration remains disabled to avoid NVIDIA overlay hooks; loading and occasional scrolling stalls remain under investigation.
+          - Fixed choppy launcher fades and scrolling on Windows by enabling Chromium's compositor through the Microsoft WARP software device. Local settings-fade samples improved from roughly 100 ms frame gaps to 16.7 ms, with no gaps over 50 ms in the measured run. No NVIDIA overlay hooks were found in that run.
+          - Replaced the native Download mods window with an Awake-themed browser: CurseForge and Modrinth search, compatible version selection, a shared download queue, and a dependency review before installation.
+          - Added download progress, cancellation, and retry after partial failure. Completed downloads are kept.
+          - Fixed matching of dependencies pinned to a specific provider file ID and retained the launcher's dependency and metadata preferences.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

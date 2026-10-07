@@ -87,12 +87,14 @@ bool laxCompare(const QString& fsfilename, const QString& metadataFilename, bool
 
 GetModDependenciesTask::GetModDependenciesTask(MinecraftInstance* instance,
                                                ModFolderModel* folder,
-                                               QList<std::shared_ptr<PackDependency>> selected)
+                                               QList<std::shared_ptr<PackDependency>> selected,
+                                               bool askRetry)
     : SequentialTask(tr("Get dependencies"))
     , m_selected(std::move(selected))
     , m_version(mcVersion(instance))
     , m_loaderType(mcLoaders(instance))
 {
+    m_askRetry = askRetry;
     for (auto* mod : folder->allMods()) {
         m_modsFileNames << mod->fileinfo().fileName();
         if (auto meta = mod->metadata(); meta) {
@@ -151,22 +153,23 @@ QList<ModPlatform::Dependency> GetModDependenciesTask::getDependenciesForVersion
         verDep = getOverride(verDep, providerName);
         auto isOnlyVersion = providerName == ModPlatform::ResourceProvider::MODRINTH && verDep.addonId.toString().isEmpty();
         auto isDuplicateDep = [&verDep, isOnlyVersion](const ModPlatform::Dependency& i) {
-            return isOnlyVersion ? i.version == verDep.version : i.addonId == verDep.addonId;
+            return isOnlyVersion ? i.version == verDep.version : i.addonId == verDep.addonId && i.version == verDep.version;
         };
         if (std::ranges::any_of(cDependencies, isDuplicateDep)) {
             continue;  // check the current dependency list
         }
 
-        auto isKnownDependency = [&verDep, providerName, isOnlyVersion](const std::shared_ptr<PackDependency>& i) {
+        auto isKnownDependency = [&verDep, providerName](const std::shared_ptr<PackDependency>& i) {
             return i->pack->provider == providerName &&
-                   (isOnlyVersion ? i->version.version == verDep.version : i->pack->addonId == verDep.addonId);
+                   matchesDependencyVersion(verDep, i->pack->addonId,
+                       i->version.fileId.toString().isEmpty() ? QVariant(i->dependency.version) : i->version.fileId);
         };
         if (std::ranges::any_of(m_selected, isKnownDependency)) {
             continue;  // check the selected versions
         }
 
-        auto isInstalledMod = [&verDep, providerName, isOnlyVersion](const std::shared_ptr<Metadata::ModStruct>& i) {
-            return i->provider == providerName && (isOnlyVersion ? i->fileId == verDep.version : i->projectId == verDep.addonId);
+        auto isInstalledMod = [&verDep, providerName](const std::shared_ptr<Metadata::ModStruct>& i) {
+            return i->provider == providerName && matchesDependencyVersion(verDep, i->projectId, i->fileId);
         };
         if (std::ranges::any_of(m_mods, isInstalledMod)) {
             continue;  // check the existing mods
@@ -184,7 +187,7 @@ QList<ModPlatform::Dependency> GetModDependenciesTask::getDependenciesForVersion
 Task::Ptr GetModDependenciesTask::getProjectInfoTask(const std::shared_ptr<PackDependency>& pDep)
 {
     auto provider = pDep->pack->provider;
-    auto [info, responseInfo] = getAPI(provider)->getProject(pDep->pack->addonId.toString());
+    auto [info, responseInfo] = getAPI(provider)->getProject(pDep->pack->addonId.toString(), m_askRetry);
     connect(info.get(), &NetJob::succeeded, this, [this, responseInfo, provider, pDep] {
         auto obj = Json::requireObject(*responseInfo)
                        .and_then([provider](const auto& v) -> Result<QJsonObject> {
@@ -196,6 +199,7 @@ Task::Ptr GetModDependenciesTask::getProjectInfoTask(const std::shared_ptr<PackD
                        .and_then([&provider, &pDep](const auto& v) { return getAPI(provider)->loadIndexedPack(*pDep->pack, v); });
 
         if (!obj) {
+            m_unresolvedDependencies.append(pDep->pack->addonId.toString() + ": " + obj.error());
             removePack(pDep->pack->addonId);
             qWarning() << "Error while parsing JSON response for mod info:" << obj.error();
             qDebug() << *responseInfo;
@@ -203,6 +207,7 @@ Task::Ptr GetModDependenciesTask::getProjectInfoTask(const std::shared_ptr<PackD
         }
     });
     QObject::connect(info.get(), &NetJob::failed, this, [this, info, pDep] {
+        m_unresolvedDependencies.append(pDep->pack->addonId.toString() + ": " + info->failReason());
         removePack(pDep->pack->addonId);
         m_failed.remove(info.get());
     });
@@ -234,7 +239,8 @@ Task::Ptr GetModDependenciesTask::prepareDependencyTask(const ModPlatform::Depen
         .dependency = dep, .mcVersion = m_version, .loader = m_loaderType, .includeChangelog = true
     };
     ResourceAPI::Callback<ModPlatform::IndexedVersion> callbacks;
-    callbacks.onFail = [](const QString& reason, int) {
+    callbacks.onFail = [this, dep](const QString& reason, int) {
+        m_unresolvedDependencies.append(dep.addonId.toString() + ": " + reason);
         qCritical() << tr("A network error occurred. Could not load project dependencies:%1").arg(reason);
     };
     callbacks.onSucceed = [dep, provider, pDep, level, this](auto& pack) {
@@ -250,6 +256,7 @@ Task::Ptr GetModDependenciesTask::prepareDependencyTask(const ModPlatform::Depen
                     return;
                 }
             }
+            m_unresolvedDependencies.append(dep.addonId.toString() + ": " + tr("No compatible dependency version was returned."));
             removePack(dep.addonId);
             return;
         }
@@ -258,6 +265,7 @@ Task::Ptr GetModDependenciesTask::prepareDependencyTask(const ModPlatform::Depen
         pDep->pack->versionsLoaded = true;
 
         if (level == 0) {
+            m_unresolvedDependencies.append(dep.addonId.toString() + ": " + tr("Dependency cycle exceeded."));
             removePack(dep.addonId);
             qWarning() << "Dependency cycle exceeded";
             return;
@@ -282,9 +290,14 @@ Task::Ptr GetModDependenciesTask::prepareDependencyTask(const ModPlatform::Depen
     };
 
     auto version = getAPI(provider)->getDependencyVersion(args, callbacks);
+    if (auto* net = dynamic_cast<NetJob*>(version.get())) net->setAskRetry(m_askRetry);
     QObject::connect(version.get(), &NetJob::failed, this, [this, version, pDep] {
         removePack(pDep->pack->addonId);
         m_failed.remove(version.get());
+    });
+    QObject::connect(version.get(), &Task::succeeded, this, [this, pDep] {
+        if (m_packDependencies.contains(pDep) && !pDep->version.fileId.isValid())
+            m_unresolvedDependencies.append(pDep->pack->addonId.toString() + ": " + tr("Invalid dependency metadata."));
     });
     tasks->addTask(version);
     return tasks;

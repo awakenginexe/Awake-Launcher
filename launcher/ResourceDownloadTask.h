@@ -42,6 +42,7 @@ class ResourceDownloadTask : public SequentialTask {
     const ModPlatform::ResourceProvider& getProvider() const { return m_pack->provider; }
     const QString& getName() const { return m_pack->name; }
     ModPlatform::IndexedPack::Ptr getPack() { return m_pack; }
+    void setAskRetry(bool askRetry) { if (m_filesNetJob) m_filesNetJob->setAskRetry(askRetry); }
 
    private:
     ModPlatform::IndexedPack::Ptr m_pack;

@@ -6,6 +6,8 @@ import type { Action, PreferenceKey } from '../features/library/model.ts';
 import { catalogs, normalizeLocale } from '../i18n/catalogs.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import { CatalogClient } from '../bridge/catalog.ts';
+import type { CatalogResult, RequestOptions } from '../bridge/catalog.ts';
+import { createModService } from '../bridge/mods.ts';
 import type { GpuSettings } from '../features/library/hardware.ts';
 
 interface Failure { code: ErrorCode | 'artworkError'; detail: string; retry: () => Promise<void> }
@@ -178,10 +180,11 @@ export function useLauncher() {
   }
   const action = (name: Action, id = '') => name === 'launch' ? launch(id) : run('invokeAction', [name, id], 120_000);
   const preference = (key: PreferenceKey | string, value: unknown) => run('setPreference', [key, value]);
-  async function queryCatalog(method: string, args: unknown[]) {
+  async function queryCatalog<T = CatalogResult>(method: string, args: unknown[], options?: RequestOptions): Promise<T> {
     if (!catalog || status.value !== 'ready') throw new BridgeError('disconnected', 'The native bridge is not ready');
-    return catalog.request(method, args);
+    return catalog.request<T>(method, args, options);
   }
+  const modService = createModService(queryCatalog);
   const searchPacks = (provider: string, query: string, offset: number) => queryCatalog('searchPacks', [provider, query, offset]);
   const packVersions = (provider: string, id: string) => queryCatalog('packVersions', [provider, id]);
   const minecraftVersions = () => queryCatalog('minecraftVersions', []);
@@ -225,5 +228,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService };
 }

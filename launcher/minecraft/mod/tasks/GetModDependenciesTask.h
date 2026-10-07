@@ -53,10 +53,20 @@ class GetModDependenciesTask : public SequentialTask {
         QStringList requiredByIds;
     };
 
-    explicit GetModDependenciesTask(MinecraftInstance* instance, ModFolderModel* folder, QList<std::shared_ptr<PackDependency>> selected);
+    explicit GetModDependenciesTask(MinecraftInstance* instance, ModFolderModel* folder, QList<std::shared_ptr<PackDependency>> selected,
+                                   bool askRetry = true);
+
+    static bool matchesDependencyVersion(const ModPlatform::Dependency& dependency, const QVariant& projectId, const QVariant& fileId)
+    {
+        if (!dependency.version.isEmpty())
+            return fileId.toString() == dependency.version &&
+                (dependency.addonId.toString().isEmpty() || projectId.toString() == dependency.addonId.toString());
+        return !dependency.addonId.toString().isEmpty() && projectId.toString() == dependency.addonId.toString();
+    }
 
     auto getDependecies() const -> QList<std::shared_ptr<PackDependency>> { return m_packDependencies; }
     QHash<QString, PackDependencyExtraInfo> getExtraInfo();
+    QStringList unresolvedDependencies() const { return m_unresolvedDependencies; }
 
    private:
     static const ResourceAPI* getAPI(ModPlatform::ResourceProvider provider)
@@ -84,6 +94,8 @@ class GetModDependenciesTask : public SequentialTask {
     QList<std::shared_ptr<Metadata::ModStruct>> m_mods;
     QList<std::shared_ptr<PackDependency>> m_selected;
     QStringList m_modsFileNames;
+    QStringList m_unresolvedDependencies;
+    bool m_askRetry = true;
 
     Version m_version;
     ModPlatform::ModLoaderTypes m_loaderType;

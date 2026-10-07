@@ -4,6 +4,7 @@
 #include "AwakeWebAssets.h"
 #include "AwakeWebPolicy.h"
 #include "AwakePackCatalog.h"
+#include "AwakeModCatalog.h"
 #include "AwakeInstanceEditor.h"
 #include "Application.h"
 #include "BuildConfig.h"
@@ -53,6 +54,10 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent, Gp
       m_gpuDetector(gpuDetector ? std::move(gpuDetector) : Awake::Gpu::hardwareSettings)
 {
     m_packCatalog = new PackCatalog(assets, this);
+    m_modCatalog = new ModCatalog(assets, this);
+    connect(m_modCatalog, &ModCatalog::finished, this, &Bridge::catalogFinished);
+    connect(m_modCatalog, &ModCatalog::progress, this, &Bridge::modProgress);
+    connect(m_modCatalog, &ModCatalog::changed, this, &Bridge::editorChanged);
     m_skins = new Skins(assets, this);
     connect(m_skins, &Skins::finished, this, &Bridge::catalogFinished);
     connect(m_skins, &Skins::changed, this, &Bridge::scheduleState);
@@ -355,6 +360,7 @@ QVariantMap Bridge::selectInstance(const QString& id)
 
 QVariantMap Bridge::launchInstance(const QString& id)
 {
+    if (m_modCatalog->busy(id)) return fail("launchInstance", tr("Finish installing mods before launching this instance."));
     if (!m_active || m_actionPending || m_modalActive) return fail("launchInstance", tr("Finish the current native action first."));
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!instance) return fail("launchInstance", tr("This instance no longer exists."));
@@ -383,6 +389,8 @@ QVariantMap Bridge::launchInstance(const QString& id)
 QVariantMap Bridge::invokeAction(const QString& action, const QString& id)
 {
     if (action == "launch") return launchInstance(id);
+    if (m_modCatalog->busy(id) && !QStringList{"windowMinimize", "windowMaximize", "folder"}.contains(action))
+        return fail(action, tr("Finish installing mods before changing this instance."));
     if (!m_active || m_actionPending) return fail(action, tr("Finish the current native action first."));
     if (!actionAllowed(action)) return fail(action, tr("This action is not available."));
     if (APPLICATION->instances()->isRemoving() && !QStringList{"windowMinimize", "windowMaximize"}.contains(action))
@@ -572,6 +580,50 @@ QVariantMap Bridge::packVersions(const QString& requestId, const QString& provid
     return success();
 }
 
+QVariantMap Bridge::modSearch(const QString& requestId, const QString& instanceId, const QString& provider, const QString& query, const QString& sort, int offset)
+{
+    if (!m_active || requestId.isEmpty() || requestId.size() > 64 || m_modCatalog->hasRequest(requestId) ||
+        instanceId.isEmpty() || instanceId.size() > 256 || !QStringList{"modrinth", "curseforge"}.contains(provider) ||
+        query.size() > 256 || sort.size() > 64 || offset < 0 || offset > 10000)
+        return {{"ok", false}, {"error", tr("Invalid mod search.")}};
+    m_modCatalog->search(requestId, instanceId, provider, query, sort, offset);
+    return success();
+}
+
+QVariantMap Bridge::modVersions(const QString& requestId, const QString& instanceId, const QString& provider, const QString& projectId)
+{
+    if (!m_active || requestId.isEmpty() || requestId.size() > 64 || m_modCatalog->hasRequest(requestId) ||
+        instanceId.isEmpty() || instanceId.size() > 256 || projectId.isEmpty() || projectId.size() > 256 ||
+        !QStringList{"modrinth", "curseforge"}.contains(provider))
+        return {{"ok", false}, {"error", tr("Invalid mod selection.")}};
+    m_modCatalog->versions(requestId, instanceId, provider, projectId);
+    return success();
+}
+
+QVariantMap Bridge::modPrepare(const QString& requestId, const QString& instanceId, const QVariantList& selections)
+{
+    if (!m_active || m_actionPending || m_modalActive || requestId.isEmpty() || requestId.size() > 64 || m_modCatalog->hasRequest(requestId) ||
+        instanceId.isEmpty() || instanceId.size() > 256 || selections.isEmpty() || selections.size() > 100)
+        return {{"ok", false}, {"error", tr("Invalid mod review or another native action is active.")}};
+    m_modCatalog->prepare(requestId, instanceId, selections);
+    return success();
+}
+
+QVariantMap Bridge::modInstall(const QString& requestId, const QString& instanceId, const QString& reviewId)
+{
+    if (!m_active || m_actionPending || m_modalActive || requestId.isEmpty() || requestId.size() > 64 || m_modCatalog->hasRequest(requestId) ||
+        instanceId.isEmpty() || instanceId.size() > 256 || reviewId.isEmpty() || reviewId.size() > 64)
+        return {{"ok", false}, {"error", tr("Invalid mod installation or another native action is active.")}};
+    m_modCatalog->install(requestId, instanceId, reviewId);
+    return success();
+}
+
+QVariantMap Bridge::modCancel(const QString& requestId)
+{
+    if (requestId.isEmpty() || requestId.size() > 64) return {{"ok", false}, {"error", tr("Invalid mod cancellation.")}};
+    return {{"ok", true}, {"canceled", m_modCatalog->cancel(requestId)}};
+}
+
 QVariantMap Bridge::minecraftVersions(const QString& requestId)
 {
     if (!m_active || requestId.isEmpty() || requestId.size() > 64)
@@ -626,6 +678,7 @@ QVariantMap Bridge::instanceDetails(const QString& id, const QString& section)
 
 QVariantMap Bridge::instanceCommand(const QString& id, const QString& command, const QVariant& payload)
 {
+    if (m_modCatalog->busy(id)) return {{"ok", false}, {"error", tr("Finish installing mods before changing this instance.")}};
     if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving())
         return fail("instanceCommand", tr("Finish the current native action first."));
     const auto result = m_instanceEditor->command(id, command, payload);

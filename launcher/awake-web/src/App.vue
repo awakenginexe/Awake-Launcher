@@ -13,7 +13,7 @@ import UpdateModal from './components/UpdateModal.vue';
 import GpuLaunchModal from './components/GpuLaunchModal.vue';
 import SkinsModal from './components/SkinsModal.vue';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService } = useLauncher();
+const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -366,7 +366,7 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="modal">
-      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" @close="editingInstance = null" />
+      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" @close="editingInstance = null" />
     </Transition>
 
     <Transition name="modal">

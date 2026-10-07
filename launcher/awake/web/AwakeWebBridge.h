@@ -16,6 +16,7 @@ class QTimer;
 namespace Awake::Web {
 class Assets;
 class PackCatalog;
+class ModCatalog;
 class InstanceEditor;
 class Skins;
 class Bridge final : public QObject {
@@ -41,6 +42,11 @@ public:
     Q_INVOKABLE QVariantMap setPreference(const QString& key, const QVariant& value);
     Q_INVOKABLE QVariantMap searchPacks(const QString& requestId, const QString& provider, const QString& query, int offset);
     Q_INVOKABLE QVariantMap packVersions(const QString& requestId, const QString& provider, const QString& packId);
+    Q_INVOKABLE QVariantMap modSearch(const QString& requestId, const QString& instanceId, const QString& provider, const QString& query, const QString& sort, int offset);
+    Q_INVOKABLE QVariantMap modVersions(const QString& requestId, const QString& instanceId, const QString& provider, const QString& projectId);
+    Q_INVOKABLE QVariantMap modPrepare(const QString& requestId, const QString& instanceId, const QVariantList& selections);
+    Q_INVOKABLE QVariantMap modInstall(const QString& requestId, const QString& instanceId, const QString& reviewId);
+    Q_INVOKABLE QVariantMap modCancel(const QString& requestId);
     Q_INVOKABLE QVariantMap minecraftVersions(const QString& requestId);
     Q_INVOKABLE QVariantMap browseArchive(const QString& requestId);
     Q_INVOKABLE QVariantMap instanceDetails(const QString& id, const QString& section);
@@ -63,6 +69,7 @@ signals:
     void operationFailed(QString operation, QString detail);
     void ready();
     void catalogFinished(QString requestId, QVariantMap response);
+    void modProgress(QString requestId, QVariantMap state);
     void editorChanged(QString id, QString section);
     void accountsRequested();
 private:
@@ -76,6 +83,7 @@ private:
     QString iconUrl(MinecraftInstance* instance);
     QPointer<Assets> m_assets;
     PackCatalog* m_packCatalog = nullptr;
+    ModCatalog* m_modCatalog = nullptr;
     InstanceEditor* m_instanceEditor = nullptr;
     Skins* m_skins = nullptr;
     Task::Ptr m_minecraftTask;

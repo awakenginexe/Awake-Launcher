@@ -11,6 +11,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QCryptographicHash>
 #include <memory>
 #include "Application.h"
 #include "InstanceList.h"
@@ -20,6 +23,7 @@
 #include "minecraft/MinecraftInstance.h"
 #include "minecraft/PackProfile.h"
 #include "minecraft/mod/ModFolderModel.h"
+#include "minecraft/mod/MetadataHandler.h"
 #include "minecraft/mod/ResourcePackFolderModel.h"
 #include "minecraft/mod/ShaderPackFolderModel.h"
 #include "minecraft/mod/tasks/LocalShaderPackParseTask.h"
@@ -67,6 +71,82 @@ private slots:
         profile->buildingFromScratch();
         profile->setComponentVersion("net.minecraft", "1.21.1", true);
         profile->setComponentVersion("net.fabricmc.fabric-loader", "0.16.14");
+    }
+    void failedIndexedReplacementKeepsMetadataUntilRetry_data()
+    {
+        QTest::addColumn<bool>("sameFilename");
+        QTest::addColumn<bool>("disabled");
+        QTest::newRow("new-filename") << false << false;
+        QTest::newRow("same-filename") << true << false;
+        QTest::newRow("disabled-old") << false << true;
+    }
+    void failedIndexedReplacementKeepsMetadataUntilRetry()
+    {
+        QFETCH(bool, sameFilename);
+        QFETCH(bool, disabled);
+        auto* instance = dynamic_cast<MinecraftInstance*>(APPLICATION->instances()->getInstanceById("one"));
+        QVERIFY(instance);
+        QTemporaryDir folder;
+        QVERIFY(folder.isValid());
+        ModFolderModel model(QDir(folder.path()), instance, true, true);
+        auto pack = std::make_shared<ModPlatform::IndexedPack>();
+        pack->provider = ModPlatform::ResourceProvider::MODRINTH;
+        pack->addonId = "fixture-project"; pack->slug = "replacement-fixture"; pack->name = "Replacement fixture";
+        ModPlatform::IndexedVersion oldVersion;
+        oldVersion.addonId = pack->addonId; oldVersion.fileId = "old-version"; oldVersion.fileName = "old.jar";
+        oldVersion.mcVersion = {"1.21.1"}; oldVersion.loaders = ModPlatform::Fabric;
+        const auto oldPath = folder.path() + '/' + oldVersion.fileName + (disabled ? ".disabled" : "");
+        QFile oldFile(oldPath);
+        QVERIFY(oldFile.open(QIODevice::WriteOnly));
+        QCOMPARE(oldFile.write("old resource"), 12); oldFile.close();
+        LocalResourceUpdateTask oldIndex(model.indexDir(), *pack, oldVersion);
+        oldIndex.start(); QVERIFY(oldIndex.wasSuccessful());
+        model.update();
+        QTRY_COMPARE(model.size(), 1);
+        QVERIFY(Metadata::get(model.indexDir(), pack->addonId).fileId == oldVersion.fileId);
+
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        bool serveReplacement = false;
+        const QByteArray replacement = "replacement resource";
+        connect(&server, &QTcpServer::newConnection, this, [&] {
+            auto* socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                if (!socket->readAll().contains("GET")) return;
+                const auto body = serveReplacement ? replacement : QByteArray();
+                socket->write((serveReplacement ? QByteArray("HTTP/1.1 200 OK\r\n") : QByteArray("HTTP/1.1 404 Not Found\r\n")) +
+                    "Content-Length: " + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        struct RestoreProxy {
+            QNetworkAccessManager* network;
+            QNetworkProxy proxy;
+            ~RestoreProxy() { network->setProxy(proxy); }
+        } restore{APPLICATION->network(), APPLICATION->network()->proxy()};
+        APPLICATION->network()->setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+        auto version = oldVersion;
+        version.fileId = "new-version"; version.fileName = sameFilename ? "old.jar" : "new.jar";
+        version.downloadUrl = QString("http://127.0.0.1:%1/replacement.jar").arg(server.serverPort());
+        version.hashType = "sha256";
+        version.hash = QString::fromLatin1(QCryptographicHash::hash(replacement, QCryptographicHash::Sha256).toHex());
+        ResourceDownloadTask failed(pack, version, &model);
+        failed.setAskRetry(false);
+        QVERIFY(!runTask(&failed));
+        QCOMPARE(Metadata::get(model.indexDir(), pack->addonId).fileId, oldVersion.fileId);
+        QVERIFY(oldFile.open(QIODevice::ReadOnly));
+        QCOMPARE(oldFile.readAll(), QByteArray("old resource")); oldFile.close();
+
+        serveReplacement = true;
+        ResourceDownloadTask retry(pack, version, &model);
+        retry.setAskRetry(false);
+        QVERIFY2(runTask(&retry), qPrintable(retry.failReason()));
+        QCOMPARE(Metadata::get(model.indexDir(), pack->addonId).fileId, version.fileId);
+        QFile newFile(folder.path() + '/' + version.fileName);
+        QVERIFY(newFile.open(QIODevice::ReadOnly));
+        QCOMPARE(newFile.readAll(), replacement);
+        if (!sameFilename) QVERIFY(!QFileInfo::exists(oldPath));
     }
     void missingKeyRemainsVisible()
     {

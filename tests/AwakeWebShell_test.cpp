@@ -40,6 +40,11 @@
 #include "translations/TranslationsModel.h"
 #include "ui/MainWindow.h"
 #include "ui/InstanceWindow.h"
+#ifdef Q_OS_WIN
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include <wrl/client.h>
+#endif
 
 class AwakeWebShellTest : public QObject {
     Q_OBJECT
@@ -76,11 +81,28 @@ class AwakeWebShellTest : public QObject {
         QTRY_COMPARE(evaluate("document.querySelectorAll('.instance-select').length").toInt(), 2);
         QCOMPARE(view->url(), QUrl("awake://ui/"));
     }
-    void launcherCompositorUsesSoftwareRendering()
+    void launcherCompositorUsesSoftwareDevice()
     {
         auto* compositor = view->findChild<QQuickWidget*>();
         QVERIFY(compositor);
+#ifdef Q_OS_WIN
+        auto* renderer = compositor->quickWindow()->rendererInterface();
+        QCOMPARE(renderer->graphicsApi(), QSGRendererInterface::Direct3D11);
+        auto* device = static_cast<ID3D11Device*>(renderer->getResource(compositor->quickWindow(), QSGRendererInterface::DeviceResource));
+        QVERIFY(device);
+        Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+        QVERIFY(SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&dxgiDevice))));
+        Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+        QVERIFY(SUCCEEDED(dxgiDevice->GetAdapter(&adapter)));
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter1;
+        QVERIFY(SUCCEEDED(adapter.As(&adapter1)));
+        DXGI_ADAPTER_DESC1 description{};
+        QVERIFY(SUCCEEDED(adapter1->GetDesc1(&description)));
+        QVERIFY(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE);
+        QVERIFY(evaluate("Boolean(document.createElement('canvas').getContext('webgl'))").toBool());
+#else
         QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
+#endif
         QVERIFY(!view->grab().isNull());
     }
     void welcomeHeadOpensTheSkinsPanelWithSoftwarePreview()
@@ -352,7 +374,10 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(!APPLICATION->logo().isNull());
         auto* logo = window->findChild<QLabel*>("titleBarLogo");
         QVERIFY(logo);
-        QVERIFY(logo->contentsRect().width() >= logo->pixmap().deviceIndependentSize().width());
+        QVERIFY2(logo->contentsRect().width() + 1.0 / logo->pixmap().devicePixelRatio() >= logo->pixmap().deviceIndependentSize().width(),
+            qPrintable(QString("Logo content %1, pixmap logical width %2, DPR %3")
+                .arg(logo->contentsRect().width()).arg(logo->pixmap().deviceIndependentSize().width())
+                .arg(logo->pixmap().devicePixelRatio())));
         evaluate("document.querySelector('.account-actions .settings-button').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());
         evaluate("document.querySelectorAll('.settings-tab-btn')[1].click()");

@@ -81,9 +81,46 @@ const fixture = `(() => {
       setTimeout(() => this.catalogFinished.emit(id, query === 'fail' ? {ok:false,error:'Test provider unavailable'} : {ok:true,hasMore:offset === 0,packs:query === 'empty' ? [] : [{id:provider + '-' + offset,name:provider + ' API fixture ' + offset,author:'Test API',description:'Fixture for real bridge wiring',downloads:'42',icon:'',minecraft:'1.21.1',loader:'Fabric'}]}), query === 'slow' ? 1000 : 20);
     },
     packVersions(id, provider, packId, cb) { cb({ok:true}); this.catalogFinished.emit(id, {ok:true,versions:[{id:'release-123',name:'Actual API release',minecraft:'1.21.1',loader:'Fabric'}]}); },
+    modSearch(id, instance, provider, query, sort, offset, cb) {
+      window.__nativeTest.calls.push(['modSearch', id, instance, provider, query, sort, offset]); cb({ok:true});
+      setTimeout(() => this.catalogFinished.emit(id, {ok:true,mods:[{id:provider + '-project',provider,name:provider + ' fixture mod',author:'Test author',description:'Provider result fixture',icon:'',website:'https://modrinth.com/mod/fixture'}],hasMore:false,minecraft:'1.21.1',loader:'fabric',sorts:[{id:'downloads',name:'Downloads'}]}), 10);
+    },
+    modVersions(id, instance, provider, project, cb) {
+      window.__nativeTest.calls.push(['modVersions', id, instance, provider, project]); cb({ok:true});
+      this.catalogFinished.emit(id, {ok:true,project:{id:project,provider,name:provider + ' fixture mod',author:'Test author',description:'Provider result fixture',icon:'',website:''},versions:[{id:provider + '-version',name:'1.0 ' + provider,minecraft:'1.21.1',loader:'fabric',type:'release',date:'2026-10-01',filename:provider + '-fixture.jar'}],minecraft:'1.21.1',loader:'fabric'});
+    },
+    modPrepare(id, instance, selections, cb) {
+      const review = 'review-' + (window.__nativeTest.modReviews.length + 1);
+      window.__nativeTest.calls.push(['modPrepare', id, instance, structuredClone(selections), review]); cb({ok:true});
+      window.__nativeTest.modReviews.push({id:review,selections:structuredClone(selections)});
+      const items = selections.map((item, index) => ({...item,name:item.provider + ' fixture mod',filename:item.provider + '-fixture.jar',version:'1.0 ' + item.provider,type:'release',requiredBy:[],dependency:false,maybeInstalled:false}));
+      if (selections.some(item => item.provider === 'modrinth')) items.push({provider:'modrinth',projectId:'required-library',versionId:'dependency-version',name:'Required library',filename:'required-library.jar',version:'2.0',type:'release',requiredBy:['modrinth fixture mod'],dependency:true,maybeInstalled:false});
+      this.catalogFinished.emit(id, {ok:true,reviewId:review,items,warnings:[]});
+    },
+    modInstall(id, instance, reviewId, cb) {
+      window.__nativeTest.calls.push(['modInstall', id, instance, reviewId]); cb({ok:true});
+      if (window.__nativeTest.earlyInstallFailure) {
+        window.__nativeTest.earlyInstallFailure = false;
+        setTimeout(() => this.catalogFinished.emit(id, {ok:false,error:'Review again'}), 10);
+        return;
+      }
+      window.__nativeTest.modActive = {id,reviewId,selections:window.__nativeTest.modReviews.find(review => review.id === reviewId)?.selections || []};
+      this.modProgress.emit(id, {current:1,total:3,status:'Downloading fixture mod'});
+    },
+    modCancel(id, cb) {
+      window.__nativeTest.calls.push(['modCancel', id]); cb({ok:true});
+      const active = window.__nativeTest.modActive;
+      if (active?.id !== id) return;
+      const [completed, ...remaining] = active.selections;
+      setTimeout(() => {
+        this.catalogFinished.emit(id, {ok:false,canceled:true,installed:completed ? [{...completed,name:completed.provider + ' fixture mod'}] : [],failed:remaining.map(item => ({...item,name:item.provider + ' fixture mod',error:'Canceled before download completed'})),warnings:[],error:'Canceled by user'});
+        window.__nativeTest.modActive = null;
+      }, 10);
+    },
     browseArchive(id, cb) { cb({ok:true}); this.catalogFinished.emit(id, {ok:true,archiveUrl:'file:///C:/test/fixture.mrpack',fileName:'fixture.mrpack'}); }
   };
-  window.__nativeTest = {calls: [], state, host, globalJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:false,path:'',version:'',vendor:'',majors:[],running:false},instanceJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:true,path:'',version:'',vendor:'',majors:[21],running:false},editor:{mods:[{id:'test.jar',name:'Test mod',detail:'test.jar',enabled:true}],notes:'Existing notes',log:'[12:00:00] Minecraft test console',settings:{minMemory:512,maxMemory:4096,width:854,height:480,fullscreen:false,overrideMemory:true,overrideWindow:true,jvmArgs:'',jvmPreset:'balanced',useGlobalJvmArgs:true}}}; window.qt = {webChannelTransport: {}};
+  host.modProgress = signal();
+  window.__nativeTest = {calls: [], modReviews:[], modActive:null, earlyInstallFailure:false, state, host, globalJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:false,path:'',version:'',vendor:'',majors:[],running:false},instanceJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:true,path:'',version:'',vendor:'',majors:[21],running:false},editor:{mods:[{id:'test.jar',name:'Test mod',detail:'test.jar',enabled:true}],notes:'Existing notes',log:'[12:00:00] Minecraft test console',settings:{minMemory:512,maxMemory:4096,width:854,height:480,fullscreen:false,overrideMemory:true,overrideWindow:true,jvmArgs:'',jvmPreset:'balanced',useGlobalJvmArgs:true}}}; window.qt = {webChannelTransport: {}};
   window.QWebChannel = class { constructor(transport, callback) { callback({objects:{awake:host}}); } };
 })();`;
 const dist = resolve('dist');
@@ -350,7 +387,74 @@ try {
     await page.locator('.editor-toolbar button').first().click();
     await page.waitForFunction(() => window.__nativeTest.calls.some(call => call[0] === 'instanceCommand' && call[2] === 'addFiles'));
     await page.locator('.editor-download-mods').click();
-    await page.waitForFunction(() => window.__nativeTest.calls.some(call => call[0] === 'instanceCommand' && call[2] === 'downloadMods'));
+    const modDialog = page.locator('.mod-browser[role="dialog"]');
+    await modDialog.waitFor();
+    assert.equal(await page.locator('#mod-browser-search').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.locator('.instance-editor-window').evaluate(el => el.inert), true);
+    for (const provider of ['modrinth', 'curseforge']) {
+      await page.locator(`[data-mod-provider="${provider}"]`).click();
+      await page.waitForFunction(provider => !document.querySelector('.mod-search-results')?.getAttribute('aria-busy')?.includes('true') && document.querySelector('.mod-result-list button')?.textContent.includes(`${provider} fixture mod`), provider);
+      assert.equal(await page.locator('.mod-result-list button').first().textContent().then(text => text.includes(`${provider} fixture mod`)), true);
+      assert.equal(await page.evaluate(provider => window.__nativeTest.calls.some(call => call[0] === 'modSearch' && call[3] === provider), provider), true);
+      await page.locator('.mod-result-list button').first().click();
+      await page.waitForFunction(provider => window.__nativeTest.calls.some(call => call[0] === 'modVersions' && call[3] === provider), provider, {timeout:5000});
+      await page.locator('#mod-browser-version option').first().waitFor({state:'attached'});
+      assert.equal(await page.locator('#mod-browser-version option').first().textContent(), `1.0 ${provider}`);
+      await page.locator('.mod-add-button').click();
+    }
+    assert.equal(await page.locator('.mod-queue li').count(), 2);
+    if (locale === 'en_US') {
+      await page.setViewportSize({width:1440,height:900});
+      const addButton = await page.locator('.mod-add-button').boundingBox();
+      const queueHeading = await page.locator('.mod-queue h3').boundingBox();
+      assert.ok(addButton && queueHeading && addButton.y + addButton.height <= queueHeading.y, 'Wide layout overlaps the queue heading');
+      await page.screenshot({path:resolve(output, 'mods-wide.png')});
+      assert.equal(await modDialog.evaluate(el => el.scrollWidth > el.clientWidth), false);
+      await page.setViewportSize({width:420,height:840});
+      const narrowAddButton = await page.locator('.mod-add-button').boundingBox();
+      const narrowQueueHeading = await page.locator('.mod-queue h3').boundingBox();
+      assert.ok(narrowAddButton && narrowQueueHeading && narrowAddButton.y + narrowAddButton.height <= narrowQueueHeading.y, 'Narrow layout overlaps the queue heading');
+      assert.equal(await modDialog.evaluate(el => el.scrollWidth > el.clientWidth), false);
+      await page.screenshot({path:resolve(output, 'mods-narrow.png')});
+      await page.locator('.mod-browser .modal-close-btn').focus();
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await page.locator('.mod-browser-footer .btn-primary').evaluate(el => el === document.activeElement), true);
+      await page.keyboard.press('Tab');
+      assert.equal(await page.locator('.mod-browser .modal-close-btn').evaluate(el => el === document.activeElement), true);
+    }
+    await page.locator('.mod-browser-footer .btn-primary').click();
+    await page.locator('.mod-review-body').waitFor();
+    assert.equal(await page.locator('.mod-review-list li').count(), 3);
+    assert.equal(await page.locator('.mod-dependency-reason').count(), 1);
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.some(call => call[0] === 'modPrepare' && call[3].length === 2)), true);
+    if (locale === 'en_US') {
+      await page.evaluate(() => window.__nativeTest.earlyInstallFailure = true);
+      await page.locator('.mod-browser-footer .btn-primary').click();
+      await page.locator('.mod-review-body .mod-notice').filter({hasText:'Review again'}).waitFor();
+      assert.equal(await page.locator('.mod-failed-list li').count(), 0);
+      await page.locator('.mod-browser-footer .btn-primary').click();
+      await page.locator('.mod-review-body').waitFor();
+      assert.equal(await page.evaluate(() => window.__nativeTest.modReviews.length), 2);
+      assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'modPrepare').at(-1)[3].length), 2);
+      assert.equal(await page.locator('.mod-review-list li').count(), 3);
+      await page.locator('.mod-browser-footer .btn-primary').click();
+      await page.waitForFunction(() => document.querySelector('.mod-progress-status')?.textContent === 'Downloading fixture mod');
+      assert.equal(await page.locator('progress').evaluate(el => Math.round(el.value)), 33);
+      await page.locator('.mod-browser-footer .btn-subtle').click();
+      await page.locator('.mod-failed-list li').waitFor();
+      assert.equal(await page.locator('.mod-failed-list li').count(), 1);
+      assert.equal(await page.locator('.mod-success').textContent(), 'Installed 1 files. They are ready in this instance’s Mods list.');
+      assert.equal(await page.evaluate(() => window.__nativeTest.calls.some(call => call[0] === 'modCancel')), true);
+      await page.locator('.mod-browser-footer .btn-primary').click();
+      await page.locator('.mod-review-body').waitFor();
+      assert.equal(await page.evaluate(() => window.__nativeTest.modReviews.length), 3);
+      assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'modPrepare').at(-1)[3].length), 1);
+      assert.equal(await page.locator('.mod-review-list li').count(), 1);
+    }
+    await page.keyboard.press('Escape');
+    await modDialog.waitFor({state:'detached'});
+    assert.equal(await page.locator('.instance-editor-window').evaluate(el => el.inert), false);
+    await page.waitForFunction(() => document.activeElement.matches('.editor-download-mods'));
     await page.locator('.editor-sidebar button[data-section="notes"]').click();
     await page.locator('#editor-notes').fill('Saved notes from the editor');
     await page.locator('.editor-save').click();
@@ -735,5 +839,5 @@ try {
   await page.goto(`${origin}/?disconnected=1`); await page.locator('.connection-error').waitFor();
   assert.equal(await page.locator('.instance-select').count(),0); await page.close();
   assert.deepEqual(errors, []); assert.deepEqual(requests, []);
-  console.log('Browser checks passed: skin reset staging/save/undo and cape recovery, Vue instance editor actions, console focus polling, notes/settings persistence, field errors and save navigation, themed discard/remove confirmations, keyboard/focus/layout, hover clipping, context actions, languages, provider routes, stale replies, import and disconnected state.');
+  console.log('Browser checks passed: mod search, versions, cross-provider queue, dependency review, progress/cancel with retained completion and fresh retry review in four locales; wide/narrow layout and modal focus/inert; existing skin, editor, settings, context, provider, import and disconnected flows.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

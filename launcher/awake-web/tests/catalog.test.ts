@@ -61,3 +61,28 @@ test('reconnecting clients use different request IDs on the same native object',
   assert.equal((await current).packs[0].id, 'current');
   next.dispose();
 });
+
+test('mod install progress is correlated and cancellation retains completed downloads', async () => {
+  const replies = new Set<(id: string, result: unknown) => void>();
+  const progress = new Set<(id: string, result: unknown) => void>();
+  const signal = (listeners: Set<(id: string, result: unknown) => void>) => ({ connect: (fn: any) => listeners.add(fn), disconnect: (fn: any) => listeners.delete(fn) });
+  let requestId = '';
+  let canceled = '';
+  const client = new CatalogClient({
+    catalogFinished: signal(replies), modProgress: signal(progress),
+    modInstall: (id: string, instance: string, review: string, cb: (value: unknown) => void) => { requestId = id; cb({ ok: true }); },
+    modCancel: (id: string, cb: (value: unknown) => void) => { canceled = id; cb({ ok: true }); },
+  });
+  const controller = new AbortController();
+  const updates: unknown[] = [];
+  const result = client.request<{ installed: string[]; canceled: boolean }>('modInstall', ['instance', 'review'], { signal: controller.signal, progress: value => updates.push(value), acceptFailure: true });
+  progress.forEach(fn => fn('unrelated', { current: 9 }));
+  progress.forEach(fn => fn(requestId, { current: 1, total: 2 }));
+  controller.abort();
+  assert.equal(canceled, requestId);
+  replies.forEach(fn => fn(requestId, { ok: false, canceled: true, error: 'Canceled', installed: ['first-mod'] }));
+  assert.deepEqual((await result).installed, ['first-mod']);
+  assert.deepEqual(updates, [{ current: 1, total: 2 }]);
+  client.dispose();
+  assert.equal(progress.size, 0);
+});

@@ -105,7 +105,7 @@ if(Launcher_ENABLE_AWAKE_WEB)
     if(WIN32)
         set_property(TEST AwakeWebBridge APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
         ecm_add_test(AwakeWebShell_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test Qt6::QuickWidgets TEST_NAME AwakeWebShell)
-        set_tests_properties(AwakeWebShell PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
+        set_tests_properties(AwakeWebShell PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows" TIMEOUT 90)
     endif()
 endif()
 
