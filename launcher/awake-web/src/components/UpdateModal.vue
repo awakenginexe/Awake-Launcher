@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { UpdateState } from '../features/library/model.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
 
-const props = defineProps<{ state: UpdateState; busy: boolean; t: (key: MessageKey) => string }>();
+const props = defineProps<{ state: UpdateState; busy: boolean; embedded?: boolean; t: (key: MessageKey) => string }>();
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'check'): void;
@@ -16,6 +16,7 @@ const updating = computed(() => ['downloading', 'installing'].includes(props.sta
 const title = computed(() => props.t(props.state.status === 'downloading' ? 'updateDownloading' : props.state.status === 'installing' ? 'updateInstalling' : props.state.status === 'available' ? 'updateAvailable' : props.state.status === 'checking' ? 'updateChecking' : props.state.status === 'upToDate' ? 'updateCurrent' : props.state.status === 'error' ? 'updateFailed' : 'updatesTitle'));
 const background = new Map<HTMLElement, boolean>();
 onMounted(() => {
+  if (props.embedded) return;
   for (const child of dialog.value?.closest('main')?.children ?? []) {
     if (child instanceof HTMLElement && !child.contains(dialog.value!)) { background.set(child, child.inert); child.inert = true; }
   }
@@ -27,11 +28,13 @@ watch(() => props.state.status, async () => {
   if (!dialog.value?.contains(active) || (active instanceof HTMLButtonElement && active.disabled)) dialog.value?.querySelector<HTMLButtonElement>('.modal-close-btn')?.focus();
 });
 onUnmounted(() => {
+  if (props.embedded) return;
   background.forEach((inert, element) => { element.inert = inert; });
   if (previousFocus?.isConnected) previousFocus.focus();
   else document.querySelector<HTMLButtonElement>('.library-header button')?.focus();
 });
 function trapFocus(event: KeyboardEvent) {
+  if (props.embedded) return;
   if (event.key !== 'Tab') return;
   const controls = [...(dialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), summary') ?? [])];
   const first = controls[0], last = controls.at(-1);
@@ -42,9 +45,9 @@ function trapFocus(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="modal-overlay" @click.self="emit('close')" @keydown="trapFocus">
-    <section ref="dialog" class="modal-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title">
-      <header class="modal-header">
+  <div :class="embedded ? 'update-embedded' : 'modal-overlay'" @click.self="!embedded && emit('close')" @keydown="trapFocus">
+    <section ref="dialog" class="modal-dialog update-dialog" :role="embedded ? 'group' : 'dialog'" :aria-modal="embedded ? undefined : true" :aria-label="title">
+      <header v-if="!embedded" class="modal-header">
         <span class="update-product">Awake Launcher</span>
         <button class="modal-close-btn" :aria-label="t('close')" @click="emit('close')">✕</button>
       </header>
@@ -55,7 +58,7 @@ function trapFocus(event: KeyboardEvent) {
             <path v-else-if="state.status === 'error'" d="M12 4v10m0 4v2" />
             <template v-else><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 6a8 8 0 0 1 13 2M18 18A8 8 0 0 1 5 16" /></template>
           </svg>
-          <h2 id="update-title">{{ title }}</h2>
+          <h2>{{ title }}</h2>
           <p v-if="state.status === 'checking'">{{ t('updateCheckingHint') }}</p>
           <p v-else-if="state.status === 'available'">{{ t('updateAvailableHint') }}</p>
           <p v-else-if="state.status === 'upToDate'">{{ t('updateCurrentHint') }}</p>
@@ -66,9 +69,9 @@ function trapFocus(event: KeyboardEvent) {
         <div v-if="state.status === 'downloading'" class="update-progress"><progress :value="state.progress" max="100" :aria-label="t('updateDownloading')" /><span>{{ state.progress }}%</span></div>
         <dl v-if="state.currentVersion" class="update-versions">
           <div><dt>{{ t('updateInstalled') }}</dt><dd>{{ state.currentVersion }}</dd></div>
-          <div v-if="state.status === 'available'"><dt>{{ t('updateLatest') }}</dt><dd>{{ state.latestVersion }}</dd></div>
+          <div><dt>{{ t('updateLatest') }}</dt><dd>{{ state.latestVersion || t('updateNotChecked') }}</dd></div>
         </dl>
-        <details v-if="state.status === 'available' && state.notes" class="update-notes" open>
+        <details v-if="state.notes" class="update-notes" open>
           <summary>{{ t('updateNotes') }}</summary>
           <p>{{ state.notes }}</p>
         </details>
@@ -78,6 +81,7 @@ function trapFocus(event: KeyboardEvent) {
         <p v-if="state.status === 'available'" class="update-download-hint">{{ t(state.portable ? 'updatePortableHint' : 'updateSetupHint') }}</p>
       </div>
       <footer class="modal-footer update-footer">
+        <button v-if="embedded && state.status === 'available'" class="btn-secondary" :disabled="busy || updating" @click="emit('check')">{{ t('checkForUpdates') }}</button>
         <button v-if="state.status === 'available' && state.hasRelease" class="btn-secondary" :disabled="busy" @click="emit('download', 'release')">{{ t('updateReleasePage') }}</button>
         <button v-if="state.status === 'available' && state.canInstall" class="btn-primary" :disabled="busy" @click="emit('download', 'setup')">{{ t('updateDownloadSetup') }}</button>
         <button v-else-if="state.status === 'available' && state.portable && state.hasPortable" class="btn-primary" :disabled="busy" @click="emit('download', 'portable')">{{ t('updateDownloadPortable') }}</button>
@@ -106,6 +110,9 @@ function trapFocus(event: KeyboardEvent) {
 .update-automatic input { accent-color: var(--accent); width: 17px; height: 17px; flex-shrink: 0; }
 .update-download-hint { font-size: .85rem; }
 .update-footer { flex-wrap: wrap; }
+.update-embedded .update-dialog { width: 100%; max-height: none; border: 0; background: none; box-shadow: none; }
+.update-embedded .update-body { padding: 20px 0; }
+.update-embedded .update-footer { padding: 16px 0; }
 .update-progress { display: flex; align-items: center; gap: 12px; }
 .update-progress progress { width: 100%; accent-color: var(--accent); }
 @keyframes update-check { to { transform: rotate(360deg); } }

@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+namespace Awake {
+inline constexpr auto PostHogHost = "@POSTHOG_HOST@";
+inline constexpr auto PostHogProjectToken = "@POSTHOG_PROJECT_TOKEN@";
+}

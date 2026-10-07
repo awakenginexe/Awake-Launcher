@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { LauncherSettings } from '../features/library/model.ts';
+import type { LauncherSettings, UpdateState } from '../features/library/model.ts';
+import UpdateModal from './UpdateModal.vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import '../styles/language-select.css';
 import JavaPicker from './JavaPicker.vue';
@@ -15,6 +16,8 @@ import logoUrl from '../../../../program_info/awake-launcher.png';
 
 const props = defineProps<{
   settings: LauncherSettings;
+  updates: UpdateState;
+  busy: boolean;
   totalMemoryMb: number;
   compact: boolean;
   reducedMotion: boolean;
@@ -27,11 +30,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'update-pref', key: string, value: unknown): void;
+  (e: 'check-updates'): void;
+  (e: 'download-update', kind: 'setup' | 'portable' | 'release'): void;
+  (e: 'automatic-updates', enabled: boolean): void;
+  (e: 'updates-viewed', presentation: number): void;
 }>();
 
 const activeTab = ref<'general' | 'java' | 'window' | 'about'>('general');
 const visitedTabs = ref(new Set(['general']));
 watch(activeTab, tab => { visitedTabs.value.add(tab); closeLanguagePicker(); });
+watch([activeTab, () => props.updates.presentation], () => {
+  if (activeTab.value === 'about') emit('updates-viewed', props.updates.presentation);
+});
 const { ramVisible } = useHardwarePrivacy();
 const languageOptions = [
   { value: 'en', label: 'English' },
@@ -373,9 +383,7 @@ function selectResolution(w: number, h: number) {
                 <p v-if="settings.version" class="brand-version">{{ settings.version }}</p>
               </div>
             </div>
-            <p class="brand-description">
-              Next-generation high performance Minecraft launcher combining a refined, smooth modern UI with the rock-solid C++ engine of Prism Launcher.
-            </p>
+            <UpdateModal embedded :state="updates" :busy="busy" :t="t" @close="emit('close')" @check="emit('check-updates')" @download="kind => emit('download-update', kind)" @automatic="value => emit('automatic-updates', value)" />
           </div>
         </div>
       </div>

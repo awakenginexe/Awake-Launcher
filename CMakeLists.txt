@@ -191,7 +191,7 @@ set(Launcher_LEGACY_FMLLIBS_BASE_URL "https://files.prismlauncher.org/fmllibs/" 
 
 ######## Set version numbers ########
 set(Launcher_VERSION_MAJOR 1)
-set(Launcher_VERSION_MINOR 2)
+set(Launcher_VERSION_MINOR 3)
 set(Launcher_VERSION_PATCH 0)
 
 set(Launcher_VERSION_NAME "${Launcher_VERSION_MAJOR}.${Launcher_VERSION_MINOR}.${Launcher_VERSION_PATCH}")
@@ -272,6 +272,11 @@ endif()
 # By using this key in your builds you accept the terms of use laid down in
 # https://docs.microsoft.com/en-us/legal/microsoft-identity-platform/terms-of-use
 set(Launcher_MSA_CLIENT_ID "$ENV{AWAKE_MSA_CLIENT_ID}" CACHE STRING "Microsoft OAuth application ID supplied by the build environment")
+set(POSTHOG_HOST "https://eu.i.posthog.com" CACHE STRING "PostHog capture host")
+set(POSTHOG_PROJECT_TOKEN "$ENV{POSTHOG_PROJECT_TOKEN}" CACHE STRING "PostHog project token; empty disables startup telemetry")
+if(NOT POSTHOG_HOST MATCHES "^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$" OR NOT POSTHOG_PROJECT_TOKEN MATCHES "^[A-Za-z0-9_]*$")
+    message(FATAL_ERROR "Invalid PostHog capture host or project token")
+endif()
 
 # By using this key in your builds you accept the terms and conditions laid down in
 # https://support.curseforge.com/en/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions

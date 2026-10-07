@@ -605,6 +605,15 @@ try {
   const page = await browser.newPage();
   await page.goto(`${origin}/?count=0`); await page.locator('.empty-state').waitFor();
   await page.setViewportSize({width:1320,height:780});
+  await page.locator('.account-actions .settings-button').click();
+  await page.locator('.settings-tab-btn').nth(3).click();
+  assert.equal(await page.locator('.settings-dialog .update-versions dd').first().textContent(), '0.3.0');
+  assert.equal(await page.locator('.settings-dialog .update-versions dd').nth(1).textContent(), '0.5.0');
+  assert.ok((await page.locator('.settings-dialog .update-notes p').textContent()).includes('<script>'));
+  await page.locator('.settings-dialog .update-footer .btn-primary').click();
+  assert.equal(await page.evaluate(() => window.__nativeTest.calls.some(call => call[0] === 'checkForUpdates')), true);
+  await page.screenshot({path:resolve(output, 'settings-updates.png')});
+  await page.locator('.settings-dialog > .modal-header .modal-close-btn').click();
   await page.evaluate(() => {
     const {host,state} = window.__nativeTest;
     const entry = {id:'current/skin-fixture',name:'Saved skin',variant:'SLIM',textureHash:'a'.repeat(64),textureUrl:'awake://ui/images/0123456789abcdef.png',previewUrl:''};
@@ -625,6 +634,20 @@ try {
     state.accountName = 'Fixture'; host.stateChanged.emit(structuredClone(state));
   });
   await page.locator('.welcome-name').click();
+  await page.waitForFunction(() => document.querySelector('.skin-canvas')?.dataset.layers);
+  assert.equal(await page.locator('[data-skin-part]').count(), 7);
+  for (const part of ['cape', 'body-overlay', 'left-arm-overlay', 'right-arm-overlay', 'left-leg-overlay', 'right-leg-overlay', 'head-overlay']) {
+    const control = page.locator(`[data-skin-part="${part}"]`);
+    assert.equal(await control.isChecked(), true);
+    await control.uncheck();
+    await page.waitForFunction(part => JSON.parse(document.querySelector('.skin-canvas').dataset.layers)[part] === false, part);
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls), []);
+    assert.equal(await page.locator('.skins-dialog .btn-primary').isDisabled(), true);
+    await control.check();
+  }
+  const stageBounds = await page.locator('.skin-stage').boundingBox(), optionsBounds = await page.locator('.skin-layer-options').boundingBox();
+  assert.ok(stageBounds && optionsBounds && optionsBounds.x >= stageBounds.x + stageBounds.width);
+  await page.screenshot({path:resolve(output, 'skin-parts.png')});
   await page.locator('.skin-reset-minecraft').click();
   assert.deepEqual(await page.evaluate(() => window.__nativeTest.skinCalls), []);
   assert.equal(await page.locator('.skins-dialog .btn-primary').isEnabled(), true);

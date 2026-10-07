@@ -1,4 +1,6 @@
 project(tests)
+ecm_add_test(StartupTelemetry_test.cpp ../launcher/awake/StartupTelemetry.cpp LINK_LIBRARIES Qt6::Core Qt6::Network Qt6::Test TEST_NAME StartupTelemetry)
+target_include_directories(StartupTelemetry PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
 
 ecm_add_test(AwakeUpdateChecker_test.cpp ../launcher/updater/AwakeUpdateChecker.cpp LINK_LIBRARIES Qt6::Core Qt6::Gui Qt6::Network Qt6::Test TEST_NAME AwakeUpdateChecker)
 target_sources(AwakeUpdateChecker PRIVATE ../launcher/updater/ExternalUpdater.h)

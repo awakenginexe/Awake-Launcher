@@ -36,6 +36,10 @@
 #include <iostream>
 
 #include "Application.h"
+#include "BuildConfig.h"
+#include "awake/StartupTelemetry.h"
+#include "StartupTelemetryConfig.h"
+#include <QTimer>
 #ifdef AWAKE_WEB_ENABLED
 #include "awake/web/AwakeWebAssets.h"
 #endif
@@ -60,6 +64,11 @@ int main(int argc, char* argv[])
     switch (app.status()) {
         case Application::StartingUp:
         case Application::Initialized: {
+            QTimer::singleShot(0, &app, [&app] {
+                auto* telemetry = new Awake::StartupTelemetry(app.network(), Awake::PostHogProjectToken,
+                    QUrl(Awake::PostHogHost), BuildConfig.versionString(), &app);
+                telemetry->start();
+            });
             Q_INIT_RESOURCE(multimc);
             Q_INIT_RESOURCE(backgrounds);
             Q_INIT_RESOURCE(documents);

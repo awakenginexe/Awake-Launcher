@@ -34,7 +34,7 @@ export function skinBoxes(variant: SkinVariant, cape: boolean): SkinBox[] {
   if (cape) parts.push(box('cape', 10, 16, 1, 0, 0, -3, 0, 0, 10, 16, 1, 32));
   return parts;
 }
-export function projectSkin(variant: SkinVariant, cape: boolean, yaw: number, pitch: number) {
+export function projectSkin(variant: SkinVariant, cape: boolean, yaw: number, pitch: number, visible: Record<string, boolean> = {}) {
   type Point = [number, number, number];
   const cy = Math.cos(yaw * Math.PI / 180), sy = Math.sin(yaw * Math.PI / 180);
   const cx = Math.cos(pitch * Math.PI / 180), sx = Math.sin(pitch * Math.PI / 180);
@@ -42,7 +42,7 @@ export function projectSkin(variant: SkinVariant, cape: boolean, yaw: number, pi
     const rx = x * cy + z * sy, rz = -x * sy + z * cy;
     return [rx, y * cx - rz * sx, y * sx + rz * cx];
   };
-  return skinBoxes(variant, cape).flatMap(box => {
+  return skinBoxes(variant, cape).filter(box => visible[box.id] !== false).flatMap(box => {
     const w = box.width / 2, h = box.height / 2, d = box.depth / 2;
     const corners: Record<string, Point[]> = {
       front: [[-w,-h,d],[w,-h,d],[w,h,d],[-w,h,d]],
@@ -54,14 +54,56 @@ export function projectSkin(variant: SkinVariant, cape: boolean, yaw: number, pi
     };
     return box.faces.flatMap(face => {
       const points = corners[face.side]!.map(([x,y,z]) => {
-        if (box.id === 'cape') { x = -x; z = -z; }
+        if (box.id === 'cape') {
+          const tilt = 10.8 * Math.PI / 180, down = y + h;
+          x = -x; z = -z;
+          const away = z * Math.cos(tilt) - down * Math.sin(tilt);
+          y = -h + down * Math.cos(tilt) + z * Math.sin(tilt);
+          z = away;
+        }
         return rotate([x + box.x, y + box.y, z + box.z]);
       });
       const [a,b,c] = points;
       if ((b![0] - a![0]) * (c![1] - a![1]) - (b![1] - a![1]) * (c![0] - a![0]) <= 0.00001) return [];
-      return [{ part: box.id, uv: face.uv, points, depth: points.reduce((sum, point) => sum + point[2], 0) / 4 }];
+      return [{ part: box.id, uv: face.uv, atlasHeight: box.atlasHeight, points, depth: points.reduce((sum, point) => sum + point[2], 0) / 4 }];
     });
   }).sort((a,b) => a.depth - b.depth);
+}
+export function rasterSkin(faces: ReturnType<typeof projectSkin>, skin: { width: number; height: number; data: Uint8ClampedArray } | undefined,
+  cape: typeof skin, width: number, height: number, scale: number): Uint8ClampedArray<ArrayBuffer> {
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  const depth = new Float32Array(width * height).fill(-Infinity);
+  for (const face of faces) {
+    const image = face.part === 'cape' ? cape : skin;
+    if (!image) continue;
+    const [a,b,,d] = face.points;
+    const ax = a![0] * scale + width / 2, ay = a![1] * scale + height / 2;
+    const bx = (b![0] - a![0]) * scale, by = (b![1] - a![1]) * scale;
+    const dx = (d![0] - a![0]) * scale, dy = (d![1] - a![1]) * scale;
+    const determinant = bx * dy - by * dx;
+    if (Math.abs(determinant) < 0.00001) continue;
+    const xs = face.points.map(point => point[0] * scale + width / 2), ys = face.points.map(point => point[1] * scale + height / 2);
+    const [u,v,w,h] = face.uv;
+    for (let y = Math.max(0, Math.floor(Math.min(...ys))); y < Math.min(height, Math.ceil(Math.max(...ys))); y++) {
+      for (let x = Math.max(0, Math.floor(Math.min(...xs))); x < Math.min(width, Math.ceil(Math.max(...xs))); x++) {
+        const px = x + 0.5 - ax, py = y + 0.5 - ay;
+        const s = (px * dy - py * dx) / determinant, t = (bx * py - by * px) / determinant;
+        if (s < 0 || s >= 1 || t < 0 || t >= 1) continue;
+        const z = a![2] + s * (b![2] - a![2]) + t * (d![2] - a![2]), index = y * width + x;
+        if (z < depth[index]!) continue;
+        const tx = Math.floor((u + s * w) * image.width / 64), ty = Math.floor((v + t * h) * image.height / face.atlasHeight);
+        const source = (ty * image.width + tx) * 4;
+        // Minecraft skin layers use cutout transparency; clear texels must not hide the body.
+        if (image.data[source + 3]! < 128) continue;
+        depth[index] = z;
+        pixels[index * 4] = image.data[source]!;
+        pixels[index * 4 + 1] = image.data[source + 1]!;
+        pixels[index * 4 + 2] = image.data[source + 2]!;
+        pixels[index * 4 + 3] = 255;
+      }
+    }
+  }
+  return pixels;
 }
 export function skinChanged(state: SkinState | null, selected: SkinEntry | null, variant: SkinVariant, capeId: string): boolean {
   if (!state || !selected) return false;

@@ -1262,6 +1262,7 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
     awake/LocalePolicy.cpp awake/LocalePolicy.h
     awake/DesignTokens.cpp awake/DesignTokens.h awake/AwakeTheme.cpp awake/AwakeTheme.h
     awake/GpuSelection.cpp awake/GpuSelection.h
+    awake/StartupTelemetry.cpp awake/StartupTelemetry.h
     awake/InstanceSearch.cpp awake/InstanceSearch.h
     awake/InstanceArtwork.cpp awake/InstanceArtwork.h awake/VisualControls.cpp awake/VisualControls.h
     awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h
@@ -1359,6 +1360,8 @@ if(WIN32)
 endif()
 
 add_executable(${Launcher_Name} MACOSX_BUNDLE WIN32 main.cpp ${LAUNCHER_RCS})
+configure_file(awake/StartupTelemetryConfig.h.in StartupTelemetryConfig.h @ONLY)
+target_include_directories(${Launcher_Name} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 if(${Launcher_USE_PCH})
     target_precompile_headers(${Launcher_Name} REUSE_FROM Launcher_logic)

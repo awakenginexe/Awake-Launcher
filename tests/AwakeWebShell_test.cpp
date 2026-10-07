@@ -191,6 +191,13 @@ class AwakeWebShellTest : public QObject {
             for (let i=0;i<pixels.length;i+=4) if (pixels[i]===255 && pixels[i+1]===128 && pixels[i+2]===0) orange++;
             return orange > 1000;
         })())JS").toBool());
+        QCOMPARE(evaluate("document.querySelectorAll('[data-skin-part]').length").toInt(), 7);
+        const auto capePixels = evaluate("document.querySelector('.skin-canvas').toDataURL()").toString();
+        evaluate("document.querySelector('[data-skin-part=cape]').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.skin-canvas').toDataURL()").toString() != capePixels);
+        QVERIFY(evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
+        evaluate("document.querySelector('[data-skin-part=cape]').click()");
+        QTRY_COMPARE(evaluate("document.querySelector('.skin-canvas').toDataURL()").toString(), capePixels);
         evaluate("document.querySelector('.skin-cape-choice').click()");
         QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
         evaluate("document.querySelectorAll('.skin-cape-choice')[1].click()");

@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { skinBoxes, parseSkinState, skinChanged, projectSkin } from '../src/features/library/skins.ts';
+import { skinBoxes, parseSkinState, skinChanged, projectSkin, rasterSkin } from '../src/features/library/skins.ts';
+
+test('preview switches remove only the chosen overlay or cape', () => {
+  for (const part of ['cape', 'head-overlay', 'body-overlay', 'left-arm-overlay', 'right-arm-overlay', 'left-leg-overlay', 'right-leg-overlay']) {
+    const faces = projectSkin('SLIM', true, -25, -10, { [part]: false });
+    assert.ok(!faces.some(face => face.part === part));
+    assert.ok(faces.some(face => face.part === 'body'));
+  }
+});
+
+test('per-pixel depth resolves overlapping surfaces even when their average depths give the wrong order', () => {
+  const solid = (r: number, g: number) => ({ width: 64, height: 64, data: new Uint8ClampedArray(Array.from({length: 4096}, () => [r,g,0,255]).flat()) });
+  const faces = projectSkin('CLASSIC', true, 0, 0).filter(face => face.part === 'body' || face.part === 'cape').slice(0, 2);
+  faces[0]!.part = 'body'; faces[0]!.points = [[-1,-1,0],[1,-1,0],[1,1,0],[-1,1,0]];
+  faces[1]!.part = 'cape'; faces[1]!.points = [[-1,-1,-3],[1,-1,2],[1,1,2],[-1,1,-3]];
+  const pixels = rasterSkin(faces, solid(0,255), solid(255,0), 4, 4, 1);
+  assert.deepEqual([...pixels.slice((1 * 4 + 1) * 4, (1 * 4 + 1) * 4 + 4)], [0,255,0,255]);
+  assert.deepEqual([...pixels.slice((1 * 4 + 2) * 4, (1 * 4 + 2) * 4 + 4)], [255,0,0,255]);
+});
 
 test('skin geometry preserves Minecraft atlas bounds, slim arms and overlay layers', () => {
   for (const variant of ['CLASSIC', 'SLIM'] as const) {

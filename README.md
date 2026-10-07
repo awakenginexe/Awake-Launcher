@@ -13,10 +13,15 @@ Download the **Setup.exe** from the latest release for a per-user installation w
 For a portable installation, download the **Windows x64 ZIP**, extract the entire package to a writable folder, and run `awakelauncher.exe`. Keep the files together and back up the folder before replacing a portable build. Release downloads include the Microsoft C++ runtime and SHA-256 checksums.
 
 Awake Launcher checks for stable updates at startup and daily. Use **Application → Check for updates** to check manually. Installed Windows builds offer **Update now**: download and verify Setup, close the launcher, install in the same folder, and restart while preserving accounts and instances. Close Minecraft before updating. Portable builds download a ZIP through your browser; close the launcher and extract it over your existing app folder. Install v1.2.0 manually once to receive the in-app installer.
+Settings → About also shows the installed and latest versions, release notes, update checks, and Update now.
 
 Setup offers **Normal** (`%APPDATA%\AwakeLauncher`), **Compact** (`AwakeLauncherData` inside the install folder), or **Custom** data storage. Updates preserve your choice. Changing the location does not move existing accounts or instances; choose their existing folder or copy the data while the launcher is closed. Portable ZIP builds keep their existing portable data layout.
 
 Add an account in **Accounts**, then choose **Create instance** to install Minecraft or a modpack. You can also import an existing instance. Awake Launcher uses its own data folder and does not move data from other launchers automatically.
+
+Release builds send one anonymous `app_started` event to PostHog EU at startup, containing only `app_version` and `os`, plus PostHog's `$process_person_profile: false` control. A random session ID is never persisted. PostHog infers country from the request; Awake does not detect country or send account details, hardware IDs, paths, instances, mods, or logs. The request is asynchronous, has no retries, and failures show no UI.
+
+Source builds disable telemetry when `POSTHOG_PROJECT_TOKEN` is empty. Supply it through the build environment or `-DPOSTHOG_PROJECT_TOKEN=...`; `POSTHOG_HOST` defaults to `https://eu.i.posthog.com`. The release workflow reads the GitHub Actions secret `POSTHOG_PROJECT_TOKEN`. The project token is embedded in the client; no private PostHog API credential is used.
 
 ## What you can do
 

@@ -47,6 +47,7 @@ const createModalTab = ref('custom');
 const showAppMenu = ref(false);
 const showUpdates = ref(false);
 let updatePresentation = 0;
+function markUpdatePresentation(presentation: number) { updatePresentation = Math.max(updatePresentation, presentation); }
 const editingInstance = ref<Instance | null>(null);
 watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive], () => {
   if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive) return;
@@ -328,6 +329,8 @@ onUnmounted(() => {
       <SettingsModal
         v-if="showSettings"
         :settings="state.launcherSettings"
+        :updates="state.updates"
+        :busy="busy"
         :total-memory-mb="state.totalMemoryMb"
         :gpu-service="gpuService"
         :java-service="javaService"
@@ -337,6 +340,10 @@ onUnmounted(() => {
         :t="t"
         @close="showSettings = false"
         @update-pref="(key, val) => preference(key, val)"
+        @check-updates="action('checkForUpdates')"
+        @download-update="kind => updateService.openDownload(kind)"
+        @automatic-updates="value => updateService.setAutomatic(value)"
+        @updates-viewed="markUpdatePresentation"
       />
     </Transition>
 
