@@ -5,7 +5,7 @@ export interface PackEntry {
   id: string; name: string; author: string; description: string; icon: string;
   downloads: string; minecraft: string; loader: string;
 }
-export interface PackVersion { id: string; name: string; minecraft: string; loader: string }
+export interface PackVersion { id: string; name: string; minecraft: string; loader: string; versionNumber?: string }
 export interface MinecraftVersion { version: string; released: string; type: string; recommended: boolean }
 export interface CatalogResult {
   packs: PackEntry[]; versions: PackVersion[]; minecraftVersions: MinecraftVersion[]; hasMore: boolean;

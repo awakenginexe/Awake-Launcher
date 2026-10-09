@@ -22,6 +22,7 @@ function environment(overrides: Record<string, unknown> = {}) {
     frontendReady: (callback: (value: unknown) => void) => { calls.push('ready'); callback(undefined); },
     selectInstance: (_id: string, callback: (value: unknown) => void) => callback({ ok: true }),
     launchInstance: (_id: string, callback: (value: unknown) => void) => callback({ ok: true }),
+    instanceDetails: (_id: string, _section: string, callback: (value: unknown) => void) => callback({ ok: true }),
     setPreference: (_key: string, _value: unknown, callback: (value: unknown) => void) => callback({ ok: true }),
     stateChanged, artworkChanged, operationFailed, catalogFinished: new Signal(), editorChanged: new Signal(), accountsRequested: new Signal(), ...overrides,
   };
@@ -118,4 +119,60 @@ test('native account requests open once per signal and disconnect on disposal', 
   fixture.scope.stop();
   fixture.native.accountsRequested.emit();
   assert.equal(fixture.launcher.accountsRequest.value, 1);
+});
+
+test('pack launch choices persist only the requested reminder and skip this time checks again', async () => {
+  for (const choice of ['skip', 'skipVersion', 'disable', 'update'] as const) {
+    let launches = 0, checks = 0, updates = 0;
+    const saved: unknown[] = [];
+    const pack = { provider: 'curseforge', name: 'Pack', versionId: '1', versionName: 'Old', reminders: true, skippedVersion: '' };
+    const fixture = environment({
+      instanceDetails: (_id: string, _section: string, callback: (value: unknown) => void) => callback({ ok: true, pack }),
+      launchInstance: (_id: string, callback: (value: unknown) => void) => { launches++; callback({ ok: true }); },
+      instanceCommand: (id: string, command: string, payload: { choice: string; version: string }, callback: (value: unknown) => void) => {
+        assert.equal(id, 'one'); assert.equal(command, 'packReminder'); saved.push(payload);
+        if (payload.choice === 'skipVersion') pack.skippedVersion = payload.version;
+        if (payload.choice === 'disable') pack.reminders = false;
+        callback({ ok: true });
+      },
+      updateInstancePack: (id: string, version: string, callback: (value: unknown) => void) => {
+        assert.equal(id, 'one'); assert.equal(version, '2'); updates++; callback({ ok: true });
+      },
+    });
+    fixture.native.instancePackVersions = (request: string, id: string, callback: (value: unknown) => void) => {
+      assert.equal(id, 'one'); checks++;
+      fixture.native.catalogFinished.emit(request, { ok: true, versions: [{ id: '2', name: 'New' }, { id: '1', name: 'Old' }] });
+      callback({ ok: true });
+    };
+    await fixture.launcher.connect();
+    await fixture.launcher.launch();
+    assert.equal(launches, 0);
+    assert.equal(fixture.launcher.packChoice.value?.version.id, '2');
+    await fixture.launcher.decidePackUpdate(choice);
+    assert.equal(fixture.launcher.packChoice.value, null);
+    assert.equal(launches, choice === 'update' ? 0 : 1);
+    assert.equal(updates, choice === 'update' ? 1 : 0);
+    assert.equal(saved.length, choice === 'disable' || choice === 'skipVersion' ? 1 : 0);
+    if (choice !== 'update') {
+      await fixture.launcher.launch();
+      assert.equal(Boolean(fixture.launcher.packChoice.value), choice === 'skip');
+      assert.equal(checks, choice === 'disable' ? 1 : 2);
+    }
+    fixture.scope.stop();
+  }
+});
+
+test('failed pack checks allow an offline launch and retain the provider error', async () => {
+  let launches = 0;
+  const fixture = environment({
+    instanceDetails: (_id: string, _section: string, callback: (value: unknown) => void) => callback({ ok: true, pack: { reminders: true } }),
+    instancePackVersions: (_request: string, _id: string, callback: (value: unknown) => void) => callback({ ok: false, error: 'Provider offline' }),
+    launchInstance: (_id: string, callback: (value: unknown) => void) => { launches++; callback({ ok: true }); },
+  });
+  await fixture.launcher.connect();
+  await fixture.launcher.launch();
+  assert.equal(launches, 1);
+  assert.equal(fixture.launcher.failure.value?.detail, 'Provider offline');
+  assert.equal(fixture.launcher.packChoice.value, null);
+  fixture.scope.stop();
 });

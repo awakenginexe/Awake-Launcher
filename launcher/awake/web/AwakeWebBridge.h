@@ -42,6 +42,8 @@ public:
     Q_INVOKABLE QVariantMap setPreference(const QString& key, const QVariant& value);
     Q_INVOKABLE QVariantMap searchPacks(const QString& requestId, const QString& provider, const QString& query, int offset);
     Q_INVOKABLE QVariantMap packVersions(const QString& requestId, const QString& provider, const QString& packId);
+    Q_INVOKABLE QVariantMap instancePackVersions(const QString& requestId, const QString& id);
+    Q_INVOKABLE QVariantMap updateInstancePack(const QString& id, const QString& versionId);
     Q_INVOKABLE QVariantMap modSearch(const QString& requestId, const QString& instanceId, const QString& provider, const QString& query, const QString& sort, int offset);
     Q_INVOKABLE QVariantMap modVersions(const QString& requestId, const QString& instanceId, const QString& provider, const QString& projectId);
     Q_INVOKABLE QVariantMap modPrepare(const QString& requestId, const QString& instanceId, const QVariantList& selections);

@@ -9,6 +9,8 @@ import { CatalogClient } from '../bridge/catalog.ts';
 import type { CatalogResult, RequestOptions } from '../bridge/catalog.ts';
 import { createModService } from '../bridge/mods.ts';
 import type { GpuSettings } from '../features/library/hardware.ts';
+import { availablePackUpdate, type InstalledPack } from '../features/library/packUpdates.ts';
+import type { PackVersion } from '../bridge/catalog.ts';
 
 interface Failure { code: ErrorCode | 'artworkError'; detail: string; retry: () => Promise<void> }
 interface ArtworkEvent { id: string; url: string; error: string }
@@ -17,6 +19,7 @@ export function useLauncher() {
   const editorRevision = ref(0);
   const accountsRequest = ref(0);
   const gpuChoice = shallowRef<{ id: string; settings: GpuSettings } | null>(null);
+  const packChoice = shallowRef<{ id: string; pack: InstalledPack; version: PackVersion } | null>(null);
   const state = shallowRef({ ...emptySnapshot(), locale: normalizeLocale(navigator.language) });
   const status = ref<'loading' | 'ready' | 'error'>('loading');
   const busy = ref(false);
@@ -172,11 +175,39 @@ export function useLauncher() {
     finally { busy.value = false; }
   }
   const select = (id: string) => run('selectInstance', [id]);
-  const launch = (id = state.value.selectedId) => run('launchInstance', [id]);
+  async function launch(id = state.value.selectedId) {
+    if (busy.value || packChoice.value) return;
+    busy.value = true;
+    failure.value = null;
+    let checkError: unknown;
+    try {
+      const details = await instanceDetails(id, 'versions') as { pack?: InstalledPack };
+      if (details.pack?.reminders) {
+        const result = await queryCatalog('instancePackVersions', [id]);
+        const version = availablePackUpdate(details.pack, result.versions);
+        if (version) { packChoice.value = { id, pack: details.pack, version }; return; }
+      }
+    } catch (error) { checkError = error; }
+    finally { busy.value = false; }
+    await run('launchInstance', [id]);
+    if (checkError && !failure.value) showFailure(checkError, () => launch(id));
+  }
+  async function decidePackUpdate(choice: 'update' | 'skip' | 'skipVersion' | 'disable') {
+    const pending = packChoice.value;
+    if (!pending) return;
+    if (choice === 'update') {
+      await javaCall('updateInstancePack', [pending.id, pending.version.id]);
+      packChoice.value = null;
+      return;
+    }
+    if (choice !== 'skip') await instanceCommand(pending.id, 'packReminder', { choice, version: pending.version.id });
+    packChoice.value = null;
+    await run('launchInstance', [pending.id]);
+  }
   function continueGpuLaunch() {
     const id = gpuChoice.value?.id;
     gpuChoice.value = null;
-    if (id) void launch(id);
+    if (id) void run('launchInstance', [id]);
   }
   const action = (name: Action, id = '') => name === 'launch' ? launch(id) : run('invokeAction', [name, id], 120_000);
   const preference = (key: PreferenceKey | string, value: unknown) => run('setPreference', [key, value]);
@@ -187,6 +218,11 @@ export function useLauncher() {
   const modService = createModService(queryCatalog);
   const searchPacks = (provider: string, query: string, offset: number) => queryCatalog('searchPacks', [provider, query, offset]);
   const packVersions = (provider: string, id: string) => queryCatalog('packVersions', [provider, id]);
+  const packService = {
+    versions: (id: string) => queryCatalog('instancePackVersions', [id]),
+    update: (id: string, version: string) => javaCall('updateInstancePack', [id, version]),
+    reminder: (id: string, enabled: boolean) => instanceCommand(id, 'packReminder', { choice: enabled ? 'reset' : 'disable' }),
+  };
   const minecraftVersions = () => queryCatalog('minecraftVersions', []);
   const browseArchive = () => queryCatalog('browseArchive', []);
   const javaService = {
@@ -228,5 +264,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService };
+  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate };
 }

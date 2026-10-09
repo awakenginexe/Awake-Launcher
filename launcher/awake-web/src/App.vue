@@ -12,8 +12,9 @@ import AppMenuModal from './components/AppMenuModal.vue';
 import UpdateModal from './components/UpdateModal.vue';
 import GpuLaunchModal from './components/GpuLaunchModal.vue';
 import SkinsModal from './components/SkinsModal.vue';
+import PackUpdateModal from './components/PackUpdateModal.vue';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService } = useLauncher();
+const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -49,8 +50,8 @@ let updatePresentation = 0;
 function markUpdatePresentation(presentation: number) { updatePresentation = Math.max(updatePresentation, presentation); }
 const editingInstance = ref<Instance | null>(null);
 const editorInstance = computed(() => state.value.instances.find(instance => instance.id === editingInstance.value?.id) || editingInstance.value);
-watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive], () => {
-  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive) return;
+watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive, packChoice.value, busy.value], () => {
+  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive || packChoice.value || busy.value) return;
   updatePresentation = state.value.updates.presentation;
   closePopovers(); closeContextMenu(); showUpdates.value = true;
 }, { immediate: true });
@@ -144,7 +145,7 @@ function toggleContextPin(instance: Instance) {
 
 function keydown(event: KeyboardEvent) {
   if (showSkins.value) return;
-  if (gpuChoice.value) return;
+  if (gpuChoice.value || packChoice.value) return;
   if (showUpdates.value) { if (event.key === 'Escape') { event.preventDefault(); showUpdates.value = false; } return; }
   if (editingInstance.value) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); searchInput.value?.focus(); searchInput.value?.select(); }
@@ -366,7 +367,11 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="modal">
-      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" @close="editingInstance = null" />
+      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" :pack-service="packService" @close="editingInstance = null" />
+    </Transition>
+
+    <Transition name="modal">
+      <PackUpdateModal v-if="packChoice" :pack="packChoice.pack" :version="packChoice.version" :decide="decidePackUpdate" :t="t" @close="packChoice = null" />
     </Transition>
 
     <Transition name="modal">

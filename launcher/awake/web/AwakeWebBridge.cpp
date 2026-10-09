@@ -13,6 +13,9 @@
 #include "awake/GpuSelection.h"
 #include <QDesktopServices>
 #include "InstanceList.h"
+#include "InstanceImportTask.h"
+#include "ui/dialogs/CustomMessageBox.h"
+#include "ui/dialogs/ProgressDialog.h"
 #include "awake/InstanceArtwork.h"
 #include "icons/IconList.h"
 #include "minecraft/Component.h"
@@ -577,6 +580,62 @@ QVariantMap Bridge::packVersions(const QString& requestId, const QString& provid
     if (!m_active || requestId.isEmpty() || requestId.size() > 64 || packId.isEmpty() || packId.size() > 256)
         return {{"ok", false}, {"error", tr("Invalid pack selection.")}};
     m_packCatalog->versions(requestId, provider, packId);
+    return success();
+}
+
+QVariantMap Bridge::instancePackVersions(const QString& requestId, const QString& id)
+{
+    auto* instance = APPLICATION->instances()->getInstanceById(id);
+    if (!m_active || requestId.isEmpty() || requestId.size() > 64 || !instance || !instance->isManagedPack() ||
+        instance->getManagedPackID().isEmpty() || !QStringList{"flame", "modrinth"}.contains(instance->getManagedPackType()))
+        return {{"ok", false}, {"error", tr("This instance does not have a supported modpack update provider.")}};
+    const auto provider = instance->getManagedPackType() == "flame" ? QString("curseforge") : QString("modrinth");
+    m_packCatalog->installedVersions(requestId, provider, instance->getManagedPackID());
+    return success();
+}
+
+QVariantMap Bridge::updateInstancePack(const QString& id, const QString& versionId)
+{
+    auto* instance = APPLICATION->instances()->getInstanceById(id);
+    if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving() || m_modCatalog->busy(id) ||
+        !instance || !instance->isManagedPack() || instance->isRunning() || !instance->canLaunch())
+        return fail("updateInstancePack", tr("Stop the game and finish the current action before changing the pack version."));
+    const auto provider = instance->getManagedPackType() == "flame" ? QString("curseforge") : instance->getManagedPackType();
+    QString error;
+    auto* task = m_packCatalog->createUpdateTask(provider, instance->getManagedPackID(), versionId, id, nullptr, &error);
+    if (!task) return fail("updateInstancePack", error);
+    task->setOriginalName(instance->getManagedPackName(), task->version());
+    task->setName(instance->name());
+    task->setIcon(instance->iconKey());
+    task->setGroup(APPLICATION->instances()->getInstanceGroup(id));
+    task->setTargetDir(QFileInfo(instance->instanceRoot()).absolutePath());
+    // Confirm here so all version changes show the same backup warning before downloading.
+    task->setConfirmUpdate(false);
+    m_actionPending = true;
+    QTimer::singleShot(0, this, [this, id, owned = std::unique_ptr<InstanceTask>(task)]() mutable {
+        auto* target = APPLICATION->instances()->getInstanceById(id);
+        if (!m_active || !target || target->isRunning() || !target->canLaunch()) { m_actionPending = false; return; }
+        setModalActive(true);
+        const auto response = CustomMessageBox::selectable(nullptr, tr("Change modpack version"),
+            tr("Changing %1 to pack version %2 can replace pack files and may make worlds incompatible. Create a backup of this instance first.\n\nContinue?")
+                .arg(target->name(), owned->version()),
+            QMessageBox::Warning, QMessageBox::Yes | QMessageBox::No, QMessageBox::No)->exec();
+        target = APPLICATION->instances()->getInstanceById(id);
+        if (response == QMessageBox::Yes && m_active && target && !target->isRunning() && target->canLaunch()) {
+            auto* task = owned.get();
+            const unique_qobject_ptr<Task> wrapped(APPLICATION->instances()->wrapInstanceTask(owned.release()));
+            ProgressDialog dialog(nullptr);
+            dialog.showSkipButton();
+            dialog.execWithTask(wrapped.get());
+            if (!wrapped->wasSuccessful()) fail("updateInstancePack", wrapped->failReason());
+            else if (!task->warnings().isEmpty())
+                CustomMessageBox::selectable(nullptr, tr("Modpack update warnings"), task->warnings().join('\n'), QMessageBox::Warning)->show();
+        }
+        m_actionPending = false;
+        setModalActive(false);
+        emit editorChanged(id, "versions");
+        scheduleState();
+    });
     return success();
 }
 

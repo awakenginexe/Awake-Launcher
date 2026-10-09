@@ -1,4 +1,5 @@
 export const en = {
+  packUpdateAvailable: 'Modpack update available', packInstalled: 'Installed', packAvailable: 'Available', packUpdate: 'Update', packSkipTime: 'Skip this time', packSkipVersion: 'Skip this version', packDoNotRemind: 'Do not remind me', packCheckUpdates: 'Check for updates', packChangeVersion: 'Change version', packRemindLaunch: 'Check for modpack updates before each game launch', packResetReminder: 'Clear skipped version',
   modSearch: 'Search mods…', modRecommended: 'Recommended', modSearching: 'Searching…', modNoResults: 'No compatible mods found. Try another search or provider.',
   modQueued: 'Queued', modProjectPage: 'Open project page', modCompatibleVersion: 'Compatible version', modNoVersions: 'No downloadable compatible version', modAddQueue: 'Add to queue',
   modSelectHint: 'Select a mod to see its compatible versions and add it to your download queue.', modQueue: 'Download queue', modQueueEmpty: 'Add mods from either provider, then review the downloads.', modRemoveQueue: 'Remove {name} from queue',
@@ -131,6 +132,7 @@ export const en = {
 export type MessageKey = keyof typeof en;
 type Catalog = Record<MessageKey, string>;
 export const th: Catalog = {
+  packUpdateAvailable: 'มีม็อดแพ็กเวอร์ชันใหม่', packInstalled: 'ติดตั้งแล้ว', packAvailable: 'เวอร์ชันที่พร้อมใช้งาน', packUpdate: 'อัปเดต', packSkipTime: 'ข้ามครั้งนี้', packSkipVersion: 'ข้ามเวอร์ชันนี้', packDoNotRemind: 'ไม่ต้องเตือนอีก', packCheckUpdates: 'ตรวจสอบการอัปเดต', packChangeVersion: 'เปลี่ยนเวอร์ชัน', packRemindLaunch: 'ตรวจสอบการอัปเดตม็อดแพ็กก่อนเปิดเกมทุกครั้ง', packResetReminder: 'ล้างเวอร์ชันที่ข้าม',
   modSearch: 'ค้นหาม็อด…', modRecommended: 'แนะนำ', modSearching: 'กำลังค้นหา…', modNoResults: 'ไม่พบม็อดที่เข้ากันได้ ลองคำค้นหรือผู้ให้บริการอื่น',
   modQueued: 'อยู่ในคิวแล้ว', modProjectPage: 'เปิดหน้าโครงการ', modCompatibleVersion: 'เวอร์ชันที่เข้ากันได้', modNoVersions: 'ไม่มีเวอร์ชันที่เข้ากันได้ให้ดาวน์โหลด', modAddQueue: 'เพิ่มเข้าคิว',
   modSelectHint: 'เลือกม็อดเพื่อดูเวอร์ชันที่เข้ากันได้และเพิ่มเข้าคิวดาวน์โหลด', modQueue: 'คิวดาวน์โหลด', modQueueEmpty: 'เพิ่มม็อดจากผู้ให้บริการใดก็ได้ แล้วตรวจสอบก่อนดาวน์โหลด', modRemoveQueue: 'นำ {name} ออกจากคิว',
@@ -261,6 +263,7 @@ export const th: Catalog = {
   archiveBrowseError: 'ไม่สามารถเลือกไฟล์เก็บถาวรได้',
 };
 export const zhCN: Catalog = {
+  packUpdateAvailable: '整合包有可用更新', packInstalled: '已安装', packAvailable: '可用版本', packUpdate: '更新', packSkipTime: '此次跳过', packSkipVersion: '跳过此版本', packDoNotRemind: '不再提醒', packCheckUpdates: '检查更新', packChangeVersion: '更改版本', packRemindLaunch: '每次启动游戏前检查整合包更新', packResetReminder: '清除已跳过的版本',
   modSearch: '搜索模组…', modRecommended: '推荐', modSearching: '正在搜索…', modNoResults: '未找到兼容模组，请尝试其他关键词或平台。',
   modQueued: '已加入队列', modProjectPage: '打开项目页面', modCompatibleVersion: '兼容版本', modNoVersions: '没有可下载的兼容版本', modAddQueue: '加入队列',
   modSelectHint: '选择模组以查看兼容版本并加入下载队列。', modQueue: '下载队列', modQueueEmpty: '从任一平台添加模组，然后检查下载列表。', modRemoveQueue: '从队列移除 {name}',
@@ -391,6 +394,7 @@ export const zhCN: Catalog = {
   archiveBrowseError: '无法浏览选择压缩包。',
 };
 export const zhTW: Catalog = {
+  packUpdateAvailable: '模組包有可用更新', packInstalled: '已安裝', packAvailable: '可用版本', packUpdate: '更新', packSkipTime: '此次略過', packSkipVersion: '略過此版本', packDoNotRemind: '不再提醒', packCheckUpdates: '檢查更新', packChangeVersion: '變更版本', packRemindLaunch: '每次啟動遊戲前檢查模組包更新', packResetReminder: '清除已略過的版本',
   modSearch: '搜尋模組…', modRecommended: '推薦', modSearching: '正在搜尋…', modNoResults: '找不到相容模組，請嘗試其他關鍵字或平台。',
   modQueued: '已加入佇列', modProjectPage: '開啟專案頁面', modCompatibleVersion: '相容版本', modNoVersions: '沒有可下載的相容版本', modAddQueue: '加入佇列',
   modSelectHint: '選擇模組以查看相容版本並加入下載佇列。', modQueue: '下載佇列', modQueueEmpty: '從任一平台加入模組，然後檢查下載清單。', modRemoveQueue: '從佇列移除 {name}',

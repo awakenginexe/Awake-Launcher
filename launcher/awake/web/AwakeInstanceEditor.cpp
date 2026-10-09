@@ -106,6 +106,14 @@ QVariantMap InstanceEditor::details(const QString& instanceId, const QString& se
             {"jvmArgs", settings->get("JvmArgs").toString()}, {"jvmPreset", instance->jvmPreset()},
             {"useGlobalJvmArgs", !settings->get("OverrideJavaArgs").toBool()}});
     } else if (section == "versions" || section == "overview") {
+        const auto type = instance->getManagedPackType();
+        if (instance->isManagedPack() && !instance->getManagedPackID().isEmpty() && QStringList{"flame", "modrinth"}.contains(type)) {
+            result.insert("pack", QVariantMap{{"provider", type == "flame" ? "curseforge" : type},
+                {"name", instance->getManagedPackName()}, {"versionId", instance->getManagedPackVersionID()},
+                {"versionName", instance->getManagedPackVersionName()},
+                {"reminders", instance->settings()->get("AwakePackUpdateReminders")},
+                {"skippedVersion", instance->settings()->get("AwakeSkippedPackVersion")}});
+        }
         auto* profile = instance->getPackProfile();
         observe(profile, instanceId, "versions");
         for (int i = 0; i < profile->rowCount(); ++i) {
@@ -142,7 +150,17 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
     if (!instance) return failure(tr("This instance no longer exists."));
     const auto options = payload.toMap();
     const auto section = options.value("section").toString();
-    if (name == "saveNotes") {
+    if (name == "packReminder") {
+        const auto choice = options.value("choice").toString();
+        const auto version = options.value("version").toString();
+        if (!QStringList{"disable", "reset", "skipVersion"}.contains(choice) || version.size() > 256 || version.contains(QChar::Null) ||
+            (choice == "skipVersion" && version.isEmpty())) return failure(tr("Invalid modpack reminder choice."));
+        if (choice == "skipVersion") instance->settings()->set("AwakeSkippedPackVersion", version);
+        else {
+            instance->settings()->set("AwakePackUpdateReminders", choice == "reset");
+            if (choice == "reset") instance->settings()->set("AwakeSkippedPackVersion", "");
+        }
+    } else if (name == "saveNotes") {
         if (payload.metaType().id() != QMetaType::QString || payload.toString().size() > 1024 * 1024)
             return failure(tr("Notes must be text shorter than one megabyte."));
         instance->setNotes(payload.toString());

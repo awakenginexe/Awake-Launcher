@@ -10,17 +10,21 @@ import JvmPresetPicker from './JvmPresetPicker.vue';
 import { jvmPresets, type JvmPreset } from '../features/library/jvm.ts';
 import ModBrowserModal from './ModBrowserModal.vue';
 import type { ModService } from '../bridge/mods.ts';
+import PackVersionPicker from './PackVersionPicker.vue';
+import type { PackService } from './PackVersionPicker.vue';
+import type { InstalledPack } from '../features/library/packUpdates.ts';
 
 interface Row { id: string; name: string; detail?: string; enabled?: boolean; status?: string }
 interface EditorSettings { minMemory: number; maxMemory: number; width: number; height: number; fullscreen: boolean; overrideMemory: boolean; overrideWindow: boolean; jvmArgs: string; jvmPreset: JvmPreset; useGlobalJvmArgs: boolean }
 interface JvmConfig { jvmArgs: string; jvmPreset: JvmPreset }
-interface Details { ok: boolean; error?: string; field?: string; rows?: Row[]; text?: string; settings?: EditorSettings; running?: boolean; jvmConfig?: { local: JvmConfig; global: JvmConfig } }
+interface Details { ok: boolean; error?: string; field?: string; rows?: Row[]; text?: string; settings?: EditorSettings; running?: boolean; pack?: InstalledPack; jvmConfig?: { local: JvmConfig; global: JvmConfig } }
 const props = defineProps<{
   instance: Instance; initialSection?: string; revision?: number; busy: boolean; t: (key: MessageKey) => string;
   details: (id: string, section: string) => Promise<unknown>;
   command: (id: string, command: string, payload?: unknown) => Promise<unknown>;
   javaService: JavaService;
   modService: ModService;
+  packService: PackService;
 }>();
 const emit = defineEmits<{ (event: 'close'): void }>();
 const sections: { id: string; label: MessageKey }[] = [
@@ -300,6 +304,7 @@ onUnmounted(() => {
               </div><p v-else class="editor-message">{{ t('editorSettingsUnavailable') }}</p>
             </template>
             <template v-else>
+              <PackVersionPicker v-if="section === 'versions' && data.pack" :id="instance.id" :pack="data.pack" :running="instance.running" :service="packService" :t="t" />
               <div class="editor-toolbar"><input v-if="data.rows?.length" v-model="filter" class="glass-input editor-filter" type="search" :aria-label="t('editorSearchAria').replace('{section}', title)" :placeholder="t('editorSearchPlaceholder').replace('{section}', title.toLowerCase())" /><button v-if="fileSection" class="btn-subtle" :disabled="disabled || instance.running" @click="run('addFiles', { section })">{{ t('editorImportFiles') }}</button><button v-if="section === 'mods'" class="btn-subtle editor-download-mods" :disabled="disabled || instance.running" @click="showModBrowser = true">{{ t('editorDownloadMods') }}</button><button v-if="section !== 'versions'" class="btn-subtle" :disabled="disabled" @click="run('openFolder', { section }, false)">{{ t('folder') }}</button></div>
               <div v-if="pendingRemoval" class="editor-remove-confirm" role="alert"><p>{{ t('editorRemoveConfirm').replace('{name}', pendingRemoval.name) }}</p><button class="btn-subtle" :disabled="disabled" @click="pendingRemoval = null">{{ t('cancel') }}</button><button class="btn-subtle" :disabled="disabled" @click="run('removeFile', { section, id: pendingRemoval.id })">{{ t('editorRemoveFile') }}</button></div>
               <ul v-if="rows.length" class="editor-file-list"><li v-for="row in rows" :key="row.id" class="editor-file-row"><label v-if="section === 'mods' && typeof row.enabled === 'boolean'" class="editor-mod-toggle"><input type="checkbox" :checked="row.enabled" :disabled="disabled" :aria-label="t('editorEnableMod').replace('{name}', row.name)" @change="run('toggleMod', { id: row.id, enabled: ($event.target as HTMLInputElement).checked })" /></label><div class="editor-file-copy"><strong>{{ row.name }}</strong><p v-if="row.detail">{{ row.detail }}</p></div><span v-if="row.status" class="editor-file-status">{{ row.status }}</span><button v-if="fileSection" class="btn-subtle" :disabled="disabled" :aria-label="t('editorRemoveAria').replace('{name}', row.name)" @click="pendingRemoval = row">{{ t('editorRemove') }}</button></li></ul>

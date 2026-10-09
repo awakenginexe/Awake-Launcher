@@ -1231,6 +1231,37 @@ private slots:
         bridge.setArtworkFocused(true);
         QVERIFY(timer->isActive());
     }
+    void packRemindersArePerInstanceAndUpdateSelectionMustBeTrusted()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        QVERIFY(instance);
+        auto* settings = instance->settings();
+        const auto reminders = settings->get("AwakePackUpdateReminders");
+        const auto skipped = settings->get("AwakeSkippedPackVersion");
+        const auto restore = qScopeGuard([&] {
+            settings->set("AwakePackUpdateReminders", reminders);
+            settings->set("AwakeSkippedPackVersion", skipped);
+        });
+        QVERIFY(bridge.instanceCommand("one", "packReminder", QVariantMap{{"choice", "reset"}}).value("ok").toBool());
+        QVERIFY(settings->get("AwakePackUpdateReminders").toBool());
+        QVERIFY(bridge.instanceCommand("one", "packReminder", QVariantMap{{"choice", "skipVersion"}, {"version", "release-2"}}).value("ok").toBool());
+        QCOMPARE(settings->get("AwakeSkippedPackVersion").toString(), QString("release-2"));
+        QVERIFY(settings->get("AwakePackUpdateReminders").toBool());
+        QVERIFY(!bridge.instanceCommand("one", "packReminder", QVariantMap{{"choice", "skipVersion"}, {"version", ""}}).value("ok").toBool());
+        QCOMPARE(settings->get("AwakeSkippedPackVersion").toString(), QString("release-2"));
+        QVERIFY(bridge.instanceCommand("one", "packReminder", QVariantMap{{"choice", "disable"}}).value("ok").toBool());
+        QVERIFY(!settings->get("AwakePackUpdateReminders").toBool());
+        QVERIFY(bridge.instanceCommand("one", "packReminder", QVariantMap{{"choice", "reset"}}).value("ok").toBool());
+        QVERIFY(settings->get("AwakeSkippedPackVersion").toString().isEmpty());
+        QVERIFY(!bridge.instancePackVersions("request", "missing").value("ok").toBool());
+        QVERIFY(!bridge.updateInstancePack("one", "untrusted").value("ok").toBool());
+        PackCatalog catalog(&assets);
+        QString error;
+        QVERIFY(!catalog.createUpdateTask("curseforge", "untrusted", "untrusted", "one", nullptr, &error));
+        QVERIFY(!error.isEmpty());
+    }
     void providerRejectsUntrustedSelections()
     {
         Assets assets;

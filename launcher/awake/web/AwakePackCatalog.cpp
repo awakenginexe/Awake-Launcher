@@ -655,8 +655,9 @@ struct PackCatalog::State {
             item->releaseOrder.clear();
             for (const auto& file : files) {
                 item->files.insert(file.fileId.toString(), file);
-                item->addRelease(file.fileId.toString(), versionRow(file.fileId.toString(), file.version,
-                                                                        file.mcVersion.join(", "), loaders(file.loaders)));
+                auto row = versionRow(file.fileId.toString(), file.version, file.mcVersion.join(", "), loaders(file.loaders));
+                row.insert("versionNumber", file.versionNumber);
+                item->addRelease(file.fileId.toString(), row);
             }
             item->versionsLoaded = true;
             releaseList(request, item);
@@ -788,7 +789,9 @@ InstanceTask* PackCatalog::createTask(QString provider, QString packId, QString 
         const auto version = item->files.value(versionId);
         if (!networkUrl(version.downloadUrl))
             return reject(tr("This version does not have an available download."));
-        return decorate(new InstanceImportTask(QUrl(version.downloadUrl), true, parent, {{"pack_id", packId}, {"pack_version_id", versionId}}));
+        auto* task = new InstanceImportTask(QUrl(version.downloadUrl), true, parent, {{"pack_id", packId}, {"pack_version_id", versionId}});
+        task->setOriginalName(item->row.value("name").toString(), version.versionNumber.isEmpty() ? version.version : version.versionNumber);
+        return decorate(task);
     }
     if (provider == "atlauncher")
         return decorate(new ATLauncher::PackInstallTask(new AtlUserInteractionSupportImpl(parent), item->atl.name, versionId));
@@ -805,5 +808,37 @@ InstanceTask* PackCatalog::createTask(QString provider, QString packId, QString 
         return decorate(new Technic::SingleZipPackInstallTask(item->technic.url, item->technic.minecraftVersion));
     }
     return reject(tr("Unknown modpack provider."));
+}
+
+void PackCatalog::installedVersions(QString requestId, QString provider, QString packId)
+{
+    auto request = d->begin(requestId);
+    QTimer::singleShot(0, this, [this, request, provider, packId] {
+        if (request->done) return;
+        if (!QStringList{"curseforge", "modrinth"}.contains(provider) || packId.isEmpty()) {
+            d->fail(request, tr("This pack does not have a supported update provider."));
+            return;
+        }
+        auto item = std::make_shared<State::Entry>();
+        item->resource = std::make_shared<ModPlatform::IndexedPack>();
+        item->resource->addonId = packId;
+        d->packs[provider].insert(packId, item);
+        d->resourceVersions(request, provider, item);
+    });
+}
+
+InstanceTask* PackCatalog::createUpdateTask(QString provider, QString packId, QString versionId, QString instanceId, QWidget* parent, QString* error)
+{
+    const auto item = d->packs.value(provider).value(packId);
+    if (!QStringList{"curseforge", "modrinth"}.contains(provider) || !item || !item->versionsLoaded || !item->files.contains(versionId) ||
+        !networkUrl(item->files.value(versionId).downloadUrl)) {
+        if (error) *error = tr("Check for updates and select an available pack version first.");
+        return nullptr;
+    }
+    const auto version = item->files.value(versionId);
+    auto* task = new InstanceImportTask(QUrl(version.downloadUrl), true, parent,
+                                      {{"pack_id", packId}, {"pack_version_id", versionId}, {"original_instance_id", instanceId}});
+    task->setOriginalName({}, version.versionNumber.isEmpty() ? version.version : version.versionNumber);
+    return task;
 }
 }  // namespace Awake::Web

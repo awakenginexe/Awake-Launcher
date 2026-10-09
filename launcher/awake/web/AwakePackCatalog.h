@@ -18,6 +18,8 @@ public:
     ~PackCatalog() override;
     void search(QString requestId, QString provider, QString query, int offset);
     void versions(QString requestId, QString provider, QString packId);
+    void installedVersions(QString requestId, QString provider, QString packId);
+    InstanceTask* createUpdateTask(QString provider, QString packId, QString versionId, QString instanceId, QWidget* parent, QString* error);
     InstanceTask* createTask(QString provider, QString packId, QString versionId, QWidget* parent, QString* error);
 
 signals:
