@@ -52,6 +52,7 @@
 #include "minecraft/PackProfile.h"
 #include "modplatform/ModIndex.h"
 #include "modplatform/atlauncher/ATLPackManifest.h"
+#include "modplatform/atlauncher/ATLPackIndex.h"
 #include "net/ChecksumValidator.h"
 #include "settings/INISettingsObject.h"
 
@@ -59,6 +60,9 @@
 
 #include "Application.h"
 #include "BuildConfig.h"
+#include "InstanceList.h"
+#include "awake/LocalInstanceImport.h"
+#include <QDirIterator>
 #include "ui/dialogs/BlockedModsDialog.h"
 
 namespace {
@@ -79,11 +83,11 @@ Meta::Version::Ptr getComponentVersion(const QString& uid, const QString& versio
 
 namespace ATLauncher {
 
-PackInstallTask::PackInstallTask(UserInteractionSupport* support, QString packName, QString version, InstallMode installMode)
+PackInstallTask::PackInstallTask(UserInteractionSupport* support, QString packName, QString version, InstallMode installMode, QString instanceId)
     : m_support(support), m_installMode(installMode), m_packName(packName), m_versionName(std::move(version))
 {
-    static const QRegularExpression s_regex("[^A-Za-z0-9]");
-    m_packSafeName = packName.replace(s_regex, "");
+    m_packSafeName = packId(packName);
+    if (installMode == InstallMode::Update && !instanceId.isEmpty()) setOverride(true, instanceId);
 }
 
 bool PackInstallTask::abort()
@@ -96,6 +100,34 @@ bool PackInstallTask::abort()
 
 void PackInstallTask::executeTask()
 {
+    if (m_installMode == InstallMode::Update && !originalInstanceID().isEmpty() && !m_updatePrepared) {
+        const auto* instance = APPLICATION->instances()->getInstanceById(originalInstanceID());
+        if (!instance || instance->isRunning()) { emitFailed(tr("Stop the game before updating this instance.")); return; }
+        const auto source = Awake::LocalImport::inspect(instance->instanceRoot());
+        if (!source.error.isEmpty()) { emitFailed(source.error); return; }
+        m_gameRoot = QFileInfo(instance->gameRoot()).fileName();
+        if (m_gameRoot != "minecraft" && m_gameRoot != ".minecraft") { emitFailed(tr("Unsupported instance game folder.")); return; }
+        setAbortable(false);
+        setStatus(tr("Preparing a copy of the existing instance..."));
+        connect(&m_updateCopyWatcher, &QFutureWatcher<QPair<QString, QStringList>>::finished, this, [this] {
+            const auto result = m_updateCopyWatcher.result();
+            if (!result.first.isEmpty()) { emitFailed(result.first); return; }
+            m_previousFiles = result.second;
+            m_updatePrepared = true;
+            executeTask();
+        });
+        m_updateCopyWatcher.setFuture(QtConcurrent::run([source, destination = m_stagingPath] {
+            QString error;
+            QStringList previous;
+            if (Awake::LocalImport::copyInstance(source, destination, &error)) {
+                QDirIterator files(destination, QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+                const QDir root(destination);
+                while (files.hasNext()) previous.append(root.relativeFilePath(files.next()));
+            }
+            return qMakePair(error, previous);
+        }));
+        return;
+    }
     qDebug() << "PackInstallTask::executeTask:" << QThread::currentThreadId();
     NetJob::Ptr netJob{ new NetJob("ATLauncher::VersionFetch", APPLICATION->network()) };
     auto searchUrl =
@@ -225,7 +257,7 @@ void PackInstallTask::deleteExistingFiles()
     }
 
     auto getPathForBase = [this](const QString& base) {
-        auto minecraftPath = FS::PathCombine(m_stagingPath, "minecraft");
+        auto minecraftPath = FS::PathCombine(m_stagingPath, m_gameRoot);
 
         if (base == "root") {
             return minecraftPath;
@@ -694,7 +726,7 @@ void PackInstallTask::extractConfigs()
 
     QDir extractDir(m_stagingPath);
     m_extractFuture = QtConcurrent::run(QThreadPool::globalInstance(), QOverload<QString, QString>::of(MMCZip::extractDir), m_archivePath,
-                                        extractDir.absolutePath() + "/minecraft");
+                                        extractDir.absolutePath() + '/' + m_gameRoot);
     connect(&m_extractFutureWatcher, &QFutureWatcher<QStringList>::finished, this, [this]() { downloadMods(); });
     connect(&m_extractFutureWatcher, &QFutureWatcher<QStringList>::canceled, this, [this]() { emitAborted(); });
     m_extractFutureWatcher.setFuture(m_extractFuture);
@@ -795,7 +827,7 @@ void PackInstallTask::downloadMods()
             }
             m_jobPtr->addNetAction(dl);
 
-            auto path = FS::PathCombine(m_stagingPath, "minecraft", relpath, mod.file);
+            auto path = FS::PathCombine(m_stagingPath, m_gameRoot, relpath, mod.file);
 
             if (mod.type == ModType::Forge) {
                 auto ver = getComponentVersion("net.minecraftforge", mod.version);
@@ -864,7 +896,7 @@ void PackInstallTask::downloadMods()
                         continue;
                     }
 
-                    auto path = FS::PathCombine(m_stagingPath, "minecraft", relpath, mod.file);
+                    auto path = FS::PathCombine(m_stagingPath, m_gameRoot, relpath, mod.file);
 
                     if (mod.type == ModType::Forge) {
                         auto ver = getComponentVersion("net.minecraftforge", mod.version);
@@ -953,7 +985,7 @@ bool PackInstallTask::extractMods(const QMap<QString, VersionMod>& toExtract,
         }
 
         QDir extractDir(m_stagingPath);
-        auto extractToPath = FS::PathCombine(extractDir.absolutePath(), "minecraft", extractToDir);
+        auto extractToPath = FS::PathCombine(extractDir.absolutePath(), m_gameRoot, extractToDir);
 
         QString folderToExtract = "";
         if (mod.type == ModType::Extract) {
@@ -979,7 +1011,7 @@ bool PackInstallTask::extractMods(const QMap<QString, VersionMod>& toExtract,
         auto extractToDir = getDirForModType(mod.decompType, mod.decompType_raw);
 
         QDir extractDir(m_stagingPath);
-        auto extractToPath = FS::PathCombine(extractDir.absolutePath(), "minecraft", extractToDir, mod.decompFile);
+        auto extractToPath = FS::PathCombine(extractDir.absolutePath(), m_gameRoot, extractToDir, mod.decompFile);
 
         if (isPathTraversal(extractToPath, mod.decompFile)) {
             qWarning() << "Blocked path traversal in decompFile" << mod.decompFile;
@@ -1097,6 +1129,9 @@ void PackInstallTask::install()
         m_instance->setManagedPack("atlauncher", m_packSafeName, m_packName, m_versionName, m_versionName);
 
         m_jarmods.clear();
+    }
+    for (const auto& relative : m_previousFiles) {
+        if (!QFileInfo::exists(m_stagingPath + '/' + relative)) m_postCommitRemovals.append(relative);
     }
     downloadFiles(m_instance.get());
 }

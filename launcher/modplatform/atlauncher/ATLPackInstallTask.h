@@ -84,8 +84,9 @@ class PackInstallTask : public InstanceTask {
     explicit PackInstallTask(UserInteractionSupport* support,
                              QString packName,
                              QString version,
-                             InstallMode installMode = InstallMode::Install);
-    ~PackInstallTask() override { delete m_support; }
+                             InstallMode installMode = InstallMode::Install,
+                             QString instanceId = {});
+    ~PackInstallTask() override { m_updateCopyWatcher.waitForFinished(); delete m_support; }
 
     bool canAbort() const override { return true; }
     bool abort() override;
@@ -147,6 +148,10 @@ class PackInstallTask : public InstanceTask {
     QFutureWatcher<bool> m_modExtractFutureWatcher;
 
     std::unique_ptr<MinecraftInstance> m_instance;
+    QFutureWatcher<QPair<QString, QStringList>> m_updateCopyWatcher;
+    QStringList m_previousFiles;
+    QString m_gameRoot = "minecraft";
+    bool m_updatePrepared = false;
 };
 
 }  // namespace ATLauncher

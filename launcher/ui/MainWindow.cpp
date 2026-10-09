@@ -779,7 +779,7 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
         menu.addActions({ui->actionRenameInstance, ui->actionChangeInstIcon, ui->actionChangeInstGroup, ui->actionCopyInstance,
                          ui->actionExportInstance, ui->actionCreateInstanceShortcut, ui->actionKillInstance, ui->actionDeleteInstance});
         menu.exec(mapToGlobal(QPoint(width() - 280, height() - 240)));
-    } else if (action == "installPack" || action == "importArchive") {
+    } else if (action == "installPack" || action == "importArchive" || action == "importLocal") {
         const auto document = QJsonDocument::fromJson(id.toUtf8());
         if (!document.isObject()) return fail(tr("Invalid installation request."));
         const auto request = document.object();
@@ -790,6 +790,10 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
             QString error;
             task = m_webBridge->packCatalog()->createTask(request.value("provider").toString(), request.value("packId").toString(),
                 request.value("versionId").toString(), this, &error);
+            if (!task) return fail(error);
+        } else if (action == "importLocal") {
+            QString error;
+            task = m_webBridge->localImportTask(request.value("id").toString(), &error);
             if (!task) return fail(error);
         } else {
             const QUrl url(request.value("url").toString());

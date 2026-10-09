@@ -46,7 +46,7 @@ const fixture = `(() => {
       window.__nativeTest.calls.push(['instanceDetails', id, section]);
       const editor = window.__nativeTest.editor;
       if (editor.failSection === section) { cb({ok:false,error:'Fixture editor read failed'}); return; }
-      cb({ok:true, name:'Test fixture', section, running:Boolean(editor.running) || section === 'log', rows:section === 'mods' ? editor.mods : section === 'versions' ? [{id:'minecraft',name:'Minecraft',detail:'1.21.1'}] : [], text:section === 'notes' ? editor.notes : section === 'log' ? editor.log : '', settings:section === 'settings' ? editor.settings : undefined,jvmConfig:{local:editor.localJvm || {jvmPreset:'custom',jvmArgs:''},global:{jvmPreset:state.launcherSettings.jvmPreset,jvmArgs:state.launcherSettings.jvmArgs}}});
+      cb({ok:true, name:'Test fixture', section, pack:section === 'versions' ? editor.pack : undefined, running:Boolean(editor.running) || section === 'log', rows:section === 'mods' ? editor.mods : section === 'versions' ? [{id:'minecraft',name:'Minecraft',detail:'1.21.1'}] : [], text:section === 'notes' ? editor.notes : section === 'log' ? editor.log : '', settings:section === 'settings' ? editor.settings : undefined,jvmConfig:{local:editor.localJvm || {jvmPreset:'custom',jvmArgs:''},global:{jvmPreset:state.launcherSettings.jvmPreset,jvmArgs:state.launcherSettings.jvmArgs}}});
     },
     instanceCommand(id, command, payload, cb) {
       window.__nativeTest.calls.push(['instanceCommand', id, command, payload]);
@@ -81,6 +81,18 @@ const fixture = `(() => {
       setTimeout(() => this.catalogFinished.emit(id, query === 'fail' ? {ok:false,error:'Test provider unavailable'} : {ok:true,hasMore:offset === 0,packs:query === 'empty' ? [] : [{id:provider + '-' + offset,name:provider + ' API fixture ' + offset,author:'Test API',description:'Fixture for real bridge wiring',downloads:'42',icon:'',minecraft:'1.21.1',loader:'Fabric'}]}), query === 'slow' ? 1000 : 20);
     },
     packVersions(id, provider, packId, cb) { cb({ok:true}); this.catalogFinished.emit(id, {ok:true,versions:[{id:'release-123',name:'Actual API release',minecraft:'1.21.1',loader:'Fabric'}]}); },
+    instancePackVersions(request, id, cb) { cb({ok:true}); this.catalogFinished.emit(request, {ok:true,versions:[{id:'release-456',name:'New pack release',minecraft:'1.21.1',loader:'Fabric'},{id:'release-123',name:'Actual API release',minecraft:'1.21.1',loader:'Fabric'}]}); },
+    updateInstancePack(id, versionId, cb) {
+      window.__nativeTest.calls.push(['updateInstancePack', id, versionId]);
+      window.__nativeTest.editor.pack.versionId = versionId;
+      cb({ok:true}); this.editorChanged.emit(id, 'versions');
+    },
+    linkInstancePack(request, id, provider, packId, versionId, cb) {
+      window.__nativeTest.calls.push(['linkInstancePack', id, provider, packId, versionId]); cb({ok:true});
+      if (window.__nativeTest.failPackLink) { this.catalogFinished.emit(request, {ok:false,error:'Wrong installed release fixture'}); return; }
+      window.__nativeTest.editor.pack = {provider,name:'Linked pack fixture',versionId,versionName:'Actual API release',reminders:true,skippedVersion:'',requiresLink:false};
+      this.catalogFinished.emit(request, {ok:true});
+    },
     modSearch(id, instance, provider, query, sort, offset, cb) {
       window.__nativeTest.calls.push(['modSearch', id, instance, provider, query, sort, offset]); cb({ok:true});
       setTimeout(() => this.catalogFinished.emit(id, {ok:true,mods:[{id:provider + '-project',provider,name:provider + ' fixture mod',author:'Test author',description:'Provider result fixture',icon:'',website:'https://modrinth.com/mod/fixture'}],hasMore:false,minecraft:'1.21.1',loader:'fabric',sorts:[{id:'downloads',name:'Downloads'}]}), 10);
@@ -117,6 +129,14 @@ const fixture = `(() => {
         window.__nativeTest.modActive = null;
       }, 10);
     },
+    localInstances(id, source, browse, cb) {
+      window.__nativeTest.calls.push(['localInstances', source, browse]); cb({ok:true});
+      if (window.__nativeTest.failLocalScan) { this.catalogFinished.emit(id, {ok:false,error:'Local scan failure fixture'}); return; }
+      const names = {curseforge:'CurseForge',atlauncher:'ATLauncher',prism:'Prism / MultiMC',multimc:'Prism / MultiMC',ftb:'FTB App',custom:'ATLauncher',auto:'ATLauncher'};
+      this.catalogFinished.emit(id, window.__nativeTest.cancelLocalBrowse ? {ok:true,canceled:true} : {ok:true,localInstances:[
+        {id:'local-fixture',name:'Local pack fixture',path:'C:/portable/Instances/MyPack',source:names[source],minecraft:'1.21.1',loader:'net.neoforged',loaderVersion:'21.1.248',error:''},
+        {id:'invalid-local',name:'Broken metadata fixture',path:'C:/portable/Instances/Broken',source:names[source],minecraft:'',loader:'',loaderVersion:'',error:'Missing Minecraft version fixture'}]});
+    },
     browseArchive(id, cb) { cb({ok:true}); this.catalogFinished.emit(id, {ok:true,archiveUrl:'file:///C:/test/fixture.mrpack',fileName:'fixture.mrpack'}); }
   };
   host.modProgress = signal();
@@ -145,6 +165,118 @@ async function chooseDropdown(page, id, value) {
   await page.locator(`#${id}-listbox [data-value="${value}"]`).click();
 }
 try {
+  {
+    const page = await browser.newPage({viewport:{width:1320,height:780}});
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`${origin}/?count=1`);
+    await page.locator('.instance-select').click({button:'right'});
+    await page.locator('.instance-context-menu button').nth(1).click();
+    await page.locator('.editor-sidebar button[data-section="versions"]').click();
+    await page.locator('.pack-link-section').waitFor({timeout:3000});
+    await page.locator('#pack-link-query').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.pack-link-search').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.locator('.pack-link-search').evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
+    await page.locator('#pack-link-query').fill('Imported pack');
+    await page.locator('.pack-link-search').click();
+    await page.locator('.pack-link-results button').first().click();
+    assert.equal(await page.locator('.pack-link-confirm').isDisabled(), true);
+    await page.locator('#pack-link-release').selectOption('release-123');
+    await page.evaluate(() => { window.__nativeTest.failPackLink = true; });
+    await page.locator('.pack-link-confirm').click();
+    await page.getByText('Wrong installed release fixture', {exact:true}).waitFor();
+    assert.equal(await page.locator('.pack-link-confirm').isEnabled(), true);
+    await page.evaluate(() => { window.__nativeTest.failPackLink = false; });
+    await page.screenshot({path:resolve(output, 'pack-link.png')});
+    await page.locator('.pack-link-confirm').click();
+    await page.getByText('Linked pack fixture', {exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.find(call => call[0] === 'linkInstancePack')), ['linkInstancePack', 'fixture-0', 'curseforge', 'curseforge-0', 'release-123']);
+    assert.equal(await page.locator('.pack-link-section').count(), 0);
+    await page.locator('.pack-version-section .btn-primary').click();
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.find(call => call[0] === 'updateInstancePack')), ['updateInstancePack', 'fixture-0', 'release-456']);
+    await page.close();
+  }
+  for (const [locale, provider] of [['th','modrinth'], ['zh_CN','atlauncher'], ['zh_TW','curseforge']]) {
+    const page = await browser.newPage({viewport:{width:1024,height:640}});
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`${origin}/?count=1&locale=${locale}`);
+    await page.locator('.instance-select').click({button:'right'});
+    await page.locator('.instance-context-menu button').nth(1).click();
+    await page.locator('.editor-sidebar button[data-section="versions"]').click();
+    await page.locator('#pack-link-provider').selectOption(provider);
+    assert.notEqual(await page.locator('.pack-link-section h3').textContent(), 'Link installed modpack');
+    await page.locator('.pack-link-search').click();
+    await page.locator('.pack-link-more').click();
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'searchPacks').at(-1)), ['searchPacks', provider, '', 25]);
+    await page.locator('#pack-link-query').fill('Exact imported pack');
+    assert.equal(await page.locator('.pack-link-results').count(), 0);
+    await page.locator('#pack-link-query').press('Enter');
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'searchPacks').at(-1)), ['searchPacks', provider, 'Exact imported pack', 0]);
+    await page.locator('.pack-link-results button').first().click();
+    assert.equal(await page.locator('#pack-link-release').inputValue(), '');
+    await page.locator('#pack-link-release').selectOption('release-123');
+    assert.equal(await page.locator('.pack-link-confirm').isEnabled(), true);
+    await page.locator('.pack-link-confirm').scrollIntoViewIfNeeded();
+    const bounds = await page.locator('.pack-link-confirm').boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 1024 && bounds.y + bounds.height <= 640);
+    await page.screenshot({path:resolve(output, `pack-link-${locale}.png`)});
+    await page.locator('.pack-link-confirm').click();
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.find(call => call[0] === 'linkInstancePack')), ['linkInstancePack', 'fixture-0', provider, provider + '-0', 'release-123']);
+    await page.close();
+  }
+  {
+    const page = await browser.newPage({viewport:{width:1320,height:780}});
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(origin);
+    await page.locator('.creation-actions button').first().click();
+    await page.locator('.platform-tab[data-source="local"]').click({timeout:3000});
+    await page.locator('.local-source-controls button').nth(1).click();
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.at(-1)), ['localInstances', 'auto', false]);
+    await page.locator('#local-source').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('#browse-local-folder').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.locator('#browse-local-folder').evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.at(-1)), ['localInstances', 'auto', true]);
+    await page.evaluate(() => { window.__nativeTest.failLocalScan = true; });
+    await page.locator('.local-source-controls button').nth(1).click();
+    await page.getByText('Local scan failure fixture', {exact:true}).waitFor();
+    await page.evaluate(() => { window.__nativeTest.failLocalScan = false; });
+    await page.locator('.catalog-status button').click();
+    await page.getByText('Local pack fixture', {exact:true}).waitFor();
+    assert.equal(await page.locator('.catalog-status[role=alert]').count(), 0);
+    for (const source of ['curseforge','atlauncher','prism','multimc','ftb','custom']) {
+      await page.locator('#local-source').selectOption(source);
+      await page.locator('#browse-local-folder').click();
+      await page.getByText('Local pack fixture', {exact:true}).waitFor();
+      assert.equal(await page.locator('.local-instance-row').count(), 2);
+      assert.equal(await page.locator('.local-instance-row').nth(1).locator('button').isDisabled(), true);
+      assert.match(await page.locator('#local-folder-help').innerText(), /instance|Instances|folder/i);
+      await page.locator('.local-instance-row').first().locator('button').click();
+      await page.evaluate(() => { window.__nativeTest.cancelLocalBrowse = true; });
+      await page.locator('#browse-local-folder').click();
+      assert.equal(await page.locator('.create-modal-footer button[type=submit]').isEnabled(), true);
+      await page.evaluate(() => { window.__nativeTest.cancelLocalBrowse = false; });
+    }
+    for (const [width,height] of [[640,480],[1320,780]]) {
+      await page.setViewportSize({width,height});
+      const button = await page.locator('.create-modal-footer button[type=submit]').boundingBox();
+      assert.ok(button && button.x + button.width <= width && button.y + button.height <= height);
+      assert.equal(await page.locator('.create-instance-window').evaluate(el => el.scrollWidth > el.clientWidth), false);
+    }
+    await page.screenshot({path:resolve(output, 'local-import.png')});
+    await page.locator('#new-inst-name').fill('Migrated fixture');
+    await page.locator('#new-inst-group').fill('Imported');
+    await page.locator('.create-modal-footer button[type=submit]').click();
+    const call = await page.evaluate(() => window.__nativeTest.calls.at(-1));
+    assert.equal(call[0], 'importLocal');
+    assert.deepEqual(JSON.parse(call[1]), {id:'local-fixture',name:'Migrated fixture',group:'Imported'});
+    await page.locator('.creation-actions button').first().click();
+    await page.keyboard.press('Escape');
+    await page.locator('.create-instance-window').waitFor({state:'hidden'});
+    assert.equal(await page.locator('.create-instance-window').count(), 0);
+    await page.close();
+  }
   {
     const page = await browser.newPage({viewport:{width:1100,height:750}});
     page.on('pageerror', error => errors.push(error.message));

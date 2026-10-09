@@ -5,6 +5,7 @@
 #include "Application.h"
 #include "BuildConfig.h"
 #include "InstanceImportTask.h"
+#include "awake/LocalInstanceImportTask.h"
 #include "icons/IconList.h"
 #include "modplatform/atlauncher/ATLPackIndex.h"
 #include "modplatform/atlauncher/ATLPackInstallTask.h"
@@ -353,14 +354,25 @@ struct PackCatalog::State {
             list(request, result, offset + rows.size() < total);
         });
     }
-    void atlSearch(const RequestPtr& request, const QString& query, int offset)
+    void atlSearch(const RequestPtr& request, const QString& query, int offset, bool installed = false)
     {
         if (catalogs.contains("atlauncher")) {
+            if (installed) {
+                for (const auto& item : catalogs.value("atlauncher")) {
+                    if (ATLauncher::packId(item->atl.name) == query || QString::number(item->atl.id) == query) {
+                        packs["atlauncher"].insert(query, item);
+                        releaseList(request, item);
+                        return;
+                    }
+                }
+                fail(request, QObject::tr("The installed ATLauncher pack is not available in its catalog."));
+                return;
+            }
             filtered(request, "atlauncher", query, offset);
             return;
         }
         json(request, QUrl(BuildConfig.ATL_DOWNLOAD_SERVER_URL + "launcher/json/packsnew.json"),
-             [this, request, query, offset](QJsonDocument doc) {
+             [this, request, query, offset, installed](QJsonDocument doc) {
             if (!doc.isArray()) {
                 fail(request, QObject::tr("ATLauncher returned an unexpected catalog."));
                 return;
@@ -386,7 +398,7 @@ struct PackCatalog::State {
                 result.append(item);
             }
             catalogs.insert("atlauncher", result);
-            filtered(request, "atlauncher", query, offset);
+            atlSearch(request, query, offset, installed);
         });
     }
     void legacySearch(const RequestPtr& request, const QString& query, int offset)
@@ -815,6 +827,7 @@ void PackCatalog::installedVersions(QString requestId, QString provider, QString
     auto request = d->begin(requestId);
     QTimer::singleShot(0, this, [this, request, provider, packId] {
         if (request->done) return;
+        if (provider == "atlauncher") { d->atlSearch(request, packId, 0, true); return; }
         if (!QStringList{"curseforge", "modrinth"}.contains(provider) || packId.isEmpty()) {
             d->fail(request, tr("This pack does not have a supported update provider."));
             return;
@@ -830,6 +843,12 @@ void PackCatalog::installedVersions(QString requestId, QString provider, QString
 InstanceTask* PackCatalog::createUpdateTask(QString provider, QString packId, QString versionId, QString instanceId, QWidget* parent, QString* error)
 {
     const auto item = d->packs.value(provider).value(packId);
+    if (provider == "atlauncher" && item && item->versionsLoaded && item->releases.contains(versionId)) {
+        auto* task = new ATLauncher::PackInstallTask(new AtlUserInteractionSupportImpl(parent), item->atl.name, versionId,
+                                                   ATLauncher::InstallMode::Update, instanceId);
+        task->setOriginalName({}, versionId);
+        return task;
+    }
     if (!QStringList{"curseforge", "modrinth"}.contains(provider) || !item || !item->versionsLoaded || !item->files.contains(versionId) ||
         !networkUrl(item->files.value(versionId).downloadUrl)) {
         if (error) *error = tr("Check for updates and select an available pack version first.");
@@ -840,5 +859,32 @@ InstanceTask* PackCatalog::createUpdateTask(QString provider, QString packId, QS
                                       {{"pack_id", packId}, {"pack_version_id", versionId}, {"original_instance_id", instanceId}});
     task->setOriginalName({}, version.versionNumber.isEmpty() ? version.version : version.versionNumber);
     return task;
+}
+Task* PackCatalog::createLinkTask(QString provider, QString packId, QString versionId, MinecraftInstance* instance, QString* error)
+{
+    const auto item = d->packs.value(provider).value(packId);
+    if (!instance || !QStringList{"curseforge", "modrinth", "atlauncher"}.contains(provider) || !item ||
+        !item->versionsLoaded || !item->releases.contains(versionId)) {
+        *error = tr("Select an available pack and its installed release first."); return nullptr;
+    }
+    QUrl archive;
+    auto name = item->row.value("name").toString();
+    auto versionName = item->releases.value(versionId).value("name").toString();
+    if (provider == "atlauncher") {
+        const auto source = LocalImport::inspect(instance->instanceRoot());
+        if (!source.error.isEmpty() || item->releases.value(versionId).value("minecraft").toString() != source.minecraft) {
+            *error = tr("Select the installed pack release matching this Minecraft version."); return nullptr;
+        }
+        packId = ATLauncher::packId(item->atl.name);
+    } else {
+        if (!item->files.contains(versionId) || !networkUrl(item->files.value(versionId).downloadUrl)) {
+            *error = tr("The installed release is not available for linking."); return nullptr;
+        }
+        const auto& version = item->files.value(versionId);
+        archive = QUrl(version.downloadUrl);
+        if (!version.versionNumber.isEmpty()) versionName = version.versionNumber;
+    }
+    if (name.isEmpty()) name = instance->name();
+    return new LocalImport::PackLinkTask(instance, {provider, packId, name, versionId, versionName}, archive);
 }
 }  // namespace Awake::Web

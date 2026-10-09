@@ -7,9 +7,13 @@ export interface PackEntry {
 }
 export interface PackVersion { id: string; name: string; minecraft: string; loader: string; versionNumber?: string }
 export interface MinecraftVersion { version: string; released: string; type: string; recommended: boolean }
+export interface LocalInstance {
+  id: string; path: string; name: string; source: string; minecraft: string; loader: string; loaderVersion: string; error: string;
+}
 export interface CatalogResult {
   packs: PackEntry[]; versions: PackVersion[]; minecraftVersions: MinecraftVersion[]; hasMore: boolean;
   archiveUrl?: string; fileName?: string;
+  localInstances?: LocalInstance[]; canceled?: boolean;
 }
 export interface RequestOptions {
   timeoutMs?: number; signal?: AbortSignal; progress?: (value: unknown) => void; acceptFailure?: boolean;

@@ -19,6 +19,16 @@ Setup offers **Normal** (`%APPDATA%\AwakeLauncher`), **Compact** (`AwakeLauncher
 
 Add an account in **Accounts**, then choose **Create instance** to install Minecraft or a modpack. You can also import an existing instance. Awake Launcher uses its own data folder and does not move data from other launchers automatically.
 
+To migrate an installed pack, use **Create instance → Local import**. Detect common locations or browse to a custom/portable path. Select the launcher's data folder, its `Instances` folder, or one instance folder:
+
+- **CurseForge:** the Minecraft modding folder or a pack containing `minecraftinstance.json`. Find it under Settings → Minecraft → Minecraft Modding Folder → Open.
+- **ATLauncher / FTB App:** an installed pack containing `instance.json`.
+- **Prism Launcher / MultiMC:** an instance containing `instance.cfg` and `mmc-pack.json`; choose the parent of `.minecraft` or `minecraft` if the other launcher opens that game folder.
+
+Close Minecraft before importing. Awake copies the instance and keeps the original intact. Accounts are separate; sign in through Awake. Folders containing only mods or saves cannot identify Minecraft and loader versions. Unsupported metadata and linked files/folders are reported instead of imported.
+
+Awake reads the online pack/release identity from supported CurseForge and ATLauncher metadata. To enable updates for a pack that needs linking, open **Edit instance → Versions → Link installed modpack**, choose its publishing source (CurseForge, Modrinth, or ATLauncher), find the exact pack, and select the release already installed. Linking reads release metadata without reinstalling game files. CurseForge/Modrinth imports need this step before their first update so Awake has the original pack file list. Linked packs use the existing update checks, reminders, and confirmed version changes. Custom packs without an available catalog release remain manually managed. Native ATLauncher updates apply the pack's keep/delete rules and can remove added or disabled mods; back up the instance first.
+
 Release builds send one anonymous `app_started` event to PostHog EU at startup, containing only `app_version` and `os`, plus PostHog's `$process_person_profile: false` control. A random session ID is never persisted. PostHog infers country from the request; Awake does not detect country or send account details, hardware IDs, paths, instances, mods, or logs. The request is asynchronous, has no retries, and failures show no UI.
 
 Source builds disable telemetry when `POSTHOG_PROJECT_TOKEN` is empty. Supply it through the build environment or `-DPOSTHOG_PROJECT_TOKEN=...`; `POSTHOG_HOST` defaults to `https://eu.i.posthog.com`. The release workflow reads the GitHub Actions secret `POSTHOG_PROJECT_TOKEN`. The project token is embedded in the client; no private PostHog API credential is used.

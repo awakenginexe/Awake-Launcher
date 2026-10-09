@@ -59,7 +59,7 @@ QString ArchiveReader::File::filename()
     return decodeLibArchivePath(m_entry, archive_entry_pathname_utf8, archive_entry_pathname);
 }
 
-QByteArray ArchiveReader::File::readAll(int* outStatus)
+QByteArray ArchiveReader::File::readAll(int* outStatus, qint64 maxBytes)
 {
     QByteArray data;
     const void* buff = nullptr;
@@ -68,6 +68,11 @@ QByteArray ArchiveReader::File::readAll(int* outStatus)
 
     int status = 0;
     while ((status = archive_read_data_block(m_archive.get(), &buff, &size, &offset)) == ARCHIVE_OK) {
+        if (maxBytes >= 0 && (data.size() > maxBytes || size > static_cast<size_t>(maxBytes - data.size()))) {
+            data.clear();
+            status = ARCHIVE_FATAL;
+            break;
+        }
         data.append(static_cast<const char*>(buff), static_cast<qsizetype>(size));
     }
     if (status != ARCHIVE_EOF && status != ARCHIVE_OK) {

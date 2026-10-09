@@ -9,9 +9,11 @@
 #include <functional>
 #include <memory>
 #include "tasks/Task.h"
+#include "awake/LocalInstanceImport.h"
 
 class MinecraftInstance;
 class Task;
+class InstanceTask;
 class QTimer;
 namespace Awake::Web {
 class Assets;
@@ -44,6 +46,7 @@ public:
     Q_INVOKABLE QVariantMap packVersions(const QString& requestId, const QString& provider, const QString& packId);
     Q_INVOKABLE QVariantMap instancePackVersions(const QString& requestId, const QString& id);
     Q_INVOKABLE QVariantMap updateInstancePack(const QString& id, const QString& versionId);
+    Q_INVOKABLE QVariantMap linkInstancePack(const QString& requestId, const QString& id, const QString& provider, const QString& packId, const QString& versionId);
     Q_INVOKABLE QVariantMap modSearch(const QString& requestId, const QString& instanceId, const QString& provider, const QString& query, const QString& sort, int offset);
     Q_INVOKABLE QVariantMap modVersions(const QString& requestId, const QString& instanceId, const QString& provider, const QString& projectId);
     Q_INVOKABLE QVariantMap modPrepare(const QString& requestId, const QString& instanceId, const QVariantList& selections);
@@ -51,6 +54,8 @@ public:
     Q_INVOKABLE QVariantMap modCancel(const QString& requestId);
     Q_INVOKABLE QVariantMap minecraftVersions(const QString& requestId);
     Q_INVOKABLE QVariantMap browseArchive(const QString& requestId);
+    Q_INVOKABLE QVariantMap localInstances(const QString& requestId, const QString& source, bool browse);
+    InstanceTask* localImportTask(const QString& id, QString* error);
     Q_INVOKABLE QVariantMap instanceDetails(const QString& id, const QString& section);
     Q_INVOKABLE QVariantMap instanceCommand(const QString& id, const QString& command, const QVariant& payload);
     Q_INVOKABLE QVariantMap javaSettings(const QString& id);
@@ -90,6 +95,7 @@ private:
     Skins* m_skins = nullptr;
     Task::Ptr m_minecraftTask;
     Task::Ptr m_javaTask;
+    Task::Ptr m_packLinkTask;
     bool m_javaPending = false;
     Select m_select;
     Action m_action;
@@ -106,6 +112,8 @@ private:
     bool m_artworkFocused = false;
     bool m_modalActive = false;
     bool m_actionPending = false;
+    bool m_localScanning = false;
+    QHash<QString, LocalImport::Instance> m_localInstances;
     GpuDetector m_gpuDetector;
     QVariantMap m_gpuHardware;
     QSet<QString> m_gpuRequests;

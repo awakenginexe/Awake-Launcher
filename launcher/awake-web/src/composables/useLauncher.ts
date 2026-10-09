@@ -183,7 +183,7 @@ export function useLauncher() {
     let checkError: unknown;
     try {
       const details = await instanceDetails(id, 'versions') as { pack?: InstalledPack };
-      if (details.pack?.reminders) {
+      if (details.pack?.reminders && !details.pack.requiresLink) {
         const result = await queryCatalog('instancePackVersions', [id]);
         const version = availablePackUpdate(details.pack, result.versions);
         if (version) { packChoice.value = { id, pack: details.pack, version }; return; }
@@ -220,12 +220,16 @@ export function useLauncher() {
   const searchPacks = (provider: string, query: string, offset: number) => queryCatalog('searchPacks', [provider, query, offset]);
   const packVersions = (provider: string, id: string) => queryCatalog('packVersions', [provider, id]);
   const packService = {
+    search: searchPacks,
+    releases: packVersions,
+    link: (id: string, provider: string, packId: string, versionId: string) => queryCatalog('linkInstancePack', [id, provider, packId, versionId], { timeoutMs: 600_000 }),
     versions: (id: string) => queryCatalog('instancePackVersions', [id]),
     update: (id: string, version: string) => javaCall('updateInstancePack', [id, version]),
     reminder: (id: string, enabled: boolean) => instanceCommand(id, 'packReminder', { choice: enabled ? 'reset' : 'disable' }),
   };
   const minecraftVersions = () => queryCatalog('minecraftVersions', []);
   const browseArchive = () => queryCatalog('browseArchive', []);
+  const localInstances = (source: string, browse: boolean) => queryCatalog('localInstances', [source, browse], { timeoutMs: 600_000 });
   const javaService = {
     settings: (id: string) => javaCall('javaSettings', [id]),
     select: (id: string, profile: string) => javaCall('setJavaProfile', [id, profile]),
@@ -265,5 +269,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate };
+  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate };
 }

@@ -1227,9 +1227,27 @@ bool InstanceList::commitStagedInstance(const QString& path, const InstanceTask&
         QString destination = FS::PathCombine(targetDir, instID);
 
         if (shouldOverride) {
+            const auto root = QFileInfo(destination).canonicalFilePath();
+            for (const auto& relative : instanceTask.postCommitRemovals()) {
+                const auto file = QFileInfo(destination + '/' + relative);
+                if (root.isEmpty() || relative.isEmpty() || QDir::isAbsolutePath(relative) || relative.contains('\\') ||
+                    relative.contains(':') || relative.split('/').contains("..") || QDir::cleanPath(relative) != relative ||
+                    file.isSymLink() || file.isJunction() ||
+                    (file.exists() && (!file.isFile() || !file.canonicalFilePath().startsWith(root + '/'))) ||
+                    QFileInfo::exists(path + '/' + relative)) {
+                    qCritical() << "Invalid obsolete file in staged update:" << relative;
+                    return false;
+                }
+            }
             if (!FS::overrideFolder(destination, path)) {
                 qWarning() << "Failed to override" << path << "to" << destination;
                 return false;
+            }
+            for (const auto& relative : instanceTask.postCommitRemovals()) {
+                if (QFileInfo::exists(destination + '/' + relative) && !QFile::remove(destination + '/' + relative)) {
+                    qWarning() << "Failed to remove obsolete pack file:" << relative;
+                    return false;
+                }
             }
         } else {
             if (!FS::move(path, destination)) {

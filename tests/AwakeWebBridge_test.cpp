@@ -25,6 +25,7 @@
 #include <QGroupBox>
 #include <QDialogButtonBox>
 #include <QTcpServer>
+#include "archive/ArchiveWriter.h"
 #include <QTcpSocket>
 #include <memory>
 #include "Application.h"
@@ -39,6 +40,7 @@
 #include "awake/web/AwakeModCatalog.h"
 #include "minecraft/mod/tasks/GetModDependenciesTask.h"
 #include "InstanceImportTask.h"
+#include "awake/LocalInstanceImportTask.h"
 #include "modplatform/atlauncher/ATLPackInstallTask.h"
 #include "modplatform/ftb/FTBPackInstallTask.h"
 #include "modplatform/import_ftb/PackInstallTask.h"
@@ -693,6 +695,98 @@ private slots:
         QVERIFY(font.supportsCharacter(0x0e20));
         QVERIFY(font.supportsCharacter('A'));
     }
+    void localImportBuildsNativeInstanceAndRejectsUnscannedPaths()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        QString error;
+        QVERIFY(!bridge.localImportTask("C:/private/arbitrary", &error));
+        QVERIFY(!error.isEmpty());
+        QVERIFY(!bridge.localInstances("request", "unknown", false).value("ok").toBool());
+        QTemporaryDir source, destination;
+        QFile metadata(source.path() + "/minecraftinstance.json");
+        QVERIFY(metadata.open(QIODevice::WriteOnly));
+        metadata.write(R"({"name":"Original","gameVersion":"1.21.1","baseModLoader":{"name":"neoforge-21.1.248"},"isMemoryOverride":true,"allocatedMemory":6000,"installedModpack":{"addonID":123,"fileID":456,"name":"Online pack"}})");
+        metadata.close();
+        QVERIFY(QDir().mkpath(source.path() + "/saves/world"));
+        QFile world(source.path() + "/saves/world/level.dat"); QVERIFY(world.open(QIODevice::WriteOnly)); world.write("world"); world.close();
+        auto* settings = APPLICATION->settings();
+        const auto previous = settings->get("DownloadGameFilesDuringInstanceCreation");
+        const auto restore = qScopeGuard([&] { settings->set("DownloadGameFilesDuringInstanceCreation", previous); });
+        settings->set("DownloadGameFilesDuringInstanceCreation", false);
+        Awake::LocalImport::ImportTask task(Awake::LocalImport::inspect(source.path()));
+        task.setParentSettings(settings);
+        task.setStagingPath(destination.path() + "/new");
+        task.setName("Imported name");
+        task.start();
+        QTRY_VERIFY_WITH_TIMEOUT(task.isFinished(), 10000);
+        QVERIFY2(task.wasSuccessful(), qPrintable(task.failReason()));
+        MinecraftInstance imported(settings, std::make_unique<INISettingsObject>(destination.path() + "/new/instance.cfg"), destination.path() + "/new");
+        QCOMPARE(imported.name(), "Imported name");
+        QCOMPARE(imported.getManagedPackType(), QString("flame"));
+        QCOMPARE(imported.getManagedPackID(), QString("123"));
+        QCOMPARE(imported.getManagedPackVersionID(), QString("456"));
+        QVERIFY(imported.settings()->get("AwakePackLinkRequired").toBool());
+        QCOMPARE(imported.settings()->get("MaxMemAlloc").toInt(), 6000);
+        QVERIFY(imported.settings()->get("OverrideMemory").toBool());
+        QVERIFY(imported.getPackProfile()->reload(Net::Mode::Offline).has_value());
+        QVERIFY(imported.getPackProfile()->getComponent("net.minecraft"));
+        QCOMPARE(imported.getPackProfile()->getComponent("net.minecraft")->m_version, "1.21.1");
+        QVERIFY(imported.getPackProfile()->getComponent("net.neoforged"));
+        QCOMPARE(imported.getPackProfile()->getComponent("net.neoforged")->m_version, "21.1.248");
+        QVERIFY(QFile::exists(imported.gameRoot() + "/saves/world/level.dat"));
+        QVERIFY(QFile::exists(source.path() + "/saves/world/level.dat"));
+    }
+    void localPrismImportPinsVersionAndPreservesSource()
+    {
+        QTemporaryDir source, destination;
+        QFile config(source.path() + "/instance.cfg");
+        QVERIFY(config.open(QIODevice::WriteOnly));
+        config.write("InstanceType=OneSix\nname=Original\nUseLatestMinecraftVersion=true\nMaxMemAlloc=6000\nOverrideMemory=true\n"); config.close();
+        QFile manifest(source.path() + "/mmc-pack.json"); QVERIFY(manifest.open(QIODevice::WriteOnly));
+        manifest.write(R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.21.1"},{"uid":"net.fabricmc.fabric-loader","version":"0.16.14"}]})"); manifest.close();
+        QVERIFY(QDir().mkpath(source.path() + "/.minecraft"));
+        auto* settings = APPLICATION->settings();
+        const auto previous = settings->get("DownloadGameFilesDuringInstanceCreation");
+        const auto restore = qScopeGuard([&] { settings->set("DownloadGameFilesDuringInstanceCreation", previous); });
+        settings->set("DownloadGameFilesDuringInstanceCreation", false);
+        Awake::LocalImport::ImportTask task(Awake::LocalImport::inspect(source.path()));
+        task.setParentSettings(settings); task.setStagingPath(destination.path() + "/new"); task.setName("Imported");
+        task.start(); QTRY_VERIFY_WITH_TIMEOUT(task.isFinished(), 10000);
+        QVERIFY2(task.wasSuccessful(), qPrintable(task.failReason()));
+        MinecraftInstance imported(settings, std::make_unique<INISettingsObject>(destination.path() + "/new/instance.cfg"), destination.path() + "/new");
+        QVERIFY(!imported.settings()->get("UseLatestMinecraftVersion").toBool());
+        QCOMPARE(imported.settings()->get("MaxMemAlloc").toInt(), 6000);
+        QVERIFY(imported.getPackProfile()->reload(Net::Mode::Offline).has_value());
+        QVERIFY(imported.getPackProfile()->getComponent("net.minecraft"));
+        QCOMPARE(imported.getPackProfile()->getComponent("net.minecraft")->m_version, "1.21.1");
+        QVERIFY(config.open(QIODevice::ReadOnly)); QVERIFY(config.readAll().contains("UseLatestMinecraftVersion=true"));
+    }
+    void localScanRejectsVersionChanges()
+    {
+        QTemporaryDir data;
+        const auto previous = qgetenv("APPDATA");
+        const auto restore = qScopeGuard([&] { if (previous.isNull()) qunsetenv("APPDATA"); else qputenv("APPDATA", previous); });
+        qputenv("APPDATA", data.path().toUtf8());
+        const auto path = data.path() + "/ATLauncher/Instances/one";
+        QVERIFY(QDir().mkpath(path));
+        QFile metadata(path + "/instance.json"); QVERIFY(metadata.open(QIODevice::WriteOnly));
+        metadata.write(R"({"id":"1.21.1","launcher":{"name":"Original"}})"); metadata.close();
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        QSignalSpy finished(&bridge, &Bridge::catalogFinished);
+        QVERIFY(bridge.localInstances("scan-request", "atlauncher", false).value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 10000);
+        const auto rows = finished.first().at(1).toMap().value("localInstances").toList();
+        QCOMPARE(rows.size(), 1);
+        const auto id = rows.first().toMap().value("id").toString();
+        QString error;
+        std::unique_ptr<InstanceTask> valid(bridge.localImportTask(id, &error)); QVERIFY2(valid != nullptr, qPrintable(error));
+        QVERIFY(metadata.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        metadata.write(R"({"id":"1.21.4","launcher":{"name":"Original"}})"); metadata.close();
+        QVERIFY(!bridge.localImportTask(id, &error));
+        QVERIFY(error.contains("changed"));
+    }
     void editorUsesRealDataAndRejectsUnsafeCommands()
     {
         Assets assets;
@@ -1331,6 +1425,82 @@ private slots:
         QString error;
         QVERIFY(!catalog.createUpdateTask("curseforge", "untrusted", "untrusted", "one", nullptr, &error));
         QVERIFY(!error.isEmpty());
+        QVERIFY(!bridge.linkInstancePack("request", "one", "curseforge", "untrusted", "untrusted").value("ok").toBool());
+        QVERIFY(!catalog.createLinkTask("curseforge", "untrusted", "untrusted", instance, &error));
+    }
+    void stagedUpdatesRemoveObsoleteFilesAfterCommit()
+    {
+        class CleanupTask : public InstanceTask {
+        public:
+            CleanupTask(QString id, QString relative) { setName("Cleanup fixture"); setOverride(true, id); m_postCommitRemovals = {relative}; }
+        protected:
+            void executeTask() override { emitSucceeded(); }
+        };
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        QVERIFY(instance);
+        const auto obsolete = instance->gameRoot() + "/mods/obsolete.jar";
+        QVERIFY(QDir().mkpath(QFileInfo(obsolete).absolutePath()));
+        QFile file(obsolete); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("old mod"); file.close();
+        const auto relative = QDir(instance->instanceRoot()).relativeFilePath(obsolete);
+        CleanupTask task("one", relative);
+        task.setTargetDir(QFileInfo(instance->instanceRoot()).absolutePath());
+        const auto stage = APPLICATION->instances()->getStagedInstancePath(task.targetDir());
+        QVERIFY(!stage.isEmpty());
+        QVERIFY(APPLICATION->instances()->commitStagedInstance(stage, task, {}));
+        QVERIFY(!QFile::exists(obsolete));
+        const auto unsafeStage = APPLICATION->instances()->getStagedInstancePath(task.targetDir());
+        CleanupTask unsafe("one", "../outside.jar"); unsafe.setTargetDir(task.targetDir());
+        QVERIFY(!APPLICATION->instances()->commitStagedInstance(unsafeStage, unsafe, {}));
+    }
+    void linkingReleaseDownloadsOnlyMetadataAndPreservesFiles()
+    {
+        QTemporaryDir dir;
+        const auto root = dir.path() + "/instance";
+        QVERIFY(QDir().mkpath(root + "/minecraft/mods"));
+        const auto write = [](const QString& path, const QByteArray& bytes) {
+            QFile file(path); return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        QVERIFY(write(root + "/instance.cfg", "InstanceType=OneSix\nname=Imported pack\n"));
+        QVERIFY(write(root + "/mmc-pack.json", R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.21.1"},{"uid":"net.fabricmc.fabric-loader","version":"0.16.0"}]})"));
+        QVERIFY(write(root + "/minecraft/mods/custom.jar", "extra mod"));
+        MMCZip::ArchiveWriter zip(dir.path() + "/release.mrpack");
+        QVERIFY(zip.open());
+        QVERIFY(zip.addFile("modrinth.index.json", QByteArray(R"({"formatVersion":1,"game":"minecraft","versionId":"1.0","name":"Online pack","dependencies":{"minecraft":"1.21.1","fabric-loader":"0.16.0"},"files":[]})")));
+        QVERIFY(zip.addFile("overrides/options.txt", QByteArray("pack options")));
+        QVERIFY(zip.close());
+        QFile archive(dir.path() + "/release.mrpack"); QVERIFY(archive.open(QIODevice::ReadOnly));
+        const auto bytes = archive.readAll();
+        QTcpServer server; QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        int requests = 0;
+        connect(&server, &QTcpServer::newConnection, this, [&] {
+            auto* socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                if (!socket->readAll().contains("GET")) return;
+                ++requests;
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(bytes.size()) + "\r\nConnection: close\r\n\r\n" + bytes);
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        const auto proxy = APPLICATION->network()->proxy();
+        APPLICATION->network()->setProxy(QNetworkProxy::NoProxy);
+        const auto restore = qScopeGuard([&] { APPLICATION->network()->setProxy(proxy); });
+        MinecraftInstance instance(APPLICATION->settings(), std::make_unique<INISettingsObject>(root + "/instance.cfg"), root);
+        instance.settings()->set("AwakePackLinkRequired", true);
+        Awake::LocalImport::PackLinkTask task(&instance, {"modrinth", "project", "Online pack", "release", "1.0"},
+            QUrl(QString("http://127.0.0.1:%1/release.mrpack").arg(server.serverPort())));
+        task.start();
+        QTRY_VERIFY_WITH_TIMEOUT(task.isFinished(), 10000);
+        QVERIFY2(task.wasSuccessful(), qPrintable(task.failReason()));
+        QCOMPARE(requests, 1);
+        QCOMPARE(instance.getManagedPackID(), QString("project"));
+        QCOMPARE(instance.getManagedPackVersionID(), QString("release"));
+        QVERIFY(!instance.settings()->get("AwakePackLinkRequired").toBool());
+        QVERIFY(QFile::exists(root + "/mrpack/modrinth.index.json"));
+        QVERIFY(QFile::exists(root + "/minecraft/mods/custom.jar"));
+        QVERIFY(!QFile::exists(root + "/minecraft/options.txt"));
+        QVERIFY(instance.getPackProfile()->reload(Net::Mode::Offline).has_value());
+        QCOMPARE(instance.getPackProfile()->getComponent("net.minecraft")->m_version, QString("1.21.1"));
     }
     void providerRejectsUntrustedSelections()
     {

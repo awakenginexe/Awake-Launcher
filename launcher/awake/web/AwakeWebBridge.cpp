@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "AwakeWebBridge.h"
+#include "awake/LocalInstanceImportTask.h"
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
+#include <QUuid>
 #include "AwakeSkinManager.h"
 #include "AwakeWebAssets.h"
 #include "AwakeWebPolicy.h"
@@ -597,9 +601,9 @@ QVariantMap Bridge::instancePackVersions(const QString& requestId, const QString
 {
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!m_active || requestId.isEmpty() || requestId.size() > 64 || !instance || !instance->isManagedPack() ||
-        instance->getManagedPackID().isEmpty() || !QStringList{"flame", "modrinth"}.contains(instance->getManagedPackType()))
+        instance->getManagedPackID().isEmpty() || !QStringList{"flame", "modrinth", "atlauncher"}.contains(instance->getManagedPackType()))
         return {{"ok", false}, {"error", tr("This instance does not have a supported modpack update provider.")}};
-    const auto provider = instance->getManagedPackType() == "flame" ? QString("curseforge") : QString("modrinth");
+    const auto provider = instance->getManagedPackType() == "flame" ? QString("curseforge") : instance->getManagedPackType();
     m_packCatalog->installedVersions(requestId, provider, instance->getManagedPackID());
     return success();
 }
@@ -610,6 +614,8 @@ QVariantMap Bridge::updateInstancePack(const QString& id, const QString& version
     if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving() || m_modCatalog->busy(id) ||
         !instance || !instance->isManagedPack() || instance->isRunning() || !instance->canLaunch())
         return fail("updateInstancePack", tr("Stop the game and finish the current action before changing the pack version."));
+    if (instance->settings()->get("AwakePackLinkRequired").toBool())
+        return fail("updateInstancePack", tr("Link the installed pack release in Edit instance > Versions before updating."));
     const auto provider = instance->getManagedPackType() == "flame" ? QString("curseforge") : instance->getManagedPackType();
     QString error;
     auto* task = m_packCatalog->createUpdateTask(provider, instance->getManagedPackID(), versionId, id, nullptr, &error);
@@ -626,9 +632,12 @@ QVariantMap Bridge::updateInstancePack(const QString& id, const QString& version
         auto* target = APPLICATION->instances()->getInstanceById(id);
         if (!m_active || !target || target->isRunning() || !target->canLaunch()) { m_actionPending = false; return; }
         setModalActive(true);
+        auto warning = tr("Changing %1 to pack version %2 can replace pack files and may make worlds incompatible. Create a backup of this instance first.")
+            .arg(target->name(), owned->version());
+        if (target->getManagedPackType() == "atlauncher")
+            warning += tr("\n\nATLauncher packs apply their keep/delete rules. Added or disabled mods can be removed.");
         const auto response = CustomMessageBox::selectable(nullptr, tr("Change modpack version"),
-            tr("Changing %1 to pack version %2 can replace pack files and may make worlds incompatible. Create a backup of this instance first.\n\nContinue?")
-                .arg(target->name(), owned->version()),
+            warning + tr("\n\nContinue?"),
             QMessageBox::Warning, QMessageBox::Yes | QMessageBox::No, QMessageBox::No)->exec();
         target = APPLICATION->instances()->getInstanceById(id);
         if (response == QMessageBox::Yes && m_active && target && !target->isRunning() && target->canLaunch()) {
@@ -646,6 +655,29 @@ QVariantMap Bridge::updateInstancePack(const QString& id, const QString& version
         emit editorChanged(id, "versions");
         scheduleState();
     });
+    return success();
+}
+
+QVariantMap Bridge::linkInstancePack(const QString& requestId, const QString& id, const QString& provider, const QString& packId, const QString& versionId)
+{
+    auto* instance = APPLICATION->instances()->getInstanceById(id);
+    if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving() || m_modCatalog->busy(id) ||
+        requestId.isEmpty() || requestId.size() > 64 || !instance || instance->isRunning() ||
+        (instance->isManagedPack() && !instance->settings()->get("AwakePackLinkRequired").toBool()))
+        return {{"ok", false}, {"error", tr("Stop the game and select an unlinked instance before linking a pack.")}};
+    QString error;
+    auto* task = m_packCatalog->createLinkTask(provider, packId, versionId, instance, &error);
+    if (!task) return {{"ok", false}, {"error", error}};
+    m_packLinkTask.reset(task);
+    m_actionPending = true;
+    connect(task, &Task::finished, this, [this, requestId, id, task] {
+        m_actionPending = false;
+        emit catalogFinished(requestId, task->wasSuccessful() ? QVariantMap{{"ok", true}} : QVariantMap{{"ok", false}, {"error", task->failReason()}});
+        if (task->wasSuccessful()) emit editorChanged(id, "versions");
+        scheduleState();
+        QTimer::singleShot(0, this, [this, task] { if (m_packLinkTask.get() == task) m_packLinkTask.reset(); });
+    });
+    QTimer::singleShot(0, task, [task] { task->start(); });
     return success();
 }
 
@@ -737,6 +769,74 @@ QVariantMap Bridge::browseArchive(const QString& requestId)
             {"fileName", QFileInfo(file).fileName()}});
     });
     return success();
+}
+
+QVariantMap Bridge::localInstances(const QString& requestId, const QString& source, bool browse)
+{
+    const QSet<QString> sources{"auto", "curseforge", "atlauncher", "prism", "multimc", "ftb", "custom"};
+    if (!m_active || m_actionPending || m_localScanning || requestId.isEmpty() || requestId.size() > 64 || !sources.contains(source))
+        return {{"ok", false}, {"error", tr("Finish the current folder scan or native action first.")}};
+    m_localScanning = true;
+    QTimer::singleShot(0, this, [this, requestId, source, browse] {
+        QStringList locations;
+        if (browse) {
+            m_actionPending = true;
+            setModalActive(true);
+            const auto folder = QFileDialog::getExistingDirectory(nullptr,
+                tr("Select a launcher folder, Instances folder, or individual instance"), QDir::homePath());
+            setModalActive(false);
+            m_actionPending = false;
+            if (folder.isEmpty()) {
+                m_localScanning = false;
+                emit catalogFinished(requestId, {{"ok", true}, {"canceled", true}});
+                return;
+            }
+            locations << folder;
+        } else locations = LocalImport::defaultLocations(source);
+        auto* watcher = new QFutureWatcher<QList<LocalImport::Instance>>(this);
+        connect(watcher, &QFutureWatcher<QList<LocalImport::Instance>>::finished, this, [this, watcher, requestId] {
+            m_localScanning = false;
+            m_localInstances.clear();
+            QVariantList entries;
+            for (const auto& instance : watcher->result()) {
+                const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                m_localInstances.insert(id, instance);
+                entries.append(QVariantMap{{"id", id}, {"path", instance.path}, {"name", instance.name}, {"source", instance.source},
+                    {"minecraft", instance.minecraft}, {"loader", instance.loader}, {"loaderVersion", instance.loaderVersion}, {"error", instance.error}});
+            }
+            watcher->deleteLater();
+            emit catalogFinished(requestId, {{"ok", true}, {"localInstances", entries}});
+        });
+        watcher->setFuture(QtConcurrent::run([locations] {
+            QList<LocalImport::Instance> entries;
+            QSet<QString> seen;
+            for (const auto& location : locations) {
+                if (!QFileInfo(location).isDir()) continue;
+                for (const auto& instance : LocalImport::scan(location)) {
+                    const auto key = QFileInfo(instance.path).canonicalFilePath();
+                    if (!seen.contains(key)) { seen.insert(key); entries.append(instance); }
+                }
+            }
+            return entries;
+        }));
+    });
+    return success();
+}
+
+InstanceTask* Bridge::localImportTask(const QString& id, QString* error)
+{
+    const auto entry = m_localInstances.constFind(id);
+    if (m_localScanning || entry == m_localInstances.cend()) {
+        *error = tr("Select an instance from a completed local folder scan.");
+        return nullptr;
+    }
+    const auto fresh = LocalImport::inspect(entry->path);
+    if (!fresh.error.isEmpty()) { *error = fresh.error; return nullptr; }
+    if (fresh.minecraft != entry->minecraft || fresh.loader != entry->loader || fresh.loaderVersion != entry->loaderVersion || fresh.pack != entry->pack) {
+        *error = tr("The source instance changed. Scan the folder again before importing.");
+        return nullptr;
+    }
+    return new LocalImport::ImportTask(fresh);
 }
 
 QVariantMap Bridge::instanceDetails(const QString& id, const QString& section)

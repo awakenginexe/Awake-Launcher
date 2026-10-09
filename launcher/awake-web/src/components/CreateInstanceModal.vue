@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
-import type { CatalogResult, MinecraftVersion, PackEntry, PackVersion } from '../bridge/catalog.ts';
+import type { CatalogResult, LocalInstance, MinecraftVersion, PackEntry, PackVersion } from '../bridge/catalog.ts';
 import '../styles/pack-catalog.css';
 import grassIcon from '../assets/icons/grass.svg';
 import customIcon from '../assets/icons/custom.svg';
@@ -18,16 +18,19 @@ const props = defineProps<{
   packVersions: (provider: string, id: string) => Promise<CatalogResult>;
   minecraftVersions: () => Promise<CatalogResult>;
   browseArchive: () => Promise<CatalogResult>;
+  localInstances: (source: string, browse: boolean) => Promise<CatalogResult>;
 }>();
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'create-quick', payload: { name: string; version: string; loader: string; group: string }): void;
   (e: 'install-pack', payload: { provider: string; packId: string; versionId: string; name: string; group: string }): void;
   (e: 'import-archive', payload: { url: string; name: string; group: string }): void;
+  (e: 'import-local', payload: { id: string; name: string; group: string }): void;
 }>();
 const tabs = [
   { id: 'custom', label: 'Custom', icon: customIcon },
   { id: 'import', label: 'Import', icon: importIcon },
+  { id: 'local', label: 'Local import', icon: importIcon },
   { id: 'atlauncher', label: 'ATLauncher', icon: atlauncherIcon },
   { id: 'curseforge', label: 'CurseForge', icon: curseforgeIcon },
   { id: 'ftb', label: 'FTB', icon: ftbIcon },
@@ -59,28 +62,36 @@ const hasMore = ref(false);
 const nextOffset = ref(0);
 const importUrl = ref('');
 const importFileName = ref('');
+const localSource = ref('auto');
+const localEntries = ref<LocalInstance[]>([]);
+const selectedLocal = ref<LocalInstance | null>(null);
+const localLoading = ref(false);
+const localHelp = computed<MessageKey>(() => ({curseforge:'localCurseForgeHelp',atlauncher:'localATLauncherHelp',prism:'localPrismHelp',multimc:'localMultiMCHelp',ftb:'localFTBHelp'} as Record<string, MessageKey>)[localSource.value] || 'localCustomHelp');
+let localRevision = 0;
 const failedIcons = ref(new Set<string>());
 let searchRevision = 0;
 let versionRevision = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
-const providerTab = computed(() => !['custom', 'import'].includes(activeTab.value));
+const providerTab = computed(() => !['custom', 'import', 'local'].includes(activeTab.value));
 const tabLabel = (id: string) => {
   const tab = tabs.find(item => item.id === id);
   if (id === 'custom') return props.t('custom');
   if (id === 'import') return props.t('import');
+  if (id === 'local') return props.t('localImportTab');
   if (id === 'ftb-app') return props.t('ftbAppImport');
   return tab?.label || '';
 };
 const providerIcon = computed(() => tabs.find(tab => tab.id === activeTab.value)?.icon || grassIcon);
 const currentInstanceIcon = computed(() => selectedPack.value?.icon && !failedIcons.value.has(selectedPack.value.icon) ? selectedPack.value.icon : activeTab.value === 'custom' ? grassIcon : providerIcon.value);
-const suggestedName = computed(() => selectedPack.value?.name || (activeTab.value === 'import' ? importFileName.value.replace(/\.[^.]+$/, '') : selectedVersion.value ? `${selectedVersion.value}${selectedLoader.value === 'Vanilla' ? '' : ` ${selectedLoader.value}`}` : ''));
+const suggestedName = computed(() => activeTab.value === 'local' ? selectedLocal.value?.name || '' : selectedPack.value?.name || (activeTab.value === 'import' ? importFileName.value.replace(/\.[^.]+$/, '') : selectedVersion.value ? `${selectedVersion.value}${selectedLoader.value === 'Vanilla' ? '' : ` ${selectedLoader.value}`}` : ''));
 const displayName = computed(() => instanceName.value.trim() || suggestedName.value);
 const filteredVersions = computed(() => availableVersions.value.filter(v =>
   v.version.toLowerCase().includes(versionSearchQuery.value.toLowerCase()) && (v.type === 'release' ? filterReleases.value : filterSnapshots.value)));
-const canSubmit = computed(() => !props.busy && !loading.value && !versionsLoading.value && Boolean(displayName.value) &&
-  (activeTab.value === 'custom' ? Boolean(selectedVersion.value) : activeTab.value === 'import' ? Boolean(importUrl.value.trim()) : Boolean(selectedPack.value && packVersionId.value)));
+const canSubmit = computed(() => !props.busy && !loading.value && !localLoading.value && !versionsLoading.value && Boolean(displayName.value) &&
+  (activeTab.value === 'custom' ? Boolean(selectedVersion.value) : activeTab.value === 'import' ? Boolean(importUrl.value.trim()) : activeTab.value === 'local' ? Boolean(selectedLocal.value && !selectedLocal.value.error) : Boolean(selectedPack.value && packVersionId.value)));
 
 async function loadCatalog(append = false) {
+  if (activeTab.value === 'local') { loading.value = false; await findLocal(false); return; }
   clearTimeout(timer);
   const revision = ++searchRevision;
   const provider = activeTab.value;
@@ -130,16 +141,35 @@ async function browseArchive() {
     if (result.archiveUrl) { importUrl.value = result.archiveUrl; importFileName.value = result.fileName || ''; }
   } catch (problem) { error.value = problem instanceof Error && problem.message ? problem.message : props.t('archiveBrowseError'); }
 }
+async function findLocal(browse: boolean) {
+  const revision = ++localRevision;
+  localLoading.value = true;
+  error.value = '';
+  try {
+    const result = await props.localInstances(localSource.value, browse);
+    if (revision !== localRevision || result.canceled) return;
+    localEntries.value = result.localInstances || [];
+    selectedLocal.value = null;
+  } catch (problem) {
+    if (revision === localRevision) error.value = problem instanceof Error && problem.message ? problem.message : props.t('localScanError');
+  } finally { if (revision === localRevision) localLoading.value = false; }
+}
+function changeLocalSource() {
+  localEntries.value = []; selectedLocal.value = null; error.value = '';
+  if (localSource.value !== 'custom') void findLocal(false);
+}
 function submit() {
   if (!canSubmit.value) return;
   const shared = { name: displayName.value, group: instanceGroup.value.trim() };
   if (activeTab.value === 'custom') emit('create-quick', { ...shared, version: selectedVersion.value, loader: selectedLoader.value });
   else if (activeTab.value === 'import') emit('import-archive', { ...shared, url: importUrl.value.trim() });
+  else if (activeTab.value === 'local' && selectedLocal.value) emit('import-local', { ...shared, id: selectedLocal.value.id });
   else if (selectedPack.value) emit('install-pack', { ...shared, provider: activeTab.value, packId: selectedPack.value.id, versionId: packVersionId.value });
 }
 watch(() => props.initialTab, tab => { if (tab) activeTab.value = tab; });
 watch(activeTab, () => {
   clearTimeout(timer); ++searchRevision; ++versionRevision;
+  ++localRevision; localLoading.value = false;
   selectedPack.value = null; versions.value = []; packVersionId.value = ''; versionError.value = ''; versionsLoading.value = false;
   packSearchQuery.value = ''; void loadCatalog();
 }, { immediate: true });
@@ -148,7 +178,7 @@ watch(packSearchQuery, () => {
   selectedPack.value = null; packs.value = []; versions.value = []; packVersionId.value = ''; hasMore.value = false; versionsLoading.value = false;
   if (providerTab.value) { loading.value = true; timer = setTimeout(() => void loadCatalog(), 300); }
 }, { flush: 'sync' });
-onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision; });
+onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision; ++localRevision; });
 </script>
 
 <template>
@@ -171,7 +201,7 @@ onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision;
       <div class="create-workspace-body">
         <aside class="platform-sidebar" :aria-label="t('sources')"><button v-for="tab in tabs" :key="tab.id" :data-source="tab.id" class="platform-tab" :class="{ 'is-active': activeTab === tab.id }" type="button" @click="activeTab = tab.id"><span class="platform-icon"><img :src="tab.icon" class="platform-tab-icon" alt="" /></span><span class="platform-label">{{ tabLabel(tab.id) }}</span><span v-if="activeTab === tab.id" class="active-chevron">›</span></button></aside>
         <div class="platform-content">
-          <div v-if="error" class="catalog-status" role="alert"><p>{{ error }}</p><button class="btn-subtle" type="button" @click="loadCatalog()">{{ t('retry') }}</button></div>
+          <div v-if="error" class="catalog-status" role="alert"><p>{{ error }}</p><button class="btn-subtle" type="button" @click="activeTab === 'local' ? findLocal(localSource === 'custom') : loadCatalog()">{{ t('retry') }}</button></div>
           <div v-if="activeTab === 'custom'" class="tab-pane-container">
             <div class="custom-tab-header"><h3>{{ t('custom') }}</h3><p class="custom-subtitle-text">{{ t('customSubtitle') }}</p></div>
             <div class="version-search-box"><input v-model="versionSearchQuery" type="search" class="version-search-input" :placeholder="t('searchVersions')" :aria-label="t('searchVersions')" /></div>
@@ -183,6 +213,26 @@ onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision;
           <div v-else-if="activeTab === 'import'" class="tab-pane-container">
             <div class="custom-tab-header"><h3>{{ t('import') }}</h3><p class="custom-subtitle-text">{{ t('importExplanation') }}</p></div>
             <div class="import-panel"><button class="import-drop-zone" type="button" @click="browseArchive">{{ t('browseLocalArchive') }}</button><p v-if="importFileName" class="selected-file-badge">{{ importFileName }}</p><label for="import-url">{{ t('archiveUrl') }}</label><input id="import-url" v-model="importUrl" type="text" class="glass-input" :placeholder="t('archiveUrlPlaceholder')" /></div>
+          </div>
+          <div v-else-if="activeTab === 'local'" class="tab-pane-container local-import-pane">
+            <div class="custom-tab-header"><h3>{{ t('localImport') }}</h3><p class="local-folder-help">{{ t('localImportExplanation') }}</p></div>
+            <div class="local-source-controls">
+              <label for="local-source">{{ t('localSource') }}</label>
+              <select id="local-source" v-model="localSource" class="glass-select" :disabled="localLoading" aria-describedby="local-folder-help" @change="changeLocalSource">
+                <option value="auto">{{ t('localAutoDetect') }}</option><option value="curseforge">CurseForge</option><option value="atlauncher">ATLauncher</option><option value="prism">Prism Launcher</option><option value="multimc">MultiMC</option><option value="ftb">FTB App</option><option value="custom">{{ t('localCustomLocation') }}</option>
+              </select>
+              <button id="browse-local-folder" class="btn-subtle" type="button" :disabled="localLoading" @click="findLocal(true)">{{ t('localBrowseFolder') }}</button>
+              <button class="btn-subtle" type="button" :disabled="localLoading || localSource === 'custom'" @click="findLocal(false)">{{ t('localDetect') }}</button>
+            </div>
+            <p id="local-folder-help" class="local-folder-help">{{ t(localHelp) }}</p>
+            <div class="local-instance-list" :aria-busy="localLoading">
+              <p v-if="localLoading" class="catalog-status" role="status">{{ t('working') }}</p>
+              <p v-else-if="!localEntries.length" class="catalog-status">{{ t('localNoInstances') }}</p>
+              <div v-for="entry in localEntries" :key="entry.id" class="local-instance-row" :class="{ 'is-selected': selectedLocal?.id === entry.id }">
+                <div class="modpack-info"><h4>{{ entry.name }}</h4><p class="modpack-meta">{{ [entry.source, entry.minecraft, entry.loader.replace('net.fabricmc.fabric-loader', 'Fabric').replace('org.quiltmc.quilt-loader', 'Quilt').replace('net.neoforged', 'NeoForge').replace('net.minecraftforge', 'Forge'), entry.loaderVersion].filter(Boolean).join(' · ') }}</p><p class="local-instance-path">{{ entry.path }}</p><p v-if="entry.error" class="local-instance-error">{{ entry.error }}</p></div>
+                <button class="btn-subtle" type="button" :disabled="localLoading || Boolean(entry.error)" :aria-pressed="selectedLocal?.id === entry.id" @click="selectedLocal = entry">{{ selectedLocal?.id === entry.id ? t('packSelected') : t('selectPack') }}</button>
+              </div>
+            </div>
           </div>
           <div v-else class="tab-pane-container">
             <div class="platform-catalog-wrap">

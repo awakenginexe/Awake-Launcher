@@ -39,6 +39,7 @@ class InstanceTask : public Task {
     bool shouldOverride() const { return m_overrideExisting; }
 
     QString originalInstanceID() const { return m_originalInstanceId; };
+    QStringList postCommitRemovals() const { return m_postCommitRemovals; }
 
     QString modifiedName() const;
     QString originalName() const;
@@ -75,6 +76,7 @@ class InstanceTask : public Task {
     QString m_modifiedName;
 
     QStringList m_filesToRemove;
+    QStringList m_postCommitRemovals;
     ShouldDeleteSaves m_shouldDeleteSaves{};
 
     Task::Ptr m_gameFilesTask;

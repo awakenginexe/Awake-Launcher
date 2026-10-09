@@ -107,10 +107,11 @@ QVariantMap InstanceEditor::details(const QString& instanceId, const QString& se
             {"useGlobalJvmArgs", !settings->get("OverrideJavaArgs").toBool()}});
     } else if (section == "versions" || section == "overview") {
         const auto type = instance->getManagedPackType();
-        if (instance->isManagedPack() && !instance->getManagedPackID().isEmpty() && QStringList{"flame", "modrinth"}.contains(type)) {
+        if (instance->isManagedPack() && !instance->getManagedPackID().isEmpty() && QStringList{"flame", "modrinth", "atlauncher"}.contains(type)) {
             result.insert("pack", QVariantMap{{"provider", type == "flame" ? "curseforge" : type},
                 {"name", instance->getManagedPackName()}, {"versionId", instance->getManagedPackVersionID()},
                 {"versionName", instance->getManagedPackVersionName()},
+                {"requiresLink", instance->settings()->get("AwakePackLinkRequired")},
                 {"reminders", instance->settings()->get("AwakePackUpdateReminders")},
                 {"skippedVersion", instance->settings()->get("AwakeSkippedPackVersion")}});
         }

@@ -6,6 +6,8 @@
 #include <memory>
 
 class InstanceTask;
+class Task;
+class MinecraftInstance;
 class QWidget;
 
 namespace Awake::Web {
@@ -21,6 +23,7 @@ public:
     void installedVersions(QString requestId, QString provider, QString packId);
     InstanceTask* createUpdateTask(QString provider, QString packId, QString versionId, QString instanceId, QWidget* parent, QString* error);
     InstanceTask* createTask(QString provider, QString packId, QString versionId, QWidget* parent, QString* error);
+    Task* createLinkTask(QString provider, QString packId, QString versionId, MinecraftInstance* instance, QString* error);
 
 signals:
     void finished(QString requestId, QVariantMap response);

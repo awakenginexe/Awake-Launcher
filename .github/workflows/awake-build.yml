@@ -134,8 +134,9 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Fixed a startup race that left the selected instance's background blank and stuck on "Loading screenshot..." until the instance was clicked.
-          - The bundled Minecraft wallpaper now appears when an instance has no screenshots, including when the native artwork finishes loading before the web interface connects.
+          - Import installed instances from CurseForge, ATLauncher, Prism Launcher, MultiMC, FTB App, or a custom folder. Browse any drive or detect common data locations; the original instance stays intact.
+          - Link an imported instance to its exact online pack and installed release in Edit instance > Versions to continue update checks and confirmed version changes.
+          - Supports CurseForge, Modrinth, and native ATLauncher pack updates. ATLauncher updates apply the pack's keep/delete rules and can remove added or disabled mods; back up before changing versions.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

@@ -3,6 +3,7 @@ import type { PackVersion } from '../../bridge/catalog.ts';
 export interface InstalledPack {
   provider: string; name: string; versionId: string; versionName: string;
   reminders: boolean; skippedVersion: string;
+  requiresLink?: boolean;
 }
 
 export function availablePackUpdate(pack: InstalledPack, versions: PackVersion[]): PackVersion | undefined {

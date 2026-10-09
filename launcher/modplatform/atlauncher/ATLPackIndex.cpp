@@ -30,6 +30,12 @@ Result<> loadIndexedVersion(ATLauncher::IndexedVersion& v, const QJsonObject& ob
 }
 }  // namespace
 
+QString ATLauncher::packId(QString name)
+{
+    static const QRegularExpression pattern("[^A-Za-z0-9]");
+    return name.remove(pattern);
+}
+
 Result<> ATLauncher::loadIndexedPack(ATLauncher::IndexedPack& m, QJsonObject& obj)
 {
     TRY_INTO(m.id, Json::requireInteger(obj, "id"))

@@ -5,6 +5,9 @@ import type { InstalledPack } from '../features/library/packUpdates.ts';
 import type { CatalogResult, PackVersion } from '../bridge/catalog.ts';
 
 export interface PackService {
+  search: (provider: string, query: string, offset: number) => Promise<CatalogResult>;
+  releases: (provider: string, id: string) => Promise<CatalogResult>;
+  link: (id: string, provider: string, packId: string, versionId: string) => Promise<unknown>;
   versions: (id: string) => Promise<CatalogResult>;
   update: (id: string, version: string) => Promise<unknown>;
   reminder: (id: string, enabled: boolean) => Promise<unknown>;
@@ -56,7 +59,7 @@ onMounted(check);
       <select :id="`pack-version-${id}`" v-model="selected" class="glass-input" :disabled="loading || !versions.length">
         <option v-for="version in versions" :key="version.id" :value="version.id">{{ [version.name, version.minecraft, version.loader].filter(Boolean).join(' · ') }}{{ version.id === pack.versionId ? ` (${t('packInstalled')})` : '' }}</option>
       </select>
-      <button class="btn-primary" :disabled="loading || running || !selected || selected === pack.versionId" @click="update">{{ t('packChangeVersion') }}</button>
+      <button class="btn-primary" :disabled="loading || running || pack.requiresLink || !selected || selected === pack.versionId" @click="update">{{ t('packChangeVersion') }}</button>
     </div>
     <p v-if="!loading && !versions.length && !error" class="editor-hint">{{ t('noPackVersions') }}</p>
     <p v-if="error" role="alert">{{ error }}</p>

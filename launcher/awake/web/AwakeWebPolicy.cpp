@@ -41,7 +41,7 @@ bool actionAllowed(const QString& action)
 {
     static const QSet<QString> actions{
         "create", "import", "edit", "folder", "accounts", "settings", "manage", "launch",
-        "rename", "changeGroup", "copy", "export", "delete", "kill", "installPack", "importArchive",
+        "rename", "changeGroup", "copy", "export", "delete", "kill", "installPack", "importArchive", "importLocal",
         "launchOptions", "application", "logs", "legacy",
         "addMicrosoft", "addOffline", "removeAccount", "setDefaultAccount", "refreshAccount", "createQuick",
         "windowMinimize", "windowMaximize", "windowClose",

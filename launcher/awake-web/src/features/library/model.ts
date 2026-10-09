@@ -32,6 +32,7 @@ export type Action =
   | 'createQuick'
   | 'installPack'
   | 'importArchive'
+  | 'importLocal'
   | 'windowMinimize'
   | 'windowMaximize'
   | 'windowClose'

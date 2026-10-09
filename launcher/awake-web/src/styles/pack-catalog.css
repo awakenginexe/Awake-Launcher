@@ -23,3 +23,12 @@
 .create-instance-window .create-workspace-body { height: min(340px, 45vh); min-height: 140px; flex: 1; }
 .create-instance-window .platform-content { min-width: 0; overflow: hidden; }
 .create-instance-window .pack-version-selection { flex-shrink: 0; }
+.local-import-pane { display: flex; flex-direction: column; min-height: 0; }
+.local-source-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.local-source-controls select { flex: 1; min-width: 130px; }
+.local-folder-help { color: var(--text-secondary); font-size: 12px; line-height: 1.5; margin: 10px 0; }
+.local-instance-list { overflow: auto; min-height: 60px; flex: 1; }
+.local-instance-row { display: flex; align-items: center; gap: 12px; padding: 10px; border-bottom: 1px solid var(--border); }
+.local-instance-row.is-selected { background: var(--surface); }
+.local-instance-path, .local-instance-error { overflow-wrap: anywhere; font-size: 12px; margin: 4px 0; }
+.local-instance-path { color: var(--text-secondary); }

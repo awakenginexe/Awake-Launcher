@@ -15,7 +15,7 @@ import SkinsModal from './components/SkinsModal.vue';
 import PackUpdateModal from './components/PackUpdateModal.vue';
 import { formatPlaytime, formatLastPlayed } from './features/library/playtime.ts';
 
-const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate } = useLauncher();
+const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -365,11 +365,13 @@ onUnmounted(() => {
         :pack-versions="packVersions"
         :minecraft-versions="minecraftVersions"
         :browse-archive="browseArchive"
+        :local-instances="localInstances"
         :t="t"
         @close="showCreate = false"
         @create-quick="payload => { showCreate = false; action('createQuick', JSON.stringify(payload)); }"
         @install-pack="payload => { showCreate = false; action('installPack', JSON.stringify(payload)); }"
         @import-archive="payload => { showCreate = false; action('importArchive', JSON.stringify(payload)); }"
+        @import-local="payload => { showCreate = false; action('importLocal', JSON.stringify(payload)); }"
       />
     </Transition>
 

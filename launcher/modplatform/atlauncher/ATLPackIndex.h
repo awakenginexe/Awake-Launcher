@@ -42,6 +42,7 @@ struct IndexedPack {
 };
 
 Result<> loadIndexedPack(IndexedPack& m, QJsonObject& obj);
+QString packId(QString name);
 }  // namespace ATLauncher
 
 Q_DECLARE_METATYPE(ATLauncher::IndexedPack)

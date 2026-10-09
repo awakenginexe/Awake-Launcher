@@ -48,6 +48,10 @@ set(CORE_SOURCES
     InstanceCopyTask.cpp
     InstanceImportTask.h
     InstanceImportTask.cpp
+    awake/LocalInstanceImport.h
+    awake/LocalInstanceImport.cpp
+    awake/LocalInstanceImportTask.h
+    awake/LocalInstanceImportTask.cpp
 
     # Resource downloading task
     ResourceDownloadTask.h
