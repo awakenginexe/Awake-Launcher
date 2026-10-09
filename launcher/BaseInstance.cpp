@@ -297,6 +297,7 @@ void BaseInstance::setRunning(bool running)
 void BaseInstance::setMinecraftRunning(bool running)
 {
     if (!settings()->get("RecordGameTime").toBool()) {
+        m_timeStarted = {};
         return;
     }
 
@@ -304,8 +305,10 @@ void BaseInstance::setMinecraftRunning(bool running)
         m_timeStarted = QDateTime::currentDateTime();
         setLastLaunch(m_timeStarted.toMSecsSinceEpoch());
     } else {
+        if (!m_timeStarted.isValid()) return;
         QDateTime timeEnded = QDateTime::currentDateTime();
-        qint64 secondsPlayed = m_timeStarted.secsTo(timeEnded);
+        qint64 secondsPlayed = qMax<qint64>(0, m_timeStarted.secsTo(timeEnded));
+        m_timeStarted = {};
 
         qint64 current = settings()->get("totalTimePlayed").toLongLong();
         settings()->set("totalTimePlayed", current + secondsPlayed);
@@ -323,18 +326,18 @@ void BaseInstance::setMinecraftRunning(bool running)
 int64_t BaseInstance::totalTimePlayed() const
 {
     qint64 current = m_settings->get("totalTimePlayed").toLongLong();
-    if (m_isRunning) {
+    if (m_isRunning && m_timeStarted.isValid() && m_settings->get("RecordGameTime").toBool()) {
         QDateTime timeNow = QDateTime::currentDateTime();
-        return current + m_timeStarted.secsTo(timeNow);
+        return current + qMax<qint64>(0, m_timeStarted.secsTo(timeNow));
     }
     return current;
 }
 
 int64_t BaseInstance::lastTimePlayed() const
 {
-    if (m_isRunning) {
+    if (m_isRunning && m_timeStarted.isValid() && m_settings->get("RecordGameTime").toBool()) {
         QDateTime timeNow = QDateTime::currentDateTime();
-        return m_timeStarted.secsTo(timeNow);
+        return qMax<qint64>(0, m_timeStarted.secsTo(timeNow));
     }
     return m_settings->get("lastTimePlayed").toLongLong();
 }

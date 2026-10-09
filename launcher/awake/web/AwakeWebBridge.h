@@ -98,6 +98,7 @@ private:
     QString m_artworkId, m_artworkUrl;
     QString m_artworkPath;
     QTimer* m_artworkTimer = nullptr;
+    QTimer* m_playtimeTimer = nullptr;
     std::shared_ptr<std::atomic_bool> m_canceled;
     quint64 m_artworkGeneration = 0;
     bool m_stateScheduled = false;

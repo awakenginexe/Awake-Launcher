@@ -145,6 +145,33 @@ async function chooseDropdown(page, id, value) {
   await page.locator(`#${id}-listbox [data-value="${value}"]`).click();
 }
 try {
+  {
+    const page = await browser.newPage({viewport:{width:1100,height:750}});
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`${origin}/?count=2&locale=en_US`);
+    await page.locator('#play:not(:disabled)').waitFor();
+    const expectedDate = await page.evaluate(() => {
+      const { state, host } = window.__nativeTest;
+      Object.assign(state.instances[0], {lastLaunch: Date.UTC(2026, 9, 9, 12, 30), lastTimePlayed: 61, totalTimePlayed: 1800});
+      Object.assign(state.instances[1], {lastLaunch: Date.UTC(2026, 9, 8, 8), lastTimePlayed: 120, totalTimePlayed: 3600});
+      host.stateChanged.emit(structuredClone(state));
+      return new Intl.DateTimeFormat('en', {dateStyle:'medium',timeStyle:'short'}).format(state.instances[0].lastLaunch);
+    });
+    await page.waitForFunction(() => document.querySelector('.library-playtime strong')?.textContent === '1h 30m');
+    assert.deepEqual(await page.locator('.instance-playtime dd').allTextContents(), [expectedDate, '1m 1s', '30m']);
+    await page.locator('#instance-search').fill('Fixture 00');
+    assert.equal(await page.locator('.instance-row').count(), 1);
+    assert.equal(await page.locator('.library-playtime strong').textContent(), '1h 30m');
+    await page.locator('#instance-search').fill('');
+    await page.locator('.instance-select').nth(1).click();
+    await page.waitForFunction(() => document.querySelectorAll('.instance-playtime dd')[1]?.textContent === '2m');
+    assert.equal(await page.locator('.instance-playtime dd').nth(2).textContent(), '1h');
+    assert.equal(await page.locator('.library-playtime strong').textContent(), '1h 30m');
+    await page.locator('.more-actions summary').click();
+    assert.equal(await page.locator('.more-actions .action-menu button').count(), 3);
+    assert.equal(await page.locator('.more-actions').getByText('Open classic interface').count(), 0);
+    await page.close();
+  }
   for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
     const page = await browser.newPage({viewport:{width:1100,height:750}});
     page.on('pageerror', error => errors.push(error.message));

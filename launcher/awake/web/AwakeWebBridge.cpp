@@ -68,6 +68,11 @@ Bridge::Bridge(Assets* assets, Select select, Action action, QObject* parent, Gp
     m_artworkTimer = new QTimer(this);
     m_artworkTimer->setObjectName("awakeArtworkTimer");
     m_artworkTimer->setInterval(60'000);
+    m_playtimeTimer = new QTimer(this);
+    m_playtimeTimer->setObjectName("awakePlaytimeTimer");
+    m_playtimeTimer->setSingleShot(true);
+    m_playtimeTimer->setInterval(10'000);
+    connect(m_playtimeTimer, &QTimer::timeout, this, &Bridge::scheduleState);
     connect(m_artworkTimer, &QTimer::timeout, this, [this] {
         if (m_active && m_artworkFocused && !m_artworkId.isEmpty()) loadArtwork(m_artworkId);
     });
@@ -168,6 +173,7 @@ QVariantMap Bridge::snapshot()
     auto* instances = APPLICATION->instances();
     const auto pins = APPLICATION->settings()->get("AwakePinnedInstances").toStringList();
     QSet<QString> liveIds;
+    bool running = false;
     for (int i = 0; i < instances->count(); ++i) {
         auto* instance = instances->at(i);
         InstanceData data;
@@ -179,8 +185,10 @@ QVariantMap Bridge::snapshot()
         data.pinned = pins.contains(data.id);
         data.canLaunch = instance->canLaunch();
         data.running = instance->isRunning();
+        running = running || data.running;
         data.broken = instance->hasVersionBroken();
         data.lastLaunch = instance->lastLaunch();
+        data.lastTimePlayed = instance->lastTimePlayed();
         data.totalTimePlayed = instance->totalTimePlayed();
         if (auto* profile = instance->getPackProfile()) {
             data.minecraftVersion = componentVersion(profile->getComponent("net.minecraft"));
@@ -196,6 +204,8 @@ QVariantMap Bridge::snapshot()
         }
         list.append(instanceDto(data));
     }
+    if (m_active && running) m_playtimeTimer->start();
+    else m_playtimeTimer->stop();
     for (auto it = m_icons.begin(); it != m_icons.end();) {
         if (!liveIds.contains(it.key())) {
             if (m_assets) m_assets->removeImage(it.value().second);
@@ -759,6 +769,7 @@ void Bridge::setActive(bool active)
     m_active = active;
     if (!active) {
         m_artworkTimer->stop();
+        m_playtimeTimer->stop();
         if (m_canceled) m_canceled->store(true);
         ++m_artworkGeneration;
     } else {

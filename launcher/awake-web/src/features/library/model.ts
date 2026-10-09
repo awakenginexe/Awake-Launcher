@@ -88,7 +88,7 @@ export interface LauncherSettings {
 export interface Instance {
   id: string; name: string; group: string; minecraftVersion: string; loader: string; loaderVersion: string;
   iconUrl: string; pinned: boolean; canLaunch: boolean; running: boolean; broken: boolean;
-  lastLaunch: number; totalTimePlayed: number;
+  lastLaunch: number; lastTimePlayed: number | null; totalTimePlayed: number;
 }
 export interface Snapshot {
   instances: Instance[]; selectedId: string; locale: Locale; reducedMotion: boolean; compact: boolean;
@@ -147,10 +147,11 @@ export function parseSnapshot(value: unknown): Snapshot {
     for (const key of ['id', 'name', 'group', 'minecraftVersion', 'loader', 'loaderVersion', 'iconUrl']) if (typeof fields[key] !== 'string') return fail();
     for (const key of ['pinned', 'canLaunch', 'running', 'broken']) if (typeof fields[key] !== 'boolean') return fail();
     for (const key of ['lastLaunch', 'totalTimePlayed']) if (typeof fields[key] !== 'number' || !Number.isFinite(fields[key]) || fields[key] < 0) return fail();
+    if (fields.lastTimePlayed != null && (typeof fields.lastTimePlayed !== 'number' || !Number.isFinite(fields.lastTimePlayed) || fields.lastTimePlayed < 0)) return fail();
     const instance = fields as unknown as Instance;
     if (!instance.id || ids.has(instance.id)) return fail();
     ids.add(instance.id);
-    return { ...instance, iconUrl: isLocalImage(instance.iconUrl) ? instance.iconUrl : '' };
+    return { ...instance, lastTimePlayed: instance.lastTimePlayed ?? null, iconUrl: isLocalImage(instance.iconUrl) ? instance.iconUrl : '' };
   });
 
   const accounts: AccountItem[] = Array.isArray(data.accounts)

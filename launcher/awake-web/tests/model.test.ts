@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { normalizeLocale, catalogs } from '../src/i18n/catalogs.ts';
 import { presentInstances, parseSnapshot, emptySnapshot, acceptSnapshot, isLocalImage, ArtworkSequence } from '../src/features/library/model.ts';
 
-const make = (id: string, name: string, extra = {}) => ({ id, name, group: '', minecraftVersion: '', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, totalTimePlayed: 0, ...extra });
+const make = (id: string, name: string, extra = {}) => ({ id, name, group: '', minecraftVersion: '', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, lastTimePlayed: null, totalTimePlayed: 0, ...extra });
 test('snapshot retains deletion status even after the instance disappears from the library', () => {
   const deletion = { active: true, id: 'removed', name: 'Removing instance' };
   assert.deepEqual(parseSnapshot({ ...emptySnapshot(), deletion }).deletion, deletion);
@@ -42,6 +42,13 @@ test('state signal wins over an older initial snapshot response', () => {
   const signaled = { ...original, accountName: 'From signal' };
   assert.equal(acceptSnapshot(signaled, original, 1, 0), signaled);
   assert.equal(acceptSnapshot(original, signaled, 0, 0), signaled);
+});
+test('last session time comes from the native snapshot and missing history stays unknown', () => {
+  const read = (extra: Record<string, unknown>) => parseSnapshot({ ...emptySnapshot(), instances: [make('one', 'One', extra)] }).instances[0];
+  assert.equal(read({ lastTimePlayed: 3661 }).lastTimePlayed, 3661);
+  assert.equal(read({ lastTimePlayed: undefined }).lastTimePlayed, null);
+  assert.equal(read({ lastTimePlayed: null }).lastTimePlayed, null);
+  for (const value of [-1, Infinity, '60', false]) assert.throws(() => read({ lastTimePlayed: value }));
 });
 test('artwork accepts only host-authorized local URLs and ignores stale decodes', () => {
   assert.equal(isLocalImage('awake://ui/artwork/123'), true);

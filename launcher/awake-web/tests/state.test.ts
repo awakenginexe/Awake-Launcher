@@ -10,7 +10,7 @@ class Signal {
   disconnect(listener: (...args: unknown[]) => void) { this.listeners.delete(listener); }
   emit(...args: unknown[]) { for (const listener of this.listeners) listener(...args); }
 }
-const instance = { id: 'one', name: 'One', group: '', minecraftVersion: '', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, totalTimePlayed: 0 };
+const instance = { id: 'one', name: 'One', group: '', minecraftVersion: '', loader: '', loaderVersion: '', iconUrl: '', pinned: false, canLaunch: true, running: false, broken: false, lastLaunch: 0, lastTimePlayed: 0, totalTimePlayed: 0 };
 function environment(overrides: Record<string, unknown> = {}) {
   const calls: string[] = [];
   const stateChanged = new Signal();
@@ -50,6 +50,23 @@ test('new state signal wins over initial snapshot and preference callback never 
   assert.equal(fixture.launcher.state.value.compact, false);
   fixture.stateChanged.emit({ ...fixture.snapshot, compact: true });
   assert.equal(fixture.launcher.state.value.compact, true);
+  fixture.scope.stop();
+});
+test('combined playtime includes every instance, regardless of selection, pins or group', async () => {
+  const fixture = environment();
+  await fixture.launcher.connect();
+  const instances = [
+    { ...instance, totalTimePlayed: 120, lastTimePlayed: 60, group: 'Mods', pinned: true },
+    { ...instance, id: 'two', totalTimePlayed: 3600, lastTimePlayed: 300, group: 'Other' },
+  ];
+  fixture.stateChanged.emit({ ...fixture.snapshot, instances, selectedId: 'one' });
+  assert.equal(fixture.launcher.totalPlaytime.value, 3720);
+  fixture.stateChanged.emit({ ...fixture.snapshot, instances, selectedId: 'two' });
+  assert.equal(fixture.launcher.totalPlaytime.value, 3720);
+  fixture.stateChanged.emit({ ...fixture.snapshot, instances: [instances[1]], selectedId: 'two' });
+  assert.equal(fixture.launcher.totalPlaytime.value, 3600);
+  fixture.stateChanged.emit({ ...fixture.snapshot, instances: [] });
+  assert.equal(fixture.launcher.totalPlaytime.value, 0);
   fixture.scope.stop();
 });
 test('failed launch shows detail and retry repeats the real operation', async () => {

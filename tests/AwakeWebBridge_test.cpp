@@ -47,6 +47,7 @@
 #include "modplatform/technic/SolderPackInstallTask.h"
 #include "minecraft/MinecraftInstance.h"
 #include "settings/SettingsObject.h"
+#include "settings/INISettingsObject.h"
 #include "translations/TranslationsModel.h"
 #include "ui/MainWindow.h"
 #include "ui/InstanceWindow.h"
@@ -82,6 +83,75 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void playtimeDoesNotCountPreparingOrCompletedSessionsTwice()
+    {
+        class TimedInstance : public MinecraftInstance {
+        public:
+            using MinecraftInstance::MinecraftInstance;
+            void startedAt(const QDateTime& started) { m_timeStarted = started; }
+        };
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        TimedInstance instance(APPLICATION->settings(), std::make_unique<INISettingsObject>(directory.filePath("instance.cfg")), directory.path());
+        auto* settings = instance.settings();
+        settings->set("OverrideGameTime", true);
+        settings->set("RecordGameTime", true);
+        settings->set("CountGameTime", false);
+        settings->set("totalTimePlayed", 100);
+        settings->set("lastTimePlayed", 20);
+        instance.setRunning(true);
+        QCOMPARE(instance.totalTimePlayed(), 100LL);
+        QCOMPARE(instance.lastTimePlayed(), 20LL);
+        instance.setMinecraftRunning(true);
+        instance.startedAt(QDateTime::currentDateTime().addSecs(-10));
+        QVERIFY(instance.lastTimePlayed() >= 10);
+        instance.setMinecraftRunning(false);
+        const auto session = settings->get("lastTimePlayed").toLongLong();
+        const auto total = settings->get("totalTimePlayed").toLongLong();
+        QVERIFY(session >= 10);
+        QCOMPARE(total, 100 + session);
+        QCOMPARE(instance.totalTimePlayed(), total);
+        QCOMPARE(instance.lastTimePlayed(), session);
+        instance.setMinecraftRunning(false);
+        QCOMPARE(instance.totalTimePlayed(), total);
+        instance.startedAt(QDateTime::currentDateTime().addSecs(10));
+        QCOMPARE(instance.totalTimePlayed(), total);
+        QCOMPARE(instance.lastTimePlayed(), 0LL);
+        instance.setMinecraftRunning(false);
+        QCOMPARE(instance.totalTimePlayed(), total);
+        settings->set("RecordGameTime", false);
+        instance.startedAt(QDateTime::currentDateTime().addSecs(-60));
+        QCOMPARE(instance.totalTimePlayed(), total);
+        instance.setMinecraftRunning(false);
+        QCOMPARE(settings->get("totalTimePlayed").toLongLong(), total);
+        instance.setRunning(false);
+    }
+    void playtimeRefreshStopsWhenInactiveOrNoInstancesAreRunning()
+    {
+        Assets assets;
+        Bridge bridge(&assets, [](const QString&) { return true; }, [](const QString&, const QString&) { return QVariantMap{{"ok", true}}; });
+        auto* instance = APPLICATION->instances()->getInstanceById("one");
+        QVERIFY(instance);
+        const auto wasRunning = instance->isRunning();
+        const auto restore = qScopeGuard([&] { instance->setRunning(wasRunning); });
+        auto* timer = bridge.findChild<QTimer*>("awakePlaytimeTimer");
+        QVERIFY(timer);
+        QVERIFY(timer->isSingleShot());
+        instance->setRunning(true);
+        auto rows = bridge.snapshot().value("instances").toList();
+        for (const auto& row : rows) {
+            if (row.toMap().value("id").toString() == "one")
+                QCOMPARE(row.toMap().value("lastTimePlayed").toLongLong(), instance->lastTimePlayed());
+        }
+        QVERIFY(timer->isActive());
+        bridge.setActive(false);
+        QVERIFY(!timer->isActive());
+        bridge.setActive(true);
+        QTRY_VERIFY(timer->isActive());
+        instance->setRunning(false);
+        bridge.snapshot();
+        QVERIFY(!timer->isActive());
+    }
     void pendingPinnedDependenciesAreDeduplicated()
     {
         auto* instance = dynamic_cast<MinecraftInstance*>(APPLICATION->instances()->getInstanceById("one"));

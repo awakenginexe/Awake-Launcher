@@ -102,6 +102,7 @@ QVariantMap instanceDto(const InstanceData& i)
     return {{"id", i.id}, {"name", i.name}, {"group", i.group}, {"minecraftVersion", i.minecraftVersion},
             {"loader", i.loader}, {"loaderVersion", i.loaderVersion}, {"iconUrl", i.iconUrl}, {"pinned", i.pinned},
             {"canLaunch", i.canLaunch}, {"running", i.running}, {"broken", i.broken},
-            {"lastLaunch", i.lastLaunch}, {"totalTimePlayed", i.totalTimePlayed}};
+            {"lastLaunch", i.lastLaunch}, {"lastTimePlayed", i.lastTimePlayed >= 0 ? QVariant::fromValue(i.lastTimePlayed) : QVariant{}},
+            {"totalTimePlayed", i.totalTimePlayed}};
 }
 }

@@ -30,6 +30,7 @@ export function useLauncher() {
   const systemMotion = ref(matchMedia('(prefers-reduced-motion: reduce)').matches);
   const reducedMotion = computed(() => systemMotion.value || state.value.reducedMotion);
   const selected = computed(() => state.value.instances.find(i => i.id === state.value.selectedId));
+  const totalPlaytime = computed(() => state.value.instances.reduce((total, instance) => total + instance.totalTimePlayed, 0));
   const t = (key: MessageKey): string => catalogs[state.value.locale][key] || catalogs.en[key];
   let native: NativeObject | null = null;
   let catalog: CatalogClient | null = null;
@@ -264,5 +265,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate };
+  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate };
 }

@@ -13,8 +13,9 @@ import UpdateModal from './components/UpdateModal.vue';
 import GpuLaunchModal from './components/GpuLaunchModal.vue';
 import SkinsModal from './components/SkinsModal.vue';
 import PackUpdateModal from './components/PackUpdateModal.vue';
+import { formatPlaytime, formatLastPlayed } from './features/library/playtime.ts';
 
-const { state, status, selected, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate } = useLauncher();
+const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -244,6 +245,7 @@ onUnmounted(() => {
       </div>
 
       <footer class="navigation-footer">
+        <p v-if="status === 'ready'" class="library-playtime"><span>{{ t('allInstancesPlaytime') }}</span><strong>{{ formatPlaytime(totalPlaytime, state.locale) }}</strong></p>
         <button class="quiet" :disabled="!enabled" @click="openSkins()">{{ t('skins') }}</button>
         <div class="creation-actions"><button :disabled="!enabled" @click="openCreate('custom')">{{ t('create') }}</button><button class="quiet" :disabled="!enabled" @click="openCreate('import')">{{ t('import') }}</button></div>
         <div class="account-actions"><button class="quiet account-button" :disabled="!enabled" @click="showAccounts = true"><span>{{ t('accounts') }}</span><span class="account-name">{{ state.accountName || t('accountUnavailable') }}</span></button><button class="settings-button" :disabled="!enabled" :title="t('settings')" :aria-label="t('settings')" @click="showSettings = true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg></button></div>
@@ -267,6 +269,11 @@ onUnmounted(() => {
             <p v-if="selected.group" class="selected-group">{{ selected.group }}</p>
             <h1>{{ selected.name }}</h1>
             <p v-if="metadata.length" class="selected-meta">{{ metadata.join(' · ') }}</p>
+            <dl class="instance-playtime">
+              <div><dt>{{ t('lastPlayed') }}</dt><dd>{{ formatLastPlayed(selected.lastLaunch, state.locale) || t('noRecordedSession') }}</dd></div>
+              <div><dt>{{ t('lastSession') }}</dt><dd>{{ selected.lastLaunch ? formatPlaytime(selected.lastTimePlayed, state.locale) : '—' }}</dd></div>
+              <div><dt>{{ t('instanceTotalPlaytime') }}</dt><dd>{{ formatPlaytime(selected.totalTimePlayed, state.locale) }}</dd></div>
+            </dl>
             <div class="identity-actions"><button class="quiet" :disabled="!enabled" @click="openEditor(selected)">{{ t('edit') }}</button><button class="quiet" :disabled="!enabled" @click="action('folder', selected.id)">{{ t('folder') }}</button></div>
           </div>
         </Transition>
@@ -274,7 +281,7 @@ onUnmounted(() => {
         <div class="launch-dock glass">
           <p class="launch-status" role="status">{{ busy ? t('working') : t(selectedStatus) }}</p>
           <button id="play" class="play-button" :disabled="!canPlay" @click="launch()"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="m5 3 11 7-11 7Z" /></svg>{{ t(selected.running ? 'running' : 'play') }}</button>
-          <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button><button :disabled="!enabled" @click="closePopovers(); action('legacy')">{{ t('legacy') }}</button></div></details>
+          <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button></div></details>
         </div>
       </div>
     </section>

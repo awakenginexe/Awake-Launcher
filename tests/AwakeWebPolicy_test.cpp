@@ -51,11 +51,15 @@ private slots:
         instance.id = "one";
         instance.name = "Thai ไทย 中文";
         instance.lastLaunch = 1000;
+        instance.lastTimePlayed = 12;
         instance.totalTimePlayed = 42;
         auto dto = instanceDto(instance);
-        QCOMPARE(dto.size(), 13);
+        QCOMPARE(dto.size(), 14);
         QCOMPARE(dto.value("name").toString(), instance.name);
         QCOMPARE(dto.value("lastLaunch").toLongLong(), 1000LL);
+        QCOMPARE(dto.value("lastTimePlayed").toLongLong(), 12LL);
+        instance.lastTimePlayed = -12;
+        QVERIFY(instanceDto(instance).value("lastTimePlayed").isNull());
         QCOMPARE(dto.value("totalTimePlayed").toLongLong(), 42LL);
         QCOMPARE(dto.value("minecraftVersion").toString(), QString());
         QVERIFY(!dto.contains("gameRoot"));
