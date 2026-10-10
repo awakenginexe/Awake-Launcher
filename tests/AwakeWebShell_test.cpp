@@ -99,8 +99,10 @@ class AwakeWebShellTest : public QObject {
         DXGI_ADAPTER_DESC1 description{};
         QVERIFY(SUCCEEDED(adapter1->GetDesc1(&description)));
         QVERIFY(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE);
+        QVERIFY(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-gpu"));
         QVERIFY(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-partial-raster"));
-        QVERIFY(evaluate("Boolean(document.createElement('canvas').getContext('webgl'))").toBool());
+        QVERIFY(!evaluate("Boolean(document.createElement('canvas').getContext('webgl'))").toBool());
+        QVERIFY(evaluate("Boolean(document.createElement('canvas').getContext('2d'))").toBool());
 #else
         QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
 #endif
@@ -481,8 +483,8 @@ class AwakeWebShellTest : public QObject {
         QTest::qWait(400);
         const auto rect = evaluate(R"((() => {
             const r = document.querySelector('.modal-dialog').getBoundingClientRect();
-            const input = document.querySelector('.inline-offline-box').getBoundingClientRect();
-            return {x:r.x+10, y:r.y+10, width:r.width-20, height:input.y-r.y-20};
+            // Check the gutter through every row without including the changing input or button.
+            return {x:r.x+3, y:r.y+10, width:14, height:r.height-20};
         })())").toMap();
         const auto ratio = view->devicePixelRatioF();
         const QRect unchangedArea(qRound(rect.value("x").toDouble() * ratio), qRound(rect.value("y").toDouble() * ratio),

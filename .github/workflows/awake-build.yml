@@ -134,8 +134,8 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Add a Windows rendering workaround for UI corruption when typing in or focusing textboxes, including the offline-account dialog. Disable partial rasterization while retaining the D3D11 software compositor.
-          - Add a native regression check for dialog pixels during offline-username typing and textbox focus changes. The reported intermittent glitch still needs confirmation on affected systems.
+          - Fix the brief horizontal UI corruption when focusing, unfocusing, or typing in textboxes on Windows. Render WebEngine pages in software while retaining Qt's D3D11 WARP window compositor. The affected user confirmed no glitch with this rendering configuration.
+          - Extend the native repaint check through the textbox row and verify that the software page renderer still supports the 2D skin preview. Software page rendering may use more CPU during animations or scrolling.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes
