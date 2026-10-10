@@ -99,6 +99,7 @@ class AwakeWebShellTest : public QObject {
         DXGI_ADAPTER_DESC1 description{};
         QVERIFY(SUCCEEDED(adapter1->GetDesc1(&description)));
         QVERIFY(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE);
+        QVERIFY(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-partial-raster"));
         QVERIFY(evaluate("Boolean(document.createElement('canvas').getContext('webgl'))").toBool());
 #else
         QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
@@ -467,6 +468,63 @@ class AwakeWebShellTest : public QObject {
         evaluate("document.querySelector('.modal-close-btn').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.empty-accounts') === null").toBool());
         for (const auto& account : previousAccounts) accounts->addAccount(account);
+    }
+    void offlineTextboxRepaintsKeepTheAccountDialogIntact()
+    {
+        auto cleanup = qScopeGuard([&] { evaluate("document.querySelector('.modal-close-btn')?.click()"); });
+        evaluate("document.querySelector('.account-button').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.modal-footer .btn-subtle') !== null").toBool());
+        evaluate("document.querySelector('.modal-footer .btn-subtle').click()");
+        QTRY_VERIFY(evaluate("document.querySelector('.inline-offline-box input') !== null").toBool());
+        evaluate("document.querySelector('.inline-offline-box input').focus()");
+        QTRY_VERIFY(evaluate("document.activeElement.matches('.inline-offline-box input')").toBool());
+        QTest::qWait(400);
+        const auto rect = evaluate(R"((() => {
+            const r = document.querySelector('.modal-dialog').getBoundingClientRect();
+            const input = document.querySelector('.inline-offline-box').getBoundingClientRect();
+            return {x:r.x+10, y:r.y+10, width:r.width-20, height:input.y-r.y-20};
+        })())").toMap();
+        const auto ratio = view->devicePixelRatioF();
+        const QRect unchangedArea(qRound(rect.value("x").toDouble() * ratio), qRound(rect.value("y").toDouble() * ratio),
+                           qRound(rect.value("width").toDouble() * ratio), qRound(rect.value("height").toDouble() * ratio));
+        const auto before = view->grab().toImage().copy(unchangedArea);
+        QVERIFY(!before.isNull());
+        const auto intact = [&] {
+            const auto after = view->grab().toImage().copy(unchangedArea);
+            if (after.size() != before.size()) return false;
+            // WARP can round a few unchanged color channels differently between frames.
+            for (int y = 0; y < before.height(); ++y) {
+                for (int x = 0; x < before.width(); ++x) {
+                    const auto a = before.pixel(x, y), b = after.pixel(x, y);
+                    if (qAbs(qRed(a)-qRed(b)) > 2 || qAbs(qGreen(a)-qGreen(b)) > 2 || qAbs(qBlue(a)-qBlue(b)) > 2)
+                        return false;
+                }
+            }
+            return true;
+        };
+        auto* inputTarget = QApplication::focusWidget();
+        QVERIFY(inputTarget);
+        const QString username = "awake_test";
+        for (const auto letter : username) {
+            QTest::keyClicks(inputTarget, QString(letter));
+            QTest::qWait(35);
+            QVERIFY2(intact(), "Typing damaged pixels outside the offline username field");
+        }
+        QCOMPARE(evaluate("document.querySelector('.inline-offline-box input').value").toString(), username);
+        const QPoint outside(qRound(rect.value("x").toDouble() + 20), qRound(rect.value("y").toDouble() + 20));
+        QTest::mouseClick(inputTarget, Qt::LeftButton, Qt::NoModifier, inputTarget->mapFrom(view, outside));
+        QTRY_VERIFY(evaluate("!document.activeElement.matches('.inline-offline-box input')").toBool());
+        QTest::qWait(100);
+        QVERIFY2(intact(), "Unfocusing the textbox damaged the account dialog");
+        const auto input = evaluate(R"((() => {
+            const r = document.querySelector('.inline-offline-box input').getBoundingClientRect();
+            return {x:r.x+r.width/2, y:r.y+r.height/2};
+        })())").toMap();
+        const QPoint inside(qRound(input.value("x").toDouble()), qRound(input.value("y").toDouble()));
+        QTest::mouseClick(inputTarget, Qt::LeftButton, Qt::NoModifier, inputTarget->mapFrom(view, inside));
+        QTRY_VERIFY(evaluate("document.activeElement.matches('.inline-offline-box input')").toBool());
+        QTest::qWait(100);
+        QVERIFY2(intact(), "Refocusing the textbox damaged the account dialog");
     }
     void nativeFolderUsesSelectedInstanceOnly()
     {

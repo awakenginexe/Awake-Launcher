@@ -20,7 +20,11 @@ void initialize()
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
     auto flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
     if (!flags.split(' ').contains("--ignore-gpu-blocklist"))
-        qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags + " --ignore-gpu-blocklist");
+        flags += " --ignore-gpu-blocklist";
+    // Avoid reusing partially rasterized tiles across textbox focus/caret repaints on WARP.
+    if (!flags.split(' ').contains("--disable-partial-raster"))
+        flags += " --disable-partial-raster";
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
 #endif
     QWebEngineUrlScheme scheme("awake");
     scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);
