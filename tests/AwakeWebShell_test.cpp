@@ -422,14 +422,15 @@ class AwakeWebShellTest : public QObject {
         evaluate("document.querySelector('.account-actions .settings-button').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.settings-dialog') !== null").toBool());
         evaluate("document.querySelectorAll('.settings-tab-btn')[1].click()");
-        QTRY_COMPARE(evaluate("document.querySelectorAll('.ram-preset').length").toInt(), 9);
+        evaluate("document.querySelector('.settings-tab-btn[data-tab=memory]').click()");
+        QTRY_COMPARE(evaluate("document.querySelectorAll('.ram-preset').length").toInt(), 16);
         const auto previous = APPLICATION->settings()->get("MaxMemAlloc");
         const auto overrideMb = HardwareInfo::installedRamMiB() + 1024;
         evaluate(QString("(() => { const input = document.querySelector('.settings-dialog input[type=number]'); input.value = '%1'; input.dispatchEvent(new Event('change', {bubbles:true})); })()")
                      .arg(overrideMb));
         QTRY_COMPARE(APPLICATION->settings()->get("MaxMemAlloc").toULongLong(), overrideMb);
         bridge->setPreference("maxMem", previous);
-        evaluate("document.querySelectorAll('.settings-tab-btn')[3].click()");
+        evaluate("document.querySelectorAll('.settings-tab-btn')[4].click()");
         QTRY_VERIFY(evaluate("document.querySelector('.brand-logo')?.complete && document.querySelector('.brand-logo')?.naturalWidth > 0").toBool());
         QCOMPARE(evaluate("document.querySelector('.brand-version').textContent.trim()").toString(), BuildConfig.versionString());
         QTest::qWait(150);

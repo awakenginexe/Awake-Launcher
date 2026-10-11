@@ -13,9 +13,10 @@ export interface JavaService {
   browse: (id: string) => Promise<unknown>;
 }
 const props = defineProps<{ instanceId?: string; revision?: number; service: JavaService; t: (key: MessageKey) => string }>();
+const emit = defineEmits<{ (event: 'loaded'): void }>();
 const options: { id: string; name: string | MessageKey; translated?: boolean; badge: MessageKey; description: MessageKey }[] = [
-  { id: 'awake', name: 'Awake Optimized', badge: 'javaRecommended', description: 'javaAwakeDescription' },
-  { id: 'minecraft', name: 'Minecraft Default', badge: 'javaMostCompatible', description: 'javaMinecraftDescription' },
+  { id: 'awake', name: 'javaAwake', translated: true, badge: 'javaRecommended', description: 'javaAwakeDescription' },
+  { id: 'minecraft', name: 'javaMinecraft', translated: true, badge: 'javaMostCompatible', description: 'javaMinecraftDescription' },
   { id: 'microsoft', name: 'Microsoft OpenJDK', badge: 'javaPerformanceCompatibility', description: 'javaProviderDescription' },
   { id: 'graalvm', name: 'GraalVM', badge: 'javaExperimentalPerformance', description: 'javaGraalDescription' },
   { id: 'temurin', name: 'Eclipse Temurin', badge: 'javaStable', description: 'javaProviderDescription' },
@@ -37,7 +38,7 @@ async function load() {
     if (!result.ok) throw new Error(result.error || props.t('editorReadError'));
     data.value = result;
   } catch (reason) { error.value = reason instanceof Error ? reason.message : String(reason); }
-  finally { working.value = false; }
+  finally { working.value = false; emit('loaded'); }
 }
 async function select(profile: string, browse = false) {
   if (working.value || data.value?.running) return;

@@ -376,7 +376,7 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="modal">
-      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" :pack-service="packService" @close="editingInstance = null" />
+      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :total-memory-mb="state.totalMemoryMb" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" :pack-service="packService" @close="editingInstance = null" />
     </Transition>
 
     <Transition name="modal">

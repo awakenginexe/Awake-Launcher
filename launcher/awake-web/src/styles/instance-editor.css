@@ -53,7 +53,7 @@
 @media (max-width: 680px) {
   .instance-editor-window { padding: 12px; width: 96vw; }
   .editor-workspace { flex-direction: column; gap: 10px; }
-  .editor-sidebar { width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden; }
+  .instance-editor-window .editor-sidebar { width: 100%; flex-direction: row; flex: 0 0 auto; overflow-x: auto; overflow-y: hidden; }
   .editor-sidebar .platform-tab { flex-shrink: 0; }
   .editor-footer .secondary-note { font-size: .7rem; }
   .editor-file-row { gap: 8px; }

@@ -1266,6 +1266,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   color: var(--text-muted);
 }
 
+.settings-dialog .setting-hint, .editor-settings .setting-hint { color: var(--text-secondary); }
+
 /* Styled Inputs */
 .styled-input {
   background: rgba(14, 25, 42, 0.7);

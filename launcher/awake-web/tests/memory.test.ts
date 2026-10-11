@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryRisk, presetFits } from '../src/features/library/memory.ts';
+import { ramPresets, memoryRisk, presetFits } from '../src/features/library/memory.ts';
+
+test('memory shortcuts include every even size from 2 to 32 GB', () => {
+  assert.deepEqual(ramPresets.map(preset => preset.mb), [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32].map(gb => gb * 1024));
+  for (const gb of [10, 14, 18, 22, 26, 28, 30]) {
+    assert.equal(ramPresets.find(preset => preset.mb === gb * 1024)?.label, `${gb} GB`);
+  }
+});
 
 test('32 GB follows the requested safe, caution and danger choices', () => {
   for (const gb of [2, 4, 6, 8, 12, 16]) assert.equal(memoryRisk(gb * 1024, 32768), 'safe');

@@ -7,6 +7,7 @@ import '../styles/instance-editor.css';
 import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
 import JvmPresetPicker from './JvmPresetPicker.vue';
+import MemoryPresets from './MemoryPresets.vue';
 import { jvmPresets, type JvmPreset } from '../features/library/jvm.ts';
 import ModBrowserModal from './ModBrowserModal.vue';
 import type { ModService } from '../bridge/mods.ts';
@@ -20,7 +21,7 @@ interface EditorSettings { minMemory: number; maxMemory: number; width: number; 
 interface JvmConfig { jvmArgs: string; jvmPreset: JvmPreset }
 interface Details { ok: boolean; error?: string; field?: string; rows?: Row[]; text?: string; settings?: EditorSettings; running?: boolean; pack?: InstalledPack; jvmConfig?: { local: JvmConfig; global: JvmConfig } }
 const props = defineProps<{
-  instance: Instance; initialSection?: string; revision?: number; busy: boolean; t: (key: MessageKey) => string;
+  instance: Instance; initialSection?: string; revision?: number; busy: boolean; totalMemoryMb: number; t: (key: MessageKey) => string;
   details: (id: string, section: string) => Promise<unknown>;
   command: (id: string, command: string, payload?: unknown) => Promise<unknown>;
   javaService: JavaService;
@@ -33,7 +34,7 @@ const sections: { id: string; label: MessageKey }[] = [
   { id: 'versions', label: 'editorVersions' }, { id: 'mods', label: 'editorMods' },
   { id: 'resourcepacks', label: 'editorResourcePacks' }, { id: 'shaderpacks', label: 'editorShaderPacks' },
   { id: 'worlds', label: 'editorWorlds' }, { id: 'screenshots', label: 'editorScreenshots' },
-  { id: 'notes', label: 'editorNotes' }, { id: 'java', label: 'javaRuntime' }, { id: 'settings', label: 'settings' }, { id: 'otherlogs', label: 'editorOtherLogs' },
+  { id: 'notes', label: 'editorNotes' }, { id: 'java', label: 'javaRuntime' }, { id: 'memory', label: 'editorMemory' }, { id: 'settings', label: 'settings' }, { id: 'otherlogs', label: 'editorOtherLogs' },
 ];
 const section = ref(props.initialSection || 'overview');
 const data = ref<Details | null>(null);
@@ -64,8 +65,9 @@ const title = computed(() => props.t(sections.find(item => item.id === section.v
 const disabled = computed(() => props.busy || working.value || loading.value);
 const rows = computed(() => (data.value?.rows || []).filter(row => `${row.name} ${row.detail || ''}`.toLowerCase().includes(filter.value.toLowerCase())));
 const fileSection = computed(() => ['mods', 'resourcepacks', 'shaderpacks'].includes(section.value));
-const dirty = computed(() => section.value === 'notes' ? notes.value !== savedNotes.value : section.value === 'settings' && JSON.stringify(settings.value) !== savedSettings.value);
-const editable = computed(() => section.value === 'settings' || section.value === 'notes');
+const settingsSection = computed(() => ['java', 'memory', 'settings'].includes(section.value));
+const dirty = computed(() => section.value === 'notes' ? notes.value !== savedNotes.value : settingsSection.value && JSON.stringify(settings.value) !== savedSettings.value);
+const editable = computed(() => settingsSection.value || section.value === 'notes');
 const settingsLocked = computed(() => working.value || props.instance.running);
 const validationErrors = computed(() => {
   const value = settings.value;
@@ -87,6 +89,10 @@ const validationErrors = computed(() => {
 const visibleErrors = computed(() => ({ ...(validationAttempted.value ? validationErrors.value : {}), ...fieldErrors.value }));
 
 async function focusError(field?: string) {
+  if (field && Object.keys(settings.value || {}).includes(field)) {
+    section.value = ['overrideMemory', 'minMemory', 'maxMemory'].includes(field) ? 'memory'
+      : ['jvmArgs', 'jvmPreset', 'useGlobalJvmArgs'].includes(field) ? 'java' : 'settings';
+  }
   await nextTick();
   const group = field && Object.keys(settings.value || {}).includes(field) ? dialog.value?.querySelector<HTMLElement>(`[data-setting="${field}"]`) : null;
   const target = group?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled), button:not(:disabled)') || group || dialog.value?.querySelector<HTMLElement>('.editor-error');
@@ -107,15 +113,14 @@ async function load(quiet = false) {
   const request = ++revision;
   const activeSection = section.value;
   if (!quiet) { loading.value = true; data.value = null; error.value = ''; fieldErrors.value = {}; validationAttempted.value = false; }
-  if (activeSection === 'java') { loading.value = false; data.value = { ok: true }; return; }
   try {
-    const result = await props.details(props.instance.id, activeSection) as Details;
+    const result = await props.details(props.instance.id, settingsSection.value ? 'settings' : activeSection) as Details;
     if (closed || request !== revision) return;
     if (!result.ok) throw new Error(result.error || props.t('editorReadError'));
     data.value = result;
     error.value = '';
     if (activeSection === 'notes') notes.value = savedNotes.value = result.text || '';
-    if (activeSection === 'settings') {
+    if (['java', 'memory', 'settings'].includes(activeSection)) {
       settings.value = result.settings ? { ...result.settings } : null;
       localJvm = result.jvmConfig?.local ? { ...result.jvmConfig.local } : undefined;
       savedSettings.value = JSON.stringify(settings.value);
@@ -163,7 +168,7 @@ async function run(name: string, payload?: unknown, refresh = true) {
 async function save() {
   if (disabled.value) return false;
   if (!dirty.value) return true;
-  if (section.value === 'settings') {
+  if (settingsSection.value) {
     validationAttempted.value = true;
     fieldErrors.value = {};
     const firstError = Object.keys(validationErrors.value)[0];
@@ -268,24 +273,25 @@ onUnmounted(() => {
           <p v-if="feedback" class="editor-feedback" role="status">{{ feedback }}</p>
           <p v-if="loading" class="editor-message" role="status">{{ t('working') }}</p>
           <template v-else-if="data">
-            <JavaPicker v-if="section === 'java'" :instance-id="instance.id" :revision="revision" :service="javaService" :t="t" />
-            <template v-else-if="section === 'log'">
+            <template v-if="section === 'log'">
               <div class="editor-toolbar"><button class="btn-subtle" :disabled="disabled || !data.text" @click="run('copyLog', undefined, false)">{{ t('editorCopy') }}</button><button class="btn-subtle" :disabled="disabled || !data.text || !data.running" :title="!data.running ? t('editorClearLogHint') : undefined" @click="run('clearLog')">{{ t('editorClear') }}</button><label class="check"><input v-model="wrap" type="checkbox" />{{ t('editorWrapLines') }}</label><span class="editor-live-status">{{ data.running ? t('running') : t('editorStopped') }}</span></div>
               <pre v-if="data.text" class="editor-console" :class="{ 'wrap-lines': wrap }" tabindex="0" :aria-label="t('editorMinecraftConsole')">{{ data.text }}</pre><p v-else class="editor-message">{{ t('editorNoConsoleOutput') }}</p>
             </template>
             <template v-else-if="section === 'notes'"><label class="visually-hidden" for="editor-notes">{{ t('editorNotes') }}</label><textarea id="editor-notes" v-model="notes" class="glass-input editor-notes" :disabled="working" :placeholder="t('editorNotesPlaceholder')"></textarea></template>
-            <template v-else-if="section === 'settings'">
+            <template v-else-if="settingsSection">
+              <JavaPicker v-if="section === 'java'" :instance-id="instance.id" :revision="revision" :service="javaService" :t="t" @loaded="Object.keys(visibleErrors).length && focusError(Object.keys(visibleErrors)[0])" />
               <div v-if="settings" class="editor-settings">
-                <fieldset><legend>{{ t('editorMemory') }}</legend>
-                  <p v-if="instance.running" class="editor-hint" role="status">{{ t('editorStopGameSettings') }}</p>
+                <p v-if="instance.running" class="editor-hint" role="status">{{ t('editorStopGameSettings') }}</p>
+                <fieldset v-if="section === 'memory'"><legend>{{ t('editorMemory') }}</legend>
                   <label class="check" data-setting="overrideMemory" tabindex="-1"><input v-model="settings.overrideMemory" type="checkbox" :disabled="settingsLocked" :aria-invalid="Boolean(visibleErrors.overrideMemory)" :aria-describedby="visibleErrors.overrideMemory ? 'editor-memory-switch-error' : undefined" />{{ t('editorUseInstanceMemory') }}<span v-if="visibleErrors.overrideMemory" id="editor-memory-switch-error" class="editor-field-error" role="alert">{{ visibleErrors.overrideMemory }}</span></label>
                   <p v-if="!settings.overrideMemory" class="editor-hint editor-inheritance">{{ t('editorGlobalMemory') }}</p>
+                  <MemoryPresets v-model="settings.maxMemory" :total-memory-mb="totalMemoryMb" :disabled="settingsLocked || !settings.overrideMemory" :t="t" />
                   <div class="editor-fields">
                     <label data-setting="minMemory" tabindex="-1">{{ t('editorMinimumMemory') }}<input v-model.number="settings.minMemory" class="glass-input" type="number" min="128" max="1048576" :disabled="settingsLocked || !settings.overrideMemory" :aria-invalid="Boolean(visibleErrors.minMemory)" :aria-describedby="visibleErrors.minMemory ? 'editor-min-memory-error' : undefined" /><span v-if="visibleErrors.minMemory" id="editor-min-memory-error" class="editor-field-error" role="alert">{{ visibleErrors.minMemory }}</span></label>
                     <label data-setting="maxMemory" tabindex="-1">{{ t('editorMaximumMemory') }}<input v-model.number="settings.maxMemory" class="glass-input" type="number" min="128" max="1048576" :disabled="settingsLocked || !settings.overrideMemory" :aria-invalid="Boolean(visibleErrors.maxMemory)" :aria-describedby="visibleErrors.maxMemory ? 'editor-max-memory-error' : undefined" /><span v-if="visibleErrors.maxMemory" id="editor-max-memory-error" class="editor-field-error" role="alert">{{ visibleErrors.maxMemory }}</span></label>
                   </div>
                 </fieldset>
-                <fieldset><legend>{{ t('gameWindow') }}</legend>
+                <fieldset v-if="section === 'settings'"><legend>{{ t('gameWindow') }}</legend>
                   <label class="check" data-setting="overrideWindow" tabindex="-1"><input v-model="settings.overrideWindow" type="checkbox" :disabled="settingsLocked" :aria-invalid="Boolean(visibleErrors.overrideWindow)" />{{ t('editorUseInstanceWindow') }}<span v-if="visibleErrors.overrideWindow" class="editor-field-error" role="alert">{{ visibleErrors.overrideWindow }}</span></label>
                   <div class="editor-fields">
                     <label data-setting="width" tabindex="-1">{{ t('editorWidth') }}<input v-model.number="settings.width" class="glass-input" type="number" min="320" max="16384" :disabled="settingsLocked || !settings.overrideWindow" :aria-invalid="Boolean(visibleErrors.width)" :aria-describedby="visibleErrors.width ? 'editor-width-error' : undefined" /><span v-if="visibleErrors.width" id="editor-width-error" class="editor-field-error" role="alert">{{ visibleErrors.width }}</span></label>
@@ -293,7 +299,7 @@ onUnmounted(() => {
                   </div>
                   <label class="check" data-setting="fullscreen" tabindex="-1"><input v-model="settings.fullscreen" type="checkbox" :disabled="settingsLocked || !settings.overrideWindow" :aria-invalid="Boolean(visibleErrors.fullscreen)" />{{ t('maximizeOnStart') }}<span v-if="visibleErrors.fullscreen" class="editor-field-error" role="alert">{{ visibleErrors.fullscreen }}</span></label>
                 </fieldset>
-                <fieldset><legend>{{ t('jvmArguments') }}</legend>
+                <fieldset v-if="section === 'java'"><legend>{{ t('jvmArguments') }}</legend>
                   <label class="check" data-setting="useGlobalJvmArgs" tabindex="-1"><input v-model="settings.useGlobalJvmArgs" type="checkbox" :disabled="settingsLocked" @change="toggleJvmInheritance" />{{ t('jvmUseGlobal') }}<span v-if="visibleErrors.useGlobalJvmArgs" class="editor-field-error" role="alert">{{ visibleErrors.useGlobalJvmArgs }}</span></label>
                   <div data-setting="jvmPreset" tabindex="-1"><JvmPresetPicker id="instance-jvm-preset" v-model="settings.jvmPreset" :disabled="settingsLocked || settings.useGlobalJvmArgs" :t="t" /><p v-if="visibleErrors.jvmPreset" class="editor-field-error" role="alert">{{ visibleErrors.jvmPreset }}</p></div>
                   <div data-setting="jvmArgs" tabindex="-1"><label for="instance-jvm-args">{{ t('jvmArguments') }}</label>
@@ -309,7 +315,7 @@ onUnmounted(() => {
               <PackLinkPicker v-if="section === 'versions' && (!data.pack || data.pack.requiresLink)" :id="instance.id" :pack="data.pack" :running="instance.running" :busy="disabled" :service="packService" :t="t" @linked="load()" />
               <div class="editor-toolbar"><input v-if="data.rows?.length" v-model="filter" class="glass-input editor-filter" type="search" :aria-label="t('editorSearchAria').replace('{section}', title)" :placeholder="t('editorSearchPlaceholder').replace('{section}', title.toLowerCase())" /><button v-if="fileSection" class="btn-subtle" :disabled="disabled || instance.running" @click="run('addFiles', { section })">{{ t('editorImportFiles') }}</button><button v-if="section === 'mods'" class="btn-subtle editor-download-mods" :disabled="disabled || instance.running" @click="showModBrowser = true">{{ t('editorDownloadMods') }}</button><button v-if="section !== 'versions'" class="btn-subtle" :disabled="disabled" @click="run('openFolder', { section }, false)">{{ t('folder') }}</button></div>
               <div v-if="pendingRemoval" class="editor-remove-confirm" role="alert"><p>{{ t('editorRemoveConfirm').replace('{name}', pendingRemoval.name) }}</p><button class="btn-subtle" :disabled="disabled" @click="pendingRemoval = null">{{ t('cancel') }}</button><button class="btn-subtle" :disabled="disabled" @click="run('removeFile', { section, id: pendingRemoval.id })">{{ t('editorRemoveFile') }}</button></div>
-              <ul v-if="rows.length" class="editor-file-list"><li v-for="row in rows" :key="row.id" class="editor-file-row"><label v-if="section === 'mods' && typeof row.enabled === 'boolean'" class="editor-mod-toggle"><input type="checkbox" :checked="row.enabled" :disabled="disabled" :aria-label="t('editorEnableMod').replace('{name}', row.name)" @change="run('toggleMod', { id: row.id, enabled: ($event.target as HTMLInputElement).checked })" /></label><div class="editor-file-copy"><strong>{{ row.name }}</strong><p v-if="row.detail">{{ row.detail }}</p></div><span v-if="row.status" class="editor-file-status">{{ row.status }}</span><button v-if="fileSection" class="btn-subtle" :disabled="disabled" :aria-label="t('editorRemoveAria').replace('{name}', row.name)" @click="pendingRemoval = row">{{ t('editorRemove') }}</button></li></ul>
+              <ul v-if="rows.length" class="editor-file-list"><li v-for="row in rows" :key="row.id" class="editor-file-row"><label v-if="section === 'mods' && typeof row.enabled === 'boolean'" class="editor-mod-toggle"><input type="checkbox" :checked="row.enabled" :disabled="disabled" :aria-label="t('editorEnableMod').replace('{name}', row.name)" @change="run('toggleMod', { id: row.id, enabled: ($event.target as HTMLInputElement).checked })" /></label><div class="editor-file-copy"><strong>{{ row.name }}</strong><p v-if="row.detail">{{ row.detail }}</p></div><span v-if="typeof row.enabled === 'boolean' || row.status" class="editor-file-status">{{ typeof row.enabled === 'boolean' ? t(row.enabled ? 'editorEnabled' : 'editorDisabled') : row.status }}</span><button v-if="fileSection" class="btn-subtle" :disabled="disabled" :aria-label="t('editorRemoveAria').replace('{name}', row.name)" @click="pendingRemoval = row">{{ t('editorRemove') }}</button></li></ul>
               <p v-else class="editor-message">{{ filter ? t('editorNoMatchingItems') : t('editorNoItems').replace('{section}', title.toLowerCase()) }}</p>
               <p v-if="section === 'versions'" class="editor-hint">{{ t('editorVersionsHint') }}</p>
               <button v-if="section === 'overview'" class="btn-subtle editor-save" :disabled="disabled" @click="run('openAdvanced', { section: 'servers' }, false)">{{ t('editorManageServers') }}</button>
@@ -318,11 +324,11 @@ onUnmounted(() => {
           </template>
         </div>
       </div>
-      <footer class="create-modal-footer editor-footer" :inert="pendingNavigation !== null"><button class="btn-subtle" :disabled="disabled || dirty" @click="run('openAdvanced', { section }, false)">{{ t('editorAdvancedTools') }}</button><span class="secondary-note">{{ dirty ? t('editorUnsavedChanges') : working ? t('working') : '' }}</span><button v-if="editable" class="btn-subtle editor-save" :disabled="disabled || !dirty || (section === 'settings' && instance.running)" @click="save">{{ t('editorSave') }}</button><button class="btn-primary" :disabled="disabled || (dirty && section === 'settings' && instance.running)" @click="dirty ? saveAndClose() : close()">{{ t(dirty ? 'editorSaveAndClose' : 'close') }}</button></footer>
+      <footer class="create-modal-footer editor-footer" :inert="pendingNavigation !== null"><button class="btn-subtle" :disabled="disabled || dirty" @click="run('openAdvanced', { section }, false)">{{ t('editorAdvancedTools') }}</button><span class="secondary-note">{{ dirty ? t('editorUnsavedChanges') : working ? t('working') : '' }}</span><button v-if="editable" class="btn-subtle editor-save" :disabled="disabled || !dirty || (settingsSection && instance.running)" @click="save">{{ t('editorSave') }}</button><button class="btn-primary" :disabled="disabled || (dirty && settingsSection && instance.running)" @click="dirty ? saveAndClose() : close()">{{ t(dirty ? 'editorSaveAndClose' : 'close') }}</button></footer>
       <div v-if="pendingNavigation" class="editor-confirm-overlay" @click.self="pendingNavigation = null">
         <section ref="confirmation" class="modal-dialog editor-discard-confirm" role="alertdialog" aria-modal="true" aria-labelledby="editor-discard-title" aria-describedby="editor-discard-description">
           <h3 id="editor-discard-title">{{ t('editorUnsavedChanges') }}</h3><p id="editor-discard-description">{{ t('editorDiscardDescription') }}</p>
-          <div class="editor-confirm-actions"><button class="btn-subtle" @click="pendingNavigation = null">{{ t('editorKeepEditing') }}</button><button class="btn-primary" :disabled="disabled || (section === 'settings' && instance.running)" @click="saveAndContinue">{{ t('editorSaveChanges') }}</button><button class="btn-subtle editor-discard-button" @click="discardChanges">{{ t('editorDiscardChanges') }}</button></div>
+          <div class="editor-confirm-actions"><button class="btn-subtle" @click="pendingNavigation = null">{{ t('editorKeepEditing') }}</button><button class="btn-primary" :disabled="disabled || (settingsSection && instance.running)" @click="saveAndContinue">{{ t('editorSaveChanges') }}</button><button class="btn-subtle editor-discard-button" @click="discardChanges">{{ t('editorDiscardChanges') }}</button></div>
         </section>
       </div>
     </section>

@@ -22,6 +22,19 @@ test('locale conventions and four complete independent catalogs', () => {
   for (const catalog of Object.values(catalogs)) assert.deepEqual(Object.keys(catalog).sort(), Object.keys(catalogs.en).sort());
   assert.notEqual(catalogs['zh-CN'].settings, catalogs['zh-TW'].settings);
 });
+
+test('every translated message preserves placeholders and has no English prose fallback', () => {
+  const placeholders = (text: string) => [...text.matchAll(/\{[a-zA-Z]+\}/g)].map(match => match[0]).sort();
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    for (const key of Object.keys(catalogs.en) as (keyof typeof catalogs.en)[]) {
+      assert.ok(catalog[key].trim(), `${locale}/${key} is empty`);
+      assert.deepEqual(placeholders(catalog[key]), placeholders(catalogs.en[key]), `${locale}/${key}`);
+      if (locale !== 'en' && !['minecraft', 'archiveUrlPlaceholder'].includes(key)) {
+        assert.notEqual(catalog[key], catalogs.en[key], `${locale}/${key} still uses English`);
+      }
+    }
+  }
+});
 test('filter searches names, versions and groups, pins sort first without mutating backend', () => {
   const items = [make('b', 'Beta', { group: 'Mods', lastLaunch: 100 }), make('a', 'Alpha', { minecraftVersion: '1.21', pinned: true }), make('c', 'Charlie', { group: 'Mods', lastLaunch: 200 })];
   assert.deepEqual(presentInstances(items, '', '', false, 'LastLaunch', 'en').map(i => i.id), ['a', 'c', 'b']);

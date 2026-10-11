@@ -298,7 +298,7 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
     } else if (name == "openAdvanced") {
         static const QHash<QString, QString> pages{{"overview", "version"}, {"versions", "version"}, {"mods", "mods"},
             {"resourcepacks", "resourcepacks"}, {"shaderpacks", "shaderpacks"}, {"worlds", "worlds"}, {"screenshots", "screenshots"},
-            {"settings", "settings"}, {"java", "settings"}, {"notes", "notes"}, {"log", "console"}, {"otherlogs", "logs"}, {"servers", "servers"}};
+            {"settings", "settings"}, {"java", "settings"}, {"memory", "settings"}, {"notes", "notes"}, {"log", "console"}, {"otherlogs", "logs"}, {"servers", "servers"}};
         if (!pages.contains(section)) return failure(tr("Unknown advanced page."));
         const auto page = pages.value(section);
         QTimer::singleShot(0, this, [instanceId, page] {

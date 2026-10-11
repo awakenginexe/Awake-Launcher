@@ -1,4 +1,4 @@
-export const ramPresets = [2, 4, 6, 8, 12, 16, 20, 24, 32].map(gb => ({ label: `${gb} GB`, mb: gb * 1024 }));
+export const ramPresets = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32].map(gb => ({ label: `${gb} GB`, mb: gb * 1024 }));
 
 export function installedMemoryMb(totalMb: number): number {
   return Number.isFinite(totalMb) && totalMb > 0 ? totalMb : 0;

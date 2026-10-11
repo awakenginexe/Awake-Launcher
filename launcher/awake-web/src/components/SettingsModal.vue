@@ -8,10 +8,9 @@ import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
 import GpuPicker from './GpuPicker.vue';
 import type { GpuService } from './GpuPicker.vue';
-import HardwareVisibility from './HardwareVisibility.vue';
+import MemoryPresets from './MemoryPresets.vue';
 import JvmPresetPicker from './JvmPresetPicker.vue';
-import { useHardwarePrivacy } from '../composables/useHardwarePrivacy.ts';
-import { ramPresets, memoryRisk, presetFits, installedMemoryMb } from '../features/library/memory.ts';
+import { presetFits } from '../features/library/memory.ts';
 import logoUrl from '../../../../program_info/awake-launcher.png';
 
 const props = defineProps<{
@@ -36,13 +35,12 @@ const emit = defineEmits<{
   (e: 'updates-viewed', presentation: number): void;
 }>();
 
-const activeTab = ref<'general' | 'java' | 'window' | 'about'>('general');
+const activeTab = ref<'general' | 'java' | 'memory' | 'window' | 'about'>('general');
 const visitedTabs = ref(new Set(['general']));
 watch(activeTab, tab => { visitedTabs.value.add(tab); closeLanguagePicker(); });
 watch([activeTab, () => props.updates.presentation], () => {
   if (activeTab.value === 'about') emit('updates-viewed', props.updates.presentation);
 });
-const { ramVisible } = useHardwarePrivacy();
 const languageOptions = [
   { value: 'en', label: 'English' },
   { value: 'th', label: 'ภาษาไทย' },
@@ -143,11 +141,17 @@ function selectResolution(w: number, h: number) {
             </svg>
             {{ t('general') }}
           </button>
-          <button class="settings-tab-btn" :class="{ 'is-active': activeTab === 'java' }" @click="activeTab = 'java'">
+          <button class="settings-tab-btn" data-tab="java" :class="{ 'is-active': activeTab === 'java' }" @click="activeTab = 'java'">
             <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M4 6h12v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V6zM16 8h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2" />
             </svg>
-            {{ t('javaMemory') }}
+            {{ t('javaRuntime') }}
+          </button>
+          <button class="settings-tab-btn" data-tab="memory" :class="{ 'is-active': activeTab === 'memory' }" @click="activeTab = 'memory'">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4" y="5" width="12" height="10" rx="1" /><path d="M7 2v3M13 2v3M7 15v3M13 15v3M1 8h3M1 12h3M16 8h3M16 12h3" />
+            </svg>
+            {{ t('editorMemory') }}
           </button>
           <button class="settings-tab-btn" :class="{ 'is-active': activeTab === 'window' }" @click="activeTab = 'window'">
             <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -172,7 +176,7 @@ function selectResolution(w: number, h: number) {
             <div class="setting-row">
               <div class="setting-copy">
                 <label for="settings-lang">{{ t('languageLabel') }}</label>
-                <span class="setting-hint">App display language</span>
+                <span class="setting-hint">{{ t('languageHint') }}</span>
               </div>
               <div ref="languagePicker" class="language-picker" @keydown="languageKeydown">
                 <button
@@ -216,7 +220,7 @@ function selectResolution(w: number, h: number) {
             <div class="setting-row">
               <div class="setting-copy">
                 <label for="close-on-launch">{{ t('closeAfterLaunch') }}</label>
-                <span class="setting-hint">Free up system resources when playing</span>
+                <span class="setting-hint">{{ t('closeAfterLaunchHint') }}</span>
               </div>
               <input
                 id="close-on-launch"
@@ -230,7 +234,7 @@ function selectResolution(w: number, h: number) {
             <div class="setting-row">
               <div class="setting-copy">
                 <label for="compact-view">{{ t('compact') }}</label>
-                <span class="setting-hint">Show condensed instance items in library</span>
+                <span class="setting-hint">{{ t('compactHint') }}</span>
               </div>
               <input
                 id="compact-view"
@@ -244,7 +248,7 @@ function selectResolution(w: number, h: number) {
             <div class="setting-row">
               <div class="setting-copy">
                 <label for="reduce-motion">{{ t('reducedMotion') }}</label>
-                <span class="setting-hint">Disable blur animations and transitions</span>
+                <span class="setting-hint">{{ t('reducedMotionHint') }}</span>
               </div>
               <input
                 id="reduce-motion"
@@ -256,35 +260,23 @@ function selectResolution(w: number, h: number) {
             </div>
           </div>
 
-          <!-- Java & Memory Tab -->
+          <!-- Java Tab -->
           <div v-if="visitedTabs.has('java')" v-show="activeTab === 'java'" class="settings-group">
             <JavaPicker :service="javaService" :t="t" />
             <div class="setting-block">
+              <JvmPresetPicker id="global-jvm-preset" :model-value="settings.jvmPreset" :t="t" @update:model-value="emit('update-pref', 'jvmPreset', $event)" />
+              <label for="global-jvm-args">{{ t('jvmArguments') }}</label>
+              <textarea id="global-jvm-args" class="styled-input jvm-arguments" rows="3" maxlength="8192" spellcheck="false" :disabled="settings.jvmPreset !== 'custom'" :value="settings.jvmArgs" @change="emit('update-pref', 'jvmArgs', ($event.target as HTMLTextAreaElement).value)" />
+              <p class="setting-hint">{{ t('jvmGlobalHint') }}</p>
+              <p class="setting-hint">{{ t('jvmMemoryHint') }}</p>
+            </div>
+          </div>
+
+          <!-- Memory Tab -->
+          <div v-if="visitedTabs.has('memory')" v-show="activeTab === 'memory'" class="settings-group">
+            <div class="setting-block">
               <label>{{ t('maxRamLabel') }}</label>
-              <div class="ram-presets-row">
-                <button
-                  v-for="preset in ramPresets"
-                  :key="preset.mb"
-                  type="button"
-                  class="pill-btn ram-preset"
-                  :class="[memoryRisk(preset.mb, totalMemoryMb), { 'is-active': settings.maxMem === preset.mb }]"
-                  :disabled="!presetFits(preset.mb, totalMemoryMb)"
-                  :title="!presetFits(preset.mb, totalMemoryMb) ? t('ramPresetUnavailable') : t(memoryRisk(preset.mb, totalMemoryMb) === 'danger' ? 'ramDanger' : memoryRisk(preset.mb, totalMemoryMb) === 'caution' ? 'ramCaution' : 'ramSafe')"
-                  @click="selectRam(preset.mb)"
-                >
-                  {{ preset.label }}
-                </button>
-              </div>
-              <div class="ram-legend setting-hint">
-                <span class="safe">{{ t('ramSafe') }}</span>
-                <span class="caution">{{ t('ramCaution') }}</span>
-                <span class="danger">{{ t('ramDanger') }}</span>
-              </div>
-              <div v-if="totalMemoryMb" class="hardware-label ram-hint">
-                <span class="setting-hint installed-ram">{{ t('installedRam') }}: {{ ramVisible ? installedMemoryMb(totalMemoryMb) / 1024 : '-----' }} GB</span>
-                <HardwareVisibility :visible="ramVisible" :label="t(ramVisible ? 'hideRam' : 'showRam')" @toggle="ramVisible = !ramVisible" />
-              </div>
-              <p class="setting-hint">{{ t('ramOverrideHint') }}</p>
+              <MemoryPresets :model-value="settings.maxMem" :total-memory-mb="totalMemoryMb" :t="t" @update:model-value="selectRam" />
               <div class="inline-input-row" style="margin-top: 10px;">
                 <input
                   type="number"
@@ -318,13 +310,6 @@ function selectResolution(w: number, h: number) {
               </div>
             </div>
 
-            <div class="setting-block">
-              <JvmPresetPicker id="global-jvm-preset" :model-value="settings.jvmPreset" :t="t" @update:model-value="emit('update-pref', 'jvmPreset', $event)" />
-              <label for="global-jvm-args">{{ t('jvmArguments') }}</label>
-              <textarea id="global-jvm-args" class="styled-input jvm-arguments" rows="3" maxlength="8192" spellcheck="false" :disabled="settings.jvmPreset !== 'custom'" :value="settings.jvmArgs" @change="emit('update-pref', 'jvmArgs', ($event.target as HTMLTextAreaElement).value)" />
-              <p class="setting-hint">{{ t('jvmGlobalHint') }}</p>
-              <p class="setting-hint">{{ t('jvmMemoryHint') }}</p>
-            </div>
           </div>
 
           <!-- Game Window Tab -->

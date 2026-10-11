@@ -140,7 +140,7 @@ const fixture = `(() => {
     browseArchive(id, cb) { cb({ok:true}); this.catalogFinished.emit(id, {ok:true,archiveUrl:'file:///C:/test/fixture.mrpack',fileName:'fixture.mrpack'}); }
   };
   host.modProgress = signal();
-  window.__nativeTest = {calls: [], modReviews:[], modActive:null, earlyInstallFailure:false, state, host, globalJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:false,path:'',version:'',vendor:'',majors:[],running:false},instanceJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:true,path:'',version:'',vendor:'',majors:[21],running:false},editor:{mods:[{id:'test.jar',name:'Test mod',detail:'test.jar',enabled:true}],notes:'Existing notes',log:'[12:00:00] Minecraft test console',settings:{minMemory:512,maxMemory:4096,width:854,height:480,fullscreen:false,overrideMemory:true,overrideWindow:true,jvmArgs:'',jvmPreset:'balanced',useGlobalJvmArgs:true}}}; window.qt = {webChannelTransport: {}};
+  window.__nativeTest = {calls: [], modReviews:[], modActive:null, earlyInstallFailure:false, state, host, globalJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:false,path:'',version:'',vendor:'',majors:[],running:false},instanceJava:{ok:true,profile:'awake',globalProfile:'awake',inherited:true,path:'',version:'',vendor:'',majors:[21],running:false},editor:{mods:[{id:'test.jar',name:'Test mod',detail:'test.jar',enabled:true,status:'Enabled'}],notes:'Existing notes',log:'[12:00:00] Minecraft test console',settings:{minMemory:512,maxMemory:4096,width:854,height:480,fullscreen:false,overrideMemory:true,overrideWindow:true,jvmArgs:'',jvmPreset:'balanced',useGlobalJvmArgs:true}}}; window.qt = {webChannelTransport: {}};
   window.QWebChannel = class { constructor(transport, callback) { callback({objects:{awake:host}}); } };
 })();`;
 const dist = resolve('dist');
@@ -165,6 +165,65 @@ async function chooseDropdown(page, id, value) {
   await page.locator(`#${id}-listbox [data-value="${value}"]`).click();
 }
 try {
+  for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
+    const page = await browser.newPage({viewport:{width:1100,height:750}});
+    await page.goto(`${origin}/?locale=${locale}`);
+    await page.locator('.account-actions .settings-button').click();
+    assert.equal(await page.locator('.settings-tab-btn').count(), 5);
+    if (locale !== 'en_US') {
+      for (const english of ['App display language', 'Free up system resources when playing', 'Show condensed instance items in library', 'Disable blur animations and transitions']) {
+        assert.equal((await page.locator('.settings-dialog').innerText()).includes(english), false);
+      }
+    }
+    await page.locator('.settings-tab-btn[data-tab=memory]').click();
+    assert.equal(await page.locator('.settings-group:visible .java-picker').count(), 0);
+    assert.equal(await page.locator('.settings-group:visible #global-jvm-args').count(), 0);
+    assert.equal(await page.locator('.ram-preset').count(), 16);
+    for (const gb of [10,14,18,22,26,28,30]) {
+      await page.locator('.ram-preset').getByText(`${gb} GB`, {exact:true}).click();
+      await page.waitForFunction(mb => window.__nativeTest.state.launcherSettings.maxMem === mb, gb * 1024);
+    }
+    await page.locator('.settings-tab-btn[data-tab=java]').click();
+    await page.locator('#global-jvm-args').waitFor();
+    assert.equal(await page.locator('.settings-group:visible .ram-preset').count(), 0);
+    await page.keyboard.press('Escape');
+    await page.locator('.instance-row').first().click({button:'right'});
+    await page.locator('.instance-context-menu button').nth(1).click();
+    await page.locator('[data-section=memory]').click();
+    assert.equal(await page.locator('.editor-content [data-setting=width]').count(), 0);
+    assert.equal(await page.locator('.editor-content #instance-jvm-args').count(), 0);
+    assert.equal(await page.locator('.ram-preset').count(), 16);
+    for (const gb of [10,14,18,22,26,28,30]) {
+      await page.getByRole('button', {name:`${gb} GB`,exact:true}).click();
+      assert.equal(await page.locator('[data-setting=maxMemory] input').inputValue(), String(gb * 1024));
+    }
+    await page.locator('[data-section=java]').click();
+    await page.locator('.editor-discard-confirm').waitFor();
+    await page.locator('.editor-discard-confirm .btn-primary').click();
+    await page.locator('#instance-jvm-args').waitFor();
+    assert.equal(await page.evaluate(() => window.__nativeTest.editor.settings.maxMemory), 30720);
+    assert.equal(await page.locator('[data-setting=maxMemory]').count(), 0);
+    await page.locator('[data-section=settings]').click();
+    assert.equal(await page.locator('[data-setting=width]').count(), 1);
+    assert.equal(await page.locator('[data-setting=maxMemory], #instance-jvm-args, .java-picker').count(), 0);
+    await page.locator('[data-section=memory]').click();
+    await page.locator('[data-setting=overrideMemory] input').uncheck();
+    assert.equal(await page.locator('.ram-preset:disabled').count(), 16);
+    await page.locator('[data-setting=overrideMemory] input').check();
+    await page.evaluate(() => {const {state,host}=window.__nativeTest; state.totalMemoryMb=16384; host.stateChanged.emit(structuredClone(state));});
+    assert.equal(await page.getByRole('button',{name:'18 GB',exact:true}).isDisabled(), true);
+    assert.equal(await page.getByRole('button',{name:'14 GB',exact:true}).isEnabled(), true);
+    await page.setViewportSize({width:640,height:750});
+    await page.screenshot({path:resolve(output, `memory-instance-${locale}.png`)});
+    const content = page.locator('.editor-content');
+    assert.ok(await content.evaluate(el => el.clientHeight) > 200, 'The sidebar must leave room for memory controls in a narrow window');
+    assert.equal(await content.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
+    await page.locator('[data-section=mods]').click();
+    const status = await page.locator('.editor-file-status').textContent();
+    if (locale === 'en_US') assert.equal(status, 'Enabled');
+    else assert.match(status, /[\u0E00-\u0E7F\u3400-\u9FFF]/, 'Mod status must follow the selected language');
+    await page.close();
+  }
   {
     const page = await browser.newPage({viewport:{width:1320,height:780}});
     page.on('pageerror', error => errors.push(error.message));
@@ -379,12 +438,13 @@ try {
     assert.equal(await page.locator('#global-jvm-args').inputValue(), '-Dawake.global=true');
     await chooseDropdown(page, 'global-jvm-preset', 'custom');
     await page.waitForFunction(() => window.__nativeTest.state.launcherSettings.jvmPreset === 'custom');
+    await page.locator('.settings-tab-btn[data-tab=memory]').click();
     assert.equal(await page.locator('.installed-ram').textContent().then(text => text.includes('----- GB')), true);
     await page.locator('.ram-hint .hardware-visibility').click();
     assert.equal(await page.locator('.installed-ram').textContent().then(text => text.includes('32 GB')), true);
     await page.locator('.ram-hint .hardware-visibility').click();
     await page.screenshot({path:resolve(output, `ram-private-${locale}.png`)});
-    await page.locator('.settings-tab-btn').nth(2).click();
+    await page.locator('.settings-tab-btn').nth(3).click();
     assert.equal(await page.locator('.gpu-devices li').first().textContent(), 'NVIDIA GeForce -----');
     await page.locator('.gpu-picker .hardware-visibility').click();
     assert.equal(await page.locator('.gpu-devices li').first().textContent(), 'NVIDIA GeForce RTX 3070 Ti');
@@ -392,13 +452,13 @@ try {
     await page.screenshot({path:resolve(output, `gpu-settings-private-${locale}.png`)});
     const settingsCalls = await page.evaluate(() => window.__nativeTest.calls.filter(call => ['gpuSettings','javaSettings'].includes(call[0])).length);
     for (let repeat = 0; repeat < 4; repeat++) {
-      for (const index of [0,1,2,3]) await page.locator('.settings-tab-btn').nth(index).click();
+      for (const index of [0,1,2,3,4]) await page.locator('.settings-tab-btn').nth(index).click();
     }
     assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => ['gpuSettings','javaSettings'].includes(call[0])).length), settingsCalls, 'Tab switching reuses Java and GPU settings');
     await page.keyboard.press('Escape');
     await page.locator('.instance-row').first().click({button:'right'});
     await page.locator('.instance-context-menu button').nth(1).click();
-    await page.locator('[data-section=settings]').click();
+    await page.locator('[data-section=java]').click();
     await page.locator('#instance-jvm-args').waitFor();
     assert.equal(await page.locator('#instance-jvm-args').isDisabled(), true);
     assert.equal(await page.locator('#instance-jvm-preset').isDisabled(), true);
@@ -630,7 +690,7 @@ try {
     await page.screenshot({path:resolve(output, `discard-${locale}.png`)});
     await page.locator('.editor-discard-confirm button').first().click();
     assert.equal(await page.locator('#editor-notes').inputValue(), 'Unwanted unsaved notes');
-    await page.locator('.editor-sidebar button[data-section="settings"]').click();
+    await page.locator('.editor-sidebar button[data-section="memory"]').click();
     await page.locator('.editor-discard-confirm button').last().click();
     if (locale === 'en_US') {
       const maximum = page.locator('.editor-fields input').nth(1);
@@ -654,6 +714,7 @@ try {
       await page.evaluate(() => { delete window.__nativeTest.editor.saveFailure; });
       await page.locator('.editor-footer .editor-save').click();
       await page.waitForFunction(() => window.__nativeTest.editor.settings.maxMemory === 12000);
+      await page.locator('[data-section=memory]').click();
       await maximum.fill('12500');
       await page.evaluate(() => { const {state,host}=window.__nativeTest; state.instances.find(item => item.id === 'fixture-1').running=true; host.stateChanged.emit(structuredClone(state)); });
       await page.waitForFunction(() => document.querySelector('[data-setting="maxMemory"] input').disabled);
@@ -787,21 +848,23 @@ try {
     await page.locator('.settings-tab-btn').nth(1).click();
     await page.locator('.java-options').waitFor();
     assert.equal(await page.locator('.wordmark').textContent(), ({en_US:'Welcome!',th:'ยินดีต้อนรับ!','zh_CN':'欢迎！','zh_TW':'歡迎！'})[locale]);
-    assert.equal(await page.locator('.ram-preset').count(), 9);
-    assert.equal(await page.locator('.ram-preset.safe').count(), 6);
-    assert.equal(await page.locator('.ram-preset.caution').count(), 2);
-    assert.equal(await page.locator('.ram-preset.danger').count(), 1);
+    await page.locator('.settings-tab-btn[data-tab=memory]').click();
+    assert.equal(await page.locator('.ram-preset').count(), 16);
+    assert.equal(await page.locator('.ram-preset.safe').count(), 8);
+    assert.equal(await page.locator('.ram-preset.caution').count(), 6);
+    assert.equal(await page.locator('.ram-preset.danger').count(), 2);
     await page.locator('.ram-preset').last().scrollIntoViewIfNeeded();
     await page.screenshot({path:resolve(output, `memory-32gb-${locale}.png`)});
     await page.locator('.ram-preset').last().click();
     assert.equal(await page.evaluate(() => window.__nativeTest.state.launcherSettings.maxMem), 32768);
     await page.evaluate(() => { window.__nativeTest.state.totalMemoryMb = 16384; window.__nativeTest.host.stateChanged.emit(structuredClone(window.__nativeTest.state)); });
-    await page.waitForFunction(() => document.querySelectorAll('.ram-preset:disabled').length === 3);
+    await page.waitForFunction(() => document.querySelectorAll('.ram-preset:disabled').length === 8);
     const maxMemory = page.locator('.settings-dialog input[type="number"]').first();
     await maxMemory.fill('32768'); await maxMemory.press('Tab');
     assert.equal(await page.evaluate(() => window.__nativeTest.calls.at(-1)[2]), 32768);
     await page.evaluate(() => { window.__nativeTest.state.totalMemoryMb = 32768; window.__nativeTest.state.accountName = 'AwakePlayer'; window.__nativeTest.host.stateChanged.emit(structuredClone(window.__nativeTest.state)); });
     await page.waitForFunction(() => document.querySelector('.wordmark').textContent.includes('AwakePlayer'));
+    await page.locator('.settings-tab-btn[data-tab=java]').click();
     assert.equal(await page.locator('.java-option').count(), 8);
     await page.locator('.modal-overlay').evaluate(async el => {
       await document.fonts.ready;
@@ -830,7 +893,7 @@ try {
         sample();
         document.querySelector(`[data-java-profile="${profile}"]`).click();
       }), profile);
-      for (const [column, label] of ['choices position', 'description height', 'memory position', 'scroll position', 'choice opacity'].entries()) {
+      for (const [column, label] of ['choices position', 'description height', 'arguments position', 'scroll position', 'choice opacity'].entries()) {
         const values = frames.map(frame => frame[column]);
         assert.ok(Math.max(...values) - Math.min(...values) < .1, `${locale}/${profile}: Java ${label} flickers (${Math.min(...values)} to ${Math.max(...values)})`);
       }
@@ -843,7 +906,7 @@ try {
     await page.locator('[data-java-profile="awake"]').focus(); await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.__nativeTest.globalJava.profile === 'awake');
     await page.locator('.settings-tab-btn').first().click();
-    await page.locator('.settings-tab-btn').nth(2).click();
+    await page.locator('.settings-tab-btn').nth(3).click();
     await page.locator('#gpu-preference').waitFor();
     assert.equal(await page.locator('.gpu-devices li').count(), 2);
     await chooseDropdown(page, 'gpu-preference', 'highPerformance');
@@ -919,7 +982,7 @@ try {
   await page.goto(`${origin}/?count=0`); await page.locator('.empty-state').waitFor();
   await page.setViewportSize({width:1320,height:780});
   await page.locator('.account-actions .settings-button').click();
-  await page.locator('.settings-tab-btn').nth(3).click();
+  await page.locator('.settings-tab-btn').nth(4).click();
   assert.equal(await page.locator('.settings-dialog .update-versions dd').first().textContent(), '0.3.0');
   assert.equal(await page.locator('.settings-dialog .update-versions dd').nth(1).textContent(), '0.5.0');
   assert.ok((await page.locator('.settings-dialog .update-notes p').textContent()).includes('<script>'));
