@@ -138,6 +138,7 @@ jobs:
           - Add a Memory page to the instance editor, move JVM arguments to Java runtime, and keep only game-window options on Settings. Existing saved settings are preserved.
           - Add 10, 14, 18, 22, 26, 28, and 30 GB memory presets to both launcher and instance settings, with installed-RAM checks and memory-use guidance.
           - Translate previously English-only settings descriptions and Java choice labels into Thai, Simplified Chinese, and Traditional Chinese. Simplify Java and memory guidance for everyday players.
+          - Fix an intermittent Windows UI test failure by waiting for the account dialog fade and compositor frames before checking textbox repaints. Include failed Qt assertions in CI logs.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

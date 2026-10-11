@@ -475,12 +475,27 @@ class AwakeWebShellTest : public QObject {
     void offlineTextboxRepaintsKeepTheAccountDialogIntact()
     {
         auto cleanup = qScopeGuard([&] { evaluate("document.querySelector('.modal-close-btn')?.click()"); });
+        window->raise();
+        window->activateWindow();
+        QTRY_VERIFY(window->isActiveWindow());
         evaluate("document.querySelector('.account-button').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.modal-footer .btn-subtle') !== null").toBool());
         evaluate("document.querySelector('.modal-footer .btn-subtle').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.inline-offline-box input') !== null").toBool());
+        view->setFocus();
         evaluate("document.querySelector('.inline-offline-box input').focus()");
         QTRY_VERIFY(evaluate("document.activeElement.matches('.inline-offline-box input')").toBool());
+        // DOM visibility precedes the finished fade and its delivery to Qt's compositor.
+        QTRY_VERIFY(evaluate(R"((() => {
+            const overlay = document.querySelector('.modal-overlay');
+            return getComputedStyle(overlay).opacity === '1'
+                && overlay.getAnimations({subtree:true}).every(animation => animation.playState !== 'running');
+        })())").toBool());
+        auto* compositor = view->findChild<QQuickWidget*>();
+        QVERIFY(compositor);
+        QSignalSpy frames(compositor->quickWindow(), &QQuickWindow::afterFrameEnd);
+        view->update();
+        QTRY_VERIFY_WITH_TIMEOUT(frames.count() >= 2, 5000);
         QTest::qWait(400);
         const auto rect = evaluate(R"((() => {
             const r = document.querySelector('.modal-dialog').getBoundingClientRect();
@@ -490,17 +505,26 @@ class AwakeWebShellTest : public QObject {
         const auto ratio = view->devicePixelRatioF();
         const QRect unchangedArea(qRound(rect.value("x").toDouble() * ratio), qRound(rect.value("y").toDouble() * ratio),
                            qRound(rect.value("width").toDouble() * ratio), qRound(rect.value("height").toDouble() * ratio));
-        const auto before = view->grab().toImage().copy(unchangedArea);
+        const auto beforeFrame = view->grab().toImage();
+        const auto before = beforeFrame.copy(unchangedArea);
         QVERIFY(!before.isNull());
         const auto intact = [&] {
-            const auto after = view->grab().toImage().copy(unchangedArea);
+            const auto afterFrame = view->grab().toImage();
+            const auto after = afterFrame.copy(unchangedArea);
             if (after.size() != before.size()) return false;
             // WARP can round a few unchanged color channels differently between frames.
             for (int y = 0; y < before.height(); ++y) {
                 for (int x = 0; x < before.width(); ++x) {
                     const auto a = before.pixel(x, y), b = after.pixel(x, y);
-                    if (qAbs(qRed(a)-qRed(b)) > 2 || qAbs(qGreen(a)-qGreen(b)) > 2 || qAbs(qBlue(a)-qBlue(b)) > 2)
+                    if (qAbs(qRed(a)-qRed(b)) > 2 || qAbs(qGreen(a)-qGreen(b)) > 2 || qAbs(qBlue(a)-qBlue(b)) > 2) {
+                        const auto output = QDir(QCoreApplication::applicationDirPath()).filePath(".validation");
+                        QDir().mkpath(output);
+                        beforeFrame.save(output + "/repaint-before.png");
+                        afterFrame.save(output + "/repaint-after.png");
+                        qWarning() << "Repaint difference" << unchangedArea << QPoint(x, y) << QColor(a) << QColor(b)
+                                   << evaluate("JSON.stringify(document.querySelector('.modal-dialog').getBoundingClientRect())");
                         return false;
+                    }
                 }
             }
             return true;
@@ -508,8 +532,11 @@ class AwakeWebShellTest : public QObject {
         auto* inputTarget = QApplication::focusWidget();
         QVERIFY(inputTarget);
         const QString username = "awake_test";
+        QString typed;
         for (const auto letter : username) {
             QTest::keyClicks(inputTarget, QString(letter));
+            typed += letter;
+            QTRY_COMPARE(evaluate("document.querySelector('.inline-offline-box input').value").toString(), typed);
             QTest::qWait(35);
             QVERIFY2(intact(), "Typing damaged pixels outside the offline username field");
         }
@@ -681,7 +708,20 @@ int main(int argc, char** argv)
         Q_INIT_RESOURCE(flat);
         Q_INIT_RESOURCE(flat_white);
         Q_INIT_RESOURCE(shaders);
-        QTimer::singleShot(0, &app, [&] { AwakeWebShellTest test; result = QTest::qExec(&test, argc, argv); app.quit(); });
+        QTimer::singleShot(0, &app, [&] {
+            AwakeWebShellTest test;
+            QStringList arguments;
+            for (int index = 0; index < argc; ++index) arguments.append(QString::fromLocal8Bit(argv[index]));
+            const auto reportPath = original + "/AwakeWebShell-results.txt";
+            const bool captureReport = !arguments.contains("-o");
+            if (captureReport) arguments << "-o" << reportPath + ",txt";
+            result = QTest::qExec(&test, arguments);
+            if (captureReport && result) {
+                QFile report(reportPath);
+                if (report.open(QIODevice::ReadOnly)) qCritical().noquote() << report.readAll();
+            }
+            app.quit();
+        });
         app.exec();
     }
     QDir::setCurrent(original);
