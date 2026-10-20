@@ -21,6 +21,7 @@ test('locale conventions and four complete independent catalogs', () => {
   for (const [input, expected] of [['en_US', 'en'], ['th_TH', 'th'], ['zh_CN', 'zh-CN'], ['zh-Hans', 'zh-CN'], ['zh_TW', 'zh-TW'], ['zh_Hant_HK', 'zh-TW'], ['fr_FR', 'en']]) assert.equal(normalizeLocale(input), expected);
   for (const catalog of Object.values(catalogs)) assert.deepEqual(Object.keys(catalog).sort(), Object.keys(catalogs.en).sort());
   assert.notEqual(catalogs['zh-CN'].settings, catalogs['zh-TW'].settings);
+  assert.deepEqual(['emptyTitle', 'emptyBody', 'create', 'library', 'search', 'edit', 'manage', 'copy', 'delete', 'pin', 'noResults', 'choose', 'createInstanceTitle', 'instanceNameLabel', 'editorSidebarLabel'].map(key => catalogs['zh-CN'][key as keyof typeof catalogs.en]), ['暂无版本', '创建或导入版本以开始游戏', '创建版本', '游戏版本', '搜索版本', '编辑版本', '管理版本', '复制版本', '删除版本', '置顶版本', '没有匹配的版本', '选择一个版本', '创建版本', '版本名称', '版本编辑器']);
 });
 
 test('every translated message preserves placeholders and has no English prose fallback', () => {

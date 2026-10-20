@@ -11,12 +11,19 @@ if (Test-Path -LiteralPath $target) { throw 'Setup smoke-test directory must be 
 if (Test-Path 'HKCU:/Software/AwakeLauncher') { throw 'Run the setup smoke test only on a clean Windows account.' }
 $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Awake Launcher.lnk'
 if (Test-Path -LiteralPath $shortcut) { throw 'An Awake Launcher Start Menu shortcut already exists.' }
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Awake Launcher.lnk'
+if (Test-Path -LiteralPath $desktopShortcut) { throw 'An Awake Launcher Desktop shortcut already exists.' }
 function Run-Setup {
-    $process = Start-Process -FilePath $setup -ArgumentList "/S /D=$target" -PassThru -Wait -WindowStyle Hidden
+    param([string]$Options = '')
+    $process = Start-Process -FilePath $setup -ArgumentList "/S $Options /D=$target" -PassThru -Wait -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { throw "Setup failed with exit code $($process.ExitCode)" }
 }
 try {
     Run-Setup
+    if (!(Test-Path -LiteralPath $desktopShortcut)) { throw 'Setup did not create the default Desktop shortcut.' }
+    $shell = New-Object -ComObject WScript.Shell
+    if ($shell.CreateShortcut($desktopShortcut).TargetPath -ne (Join-Path $target 'awakelauncher.exe')) { throw 'Desktop shortcut targets the wrong executable.' }
+    if ((Get-ItemProperty 'HKCU:/Software/AwakeLauncher').DesktopShortcut -ne 1) { throw 'Setup did not save the Desktop shortcut preference.' }
     if (Test-Path -LiteralPath (Join-Path $target 'portable.txt')) { throw 'Setup installed the portable marker.' }
     foreach ($file in Get-ChildItem -LiteralPath $payload -Recurse -File) {
         $installed = Join-Path $target ([IO.Path]::GetRelativePath($payload, $file.FullName))
@@ -28,14 +35,25 @@ try {
     'preserve this user file' | Set-Content -LiteralPath $sentinel
     $location = Join-Path $target 'data-location.txt'
     if ((Get-Content -LiteralPath $location -Encoding Unicode)[0] -ne 'normal') { throw 'Setup did not default to Normal data storage.' }
+    foreach ($language in @(1033, 1054, 2052, 1028)) {
+        Set-ItemProperty 'HKCU:/Software/AwakeLauncher' -Name InstallerLanguage -Value "$language"
+        Run-Setup
+        if ((Get-ItemProperty 'HKCU:/Software/AwakeLauncher').InstallerLanguage -ne "$language") { throw "Update changed installer language $language." }
+        if (!(Test-Path -LiteralPath $desktopShortcut)) { throw 'Update lost the selected Desktop shortcut.' }
+    }
+    Run-Setup -Options '/DESKTOP=0'
+    if (Test-Path -LiteralPath $desktopShortcut) { throw 'Setup ignored the deselected Desktop shortcut.' }
+    if ((Get-ItemProperty 'HKCU:/Software/AwakeLauncher').DesktopShortcut -ne 0) { throw 'Setup did not save the deselected Desktop shortcut preference.' }
     foreach ($mode in @('compact', 'custom')) {
         $customPath = Join-Path $target 'Custom Data 我的实例'
         "$mode`r`n$customPath`r`n" | Set-Content -LiteralPath $location -Encoding Unicode -NoNewline
         $before = (Get-FileHash -LiteralPath $location).Hash
         Run-Setup
         if ((Get-FileHash -LiteralPath $location).Hash -ne $before) { throw "Update changed $mode data location." }
+        if (Test-Path -LiteralPath $desktopShortcut) { throw 'Update recreated a deselected Desktop shortcut.' }
     }
-    Run-Setup
+    Run-Setup -Options '/DESKTOP=1'
+    if (!(Test-Path -LiteralPath $desktopShortcut)) { throw 'Reinstall did not recreate the selected Desktop shortcut.' }
     if ((Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'preserve this user file') { throw 'Upgrade changed user data.' }
     $process = Start-Process -FilePath (Join-Path $target 'uninstall.exe') -ArgumentList "/S _?=$target" -PassThru -Wait -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { throw "Uninstall failed with exit code $($process.ExitCode)" }
@@ -45,7 +63,8 @@ try {
     if (!(Test-Path -LiteralPath $sentinel)) { throw 'Uninstall removed user data.' }
     if (Test-Path 'HKCU:/Software/AwakeLauncher') { throw 'Uninstall left the registration key.' }
     if (Test-Path -LiteralPath $shortcut) { throw 'Uninstall left the Start Menu shortcut.' }
-    Write-Output 'Setup installation, upgrade, quoted uninstall command, file hashes, and user-data preservation passed.'
+    if (Test-Path -LiteralPath $desktopShortcut) { throw 'Uninstall left the Desktop shortcut.' }
+    Write-Output 'Setup installation, four persisted languages, Desktop shortcut choices, upgrade, quoted uninstall command, file hashes, and user-data preservation passed.'
 } finally {
     if (Test-Path -LiteralPath (Join-Path $target 'uninstall.exe')) {
         Start-Process -FilePath (Join-Path $target 'uninstall.exe') -ArgumentList "/S _?=$target" -Wait -WindowStyle Hidden

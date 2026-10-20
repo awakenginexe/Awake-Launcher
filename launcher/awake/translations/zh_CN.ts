@@ -336,7 +336,7 @@
     <message>
       <location filename="src/launcher/ui/dialogs/AboutDialog.ui" line="116" />
       <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;A custom launcher that makes managing Minecraft easier by allowing you to have multiple instances of Minecraft at once.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-      <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;一款允许同时拥有多个 Minecraft 实例的自定义启动器，可以更加便利地管理 Minecraft。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+      <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;一款可同时管理多个 Minecraft 游戏配置的自定义启动器，让 Minecraft 管理更加便利。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/AboutDialog.ui" line="173" />
@@ -1536,7 +1536,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/BlockedModsDialog.ui" line="45" />
       <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Your configured global mods folder and default downloads folder are automatically checked for the downloaded mods and they will be copied to the instance if found.&lt;/p&gt;&lt;p&gt;Optionally, you may drag and drop the downloaded mods onto this dialog or add a folder to watch if you did not download the mods to a default location.&lt;/p&gt;&lt;p&gt;&lt;span style=" font-weight:600;"&gt;Click 'Open Missing' to open all the download links in the browser. &lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-      <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;系统会自动从你配置的全局 Mod 文件夹和默认下载文件夹中寻找下载的 Mod，并会将找到的 Mod 复制到实例中。&lt;/p&gt;&lt;p&gt;如果没有将 Mod 下载到默认位置，你也可以将下载的 Mod 拖放到到此对话框中，或者添加新的文件夹来寻找 Mod 。&lt;/p&gt;&lt;p&gt;&lt;span style=" font-weight:600;"&gt;点击 “打开下载页面” 以在浏览器中打开所有下载链接。&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+      <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;系统会自动从你配置的全局 Mod 文件夹和默认下载文件夹中寻找下载的 Mod，并会将找到的 Mod 复制到对应版本中。&lt;/p&gt;&lt;p&gt;如果没有将 Mod 下载到默认位置，你也可以将下载的 Mod 拖放到到此对话框中，或者添加新的文件夹来寻找 Mod 。&lt;/p&gt;&lt;p&gt;&lt;span style=" font-weight:600;"&gt;点击 “打开下载页面” 以在浏览器中打开所有下载链接。&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/BlockedModsDialog.ui" line="59" />
@@ -1802,12 +1802,12 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/minecraft/ComponentUpdateTask.cpp" line="502" />
       <source>Instance has conflicting dependencies.</source>
-      <translation>实例包含冲突的前置项。</translation>
+      <translation>版本包含冲突的前置项。</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/ComponentUpdateTask.cpp" line="508" />
       <source>Instance has unresolved dependencies while loading/checking for launch.</source>
-      <translation>实例在启动前加载/检查时发现了未安装的前置项。</translation>
+      <translation>版本在启动前加载或检查时发现了未安装的前置项。</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/ComponentUpdateTask.cpp" line="808" />
@@ -1881,7 +1881,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/CopyInstanceDialog.ui" line="17" />
       <source>Copy Instance</source>
-      <translation>复制实例</translation>
+      <translation>复制版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/CopyInstanceDialog.ui" line="74" />
@@ -1906,7 +1906,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/CopyInstanceDialog.ui" line="118" />
       <source>Instance Copy Options</source>
-      <translation>实例复制选项</translation>
+      <translation>版本复制选项</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/CopyInstanceDialog.ui" line="134" />
@@ -1961,7 +1961,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/CopyInstanceDialog.ui" line="288" />
       <source>If "copy saves" is selected world save data will be copied instead of linked and thus not shared between instances.</source>
-      <translation>如果选择了“复制存档”，则世界存档数据将复制而非链接，因此存档不会在实例之间共享。</translation>
+      <translation>如果选择了“复制存档”，则世界存档数据将复制而非链接，因此存档不会在版本之间共享。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/CopyInstanceDialog.ui" line="291" />
@@ -2108,7 +2108,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/CreateShortcutDialog.ui" line="17" />
       <source>Create Instance Shortcut</source>
-      <translation>创建实例快捷方式</translation>
+      <translation>创建版本快捷方式</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/CreateShortcutDialog.ui" line="44" />
@@ -2164,7 +2164,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/CreateShortcutDialog.ui" line="200" />
       <source>Note: If a shortcut is moved after creation, it won't be deleted when deleting the instance.</source>
-      <translation>注：如果快捷方式创建后被移动了，删除实例时将不会删除该快捷方式。</translation>
+      <translation>注：如果快捷方式创建后被移动，删除版本时不会删除该快捷方式。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/CreateShortcutDialog.ui" line="207" />
@@ -2209,7 +2209,7 @@ Some versions of Minecraft may not launch.
     <message>
       <location filename="src/launcher/ui/dialogs/CreateShortcutDialog.cpp" line="195" />
       <source>instance</source>
-      <translation>实例</translation>
+      <translation>版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/CreateShortcutDialog.cpp" line="199" />
@@ -2761,7 +2761,7 @@ Maximum allocated: %1 MiB
 Free: %2 MiB (out of %3 MiB total)
 
 Launch anyway? This may cause slowdowns in the game and your system.</source>
-      <translation>在当前内存设置下，可能没有足够的可用内存能用于启动该实例。
+      <translation>当前内存设置可能导致可用内存不足，无法启动该版本。
 
 最大分配内存：%1 MiB
 可用内存：%2 MiB（总共 %3 MiB）
@@ -2771,7 +2771,7 @@ Launch anyway? This may cause slowdowns in the game and your system.</source>
     <message>
       <location filename="src/launcher/minecraft/launch/EnsureAvailableMemory.cpp" line="101" />
       <source>Not enough RAM available to launch this instance</source>
-      <translation>没有足够的可用内存能用于启动该实例</translation>
+      <translation>没有足够的可用内存来启动此版本</translation>
     </message>
   </context>
   <context>
@@ -2819,7 +2819,7 @@ Launch anyway? This may cause slowdowns in the game and your system.</source>
       <source>
 This instance cannot be launched because some libraries are missing or have not been downloaded yet. Please try again in online mode with a working Internet connection</source>
       <translation>
-该实例无法启动，因为部分库文件缺失或未下载。请在互联网连接正常的情况下，以在线模式重试</translation>
+该版本无法启动，因为部分库文件缺失或尚未下载。请在互联网连接正常的情况下，以在线模式重试</translation>
     </message>
   </context>
   <context>
@@ -2889,7 +2889,7 @@ This instance cannot be launched because some libraries are missing or have not 
     <message>
       <location filename="src/launcher/ui/dialogs/ExportInstanceDialog.ui" line="14" />
       <source>Export Instance</source>
-      <translation>导出该实例</translation>
+      <translation>导出该版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/ExportInstanceDialog.cpp" line="137" />
@@ -2923,7 +2923,7 @@ This instance cannot be launched because some libraries are missing or have not 
     <message>
       <location filename="src/launcher/ui/dialogs/ExportInstanceDialog.cpp" line="149" />
       <source>Unable to export instance</source>
-      <translation>无法导出实例</translation>
+      <translation>无法导出版本</translation>
     </message>
     <message>
       <source>Abort</source>
@@ -3229,7 +3229,7 @@ This instance cannot be launched because some libraries are missing or have not 
     <message>
       <location filename="src/launcher/ui/dialogs/ExportToModListDialog.ui" line="212" />
       <source>This depends on the mods' metadata. To ensure it is available, run an update on the instance. Installing the updates isn't necessary.</source>
-      <translation>这取决于这些 Mod 的元数据。如果要保证其可用，可以该实例中运行更新，而不需要将更新安装到实例中。</translation>
+      <translation>这取决于这些 Mod 的元数据。若要确保信息可用，请更新此版本；无需安装更新。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/ExportToModListDialog.ui" line="226" />
@@ -3579,7 +3579,7 @@ Are you sure you want to do this?</source>
     <message>
       <location filename="src/launcher/ui/pages/global/ExternalToolsPage.ui" line="245" />
       <source>Custom tools launchable on worlds from the instance Worlds menu. Command supports the ${WORLD_PATH} placeholder.</source>
-      <translation>可以在实例的世界菜单中的世界上启动的自定义工具。命令支持 ${WORLD_PATH} 占位符。</translation>
+      <translation>可以在版本的世界菜单中启动的自定义工具。命令支持 ${WORLD_PATH} 占位符。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/ExternalToolsPage.ui" line="257" />
@@ -3860,12 +3860,12 @@ Please try again.</source>
     <message>
       <location filename="src/launcher/modplatform/ftb/FTBPackInstallTask.cpp" line="212" />
       <source>The following files are not available for download in third party launchers.&lt;br/&gt;You will need to manually download them and add them to the instance.</source>
-      <translation>以下文件无法在第三方启动器中下载。&lt;br/&gt;你需要手动下载它们并将其添加到实例中。</translation>
+      <translation>以下文件无法通过第三方启动器下载。&lt;br/&gt;请手动下载并添加到此版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/modplatform/ftb/FTBPackInstallTask.cpp" line="234" />
       <source>Creating the instance...</source>
-      <translation>正在创建实例……</translation>
+      <translation>正在创建版本……</translation>
     </message>
     <message>
       <location filename="src/launcher/modplatform/ftb/FTBPackInstallTask.cpp" line="297" />
@@ -4183,7 +4183,7 @@ NOTE: Make sure you made a backup of your important instance data before updatin
       <location filename="src/launcher/modplatform/flame/FlameInstanceCreationTask.cpp" line="594" />
       <source>The following files are not available for download in third party launchers.&lt;br/&gt;You will need to manually download them and add them to the instance.</source>
       <oldsource>The following mods were blocked on third party launchers.&lt;br/&gt;You will need to manually download them and add them to the modpack</oldsource>
-      <translation>以下文件无法在第三方启动器中下载。&lt;br/&gt;你需要手动下载它们并将其添加到实例中。</translation>
+      <translation>以下文件无法通过第三方启动器下载。&lt;br/&gt;请手动下载并添加到此版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/modplatform/flame/FlameInstanceCreationTask.cpp" line="616" />
@@ -4232,7 +4232,7 @@ NOTE: Make sure you made a backup of your important instance data before updatin
     <message>
       <location filename="src/launcher/ui/pages/instance/ManagedPackPage.cpp" line="344" />
       <source>&lt;h1&gt;Hey there!&lt;/h1&gt;&lt;h4&gt;It seems like your Pack ID is null. This is because of a bug in older versions of the launcher.&lt;br/&gt;Unfortunately, we can't do the proper API requests without this information.&lt;br/&gt;&lt;br/&gt;So, in order for this feature to work, you will need to re-download the modpack from the built-in downloader.&lt;br/&gt;&lt;br/&gt;Don't worry though, it will ask you to update this instance instead, so you'll not lose this instance!&lt;/h4&gt;</source>
-      <translation>&lt;h1&gt;你好！ &lt;/h1&gt;&lt;h4&gt;由于旧版本启动器中存在的漏洞，你的 Pack ID 为空。 &lt;br/&gt;不幸的是，执行正确的 API 请求需要此信息。 &lt;br/&gt;&lt;br/&gt;为了使该功能正常工作， 需要用内置下载器重新下载整合包。 &lt;br/&gt;&lt;br/&gt;不用担心，下载器会让你更新该实例，所以该实例不会丢失！ &lt;/h4&gt;</translation>
+      <translation>&lt;h1&gt;你好！ &lt;/h1&gt;&lt;h4&gt;由于旧版本启动器中存在的漏洞，你的 Pack ID 为空。 &lt;br/&gt;不幸的是，执行正确的 API 请求需要此信息。 &lt;br/&gt;&lt;br/&gt;为了使该功能正常工作， 需要用内置下载器重新下载整合包。 &lt;br/&gt;&lt;br/&gt;不用担心，下载器会引导你更新此版本，因此你的版本数据会保留！ &lt;/h4&gt;</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/ManagedPackPage.cpp" line="386" />
@@ -4825,17 +4825,17 @@ NOTE: Make sure you made a backup of your important instance data before updatin
     <message>
       <location filename="src/launcher/ui/dialogs/ImportResourceDialog.ui" line="14" />
       <source>Choose instance to import to</source>
-      <translation>选择需要导入的实例</translation>
+      <translation>选择要导入到的版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/ImportResourceDialog.ui" line="20" />
       <source>Choose the instance you would like to import this resource pack to.</source>
-      <translation>选择需要导入资源包的实例。</translation>
+      <translation>选择要导入资源包的版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/ImportResourceDialog.cpp" line="46" />
       <source>Choose the instance you would like to import this %1 to.</source>
-      <translation>选择需要导入 %1 的实例。</translation>
+      <translation>选择要导入 %1 的版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/ImportResourceDialog.cpp" line="47" />
@@ -4967,7 +4967,7 @@ NOTE: Make sure you made a backup of your important instance data before updatin
       <source>%1 is known to conflict with %2, which is enabled on this instance. Having both enabled at the same time will likely break the instance.
 
 What would you like to do with %2?</source>
-      <translation>该实例上启用的 %2 与 %1 冲突。同时启用两者有可能会导致实例无法正常启动。
+      <translation>此版本中启用的 %2 与 %1 冲突。同时启用两者可能导致版本无法正常启动。
 
 你想如何处理 %2？</translation>
     </message>
@@ -5024,7 +5024,7 @@ What would you like to do with %2?</source>
     <message>
       <location filename="src/launcher/InstanceCopyTask.cpp" line="40" />
       <source>Copying instance %1</source>
-      <translation>正在复制实例 %1</translation>
+      <translation>正在复制版本 %1</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceCopyTask.cpp" line="145" />
@@ -5046,12 +5046,12 @@ What would you like to do with %2?</source>
     <message>
       <source>Error while creating new instance:
 %1</source>
-      <translation>创建新实例时出现错误：
+      <translation>创建新版本时出现错误：
 %1</translation>
     </message>
     <message>
       <source>Error while creating new instance.</source>
-      <translation>创建新实例时出现错误。</translation>
+      <translation>创建新版本时出现错误。</translation>
     </message>
     <message>
       <source>Removing old conflicting files...</source>
@@ -5229,7 +5229,7 @@ Proceed with caution!</source>
     <message>
       <location filename="src/launcher/InstanceList.cpp" line="180" />
       <source>%1 Instance</source>
-      <translation>%1 实例</translation>
+      <translation>%1 个版本</translation>
     </message>
   </context>
   <context>
@@ -5251,7 +5251,7 @@ Proceed with caution!</source>
     <message>
       <location filename="src/launcher/InstancePageProvider.h" line="51" />
       <source>Edit Instance (%1)</source>
-      <translation>编辑实例（%1）</translation>
+      <translation>编辑版本（%1）</translation>
     </message>
     <message>
       <source>Loader mods</source>
@@ -5586,7 +5586,7 @@ Please make sure that the maximum memory value is lower.</source>
     <message>
       <location filename="src/launcher/InstanceList.cpp" line="1021" />
       <source>Failed to commit instance, even after multiple retries. It is being blocked by something.</source>
-      <translation>多次重试后提交实例失败。更新被某因素阻止。</translation>
+      <translation>多次重试后提交版本失败，更新可能受到其他程序阻止。</translation>
     </message>
   </context>
   <context>
@@ -5622,13 +5622,13 @@ Please make sure that the maximum memory value is lower.</source>
     <message>
       <location filename="src/launcher/ui/instanceview/InstanceView.cpp" line="472" />
       <source>Click "Add Instance" to get started.</source>
-      <translation>从点击“添加实例”开始。</translation>
+      <translation>点击“添加版本”开始。</translation>
     </message>
     <message>
       <source>No matching instances.
 Clear the search or turn off Pinned only.</source>
-      <translation>没有匹配的实例。
-请清除搜索或关闭仅显示置顶实例。</translation>
+      <translation>没有匹配的版本。
+请清除搜索条件，或关闭“仅显示置顶版本”。</translation>
     </message>
   </context>
   <context>
@@ -5656,7 +5656,7 @@ Clear the search or turn off Pinned only.</source>
     <message>
       <location filename="src/launcher/ui/InstanceWindow.cpp" line="99" />
       <source>Restart the running instance</source>
-      <translation>重启正在运行的实例</translation>
+      <translation>重启正在运行的版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/InstanceWindow.cpp" line="106" />
@@ -5688,7 +5688,7 @@ Clear the search or turn off Pinned only.</source>
     <message>
       <location filename="src/launcher/ui/InstanceWindow.cpp" line="107" />
       <source>Kill the running instance</source>
-      <translation>强制停止正在运行的实例</translation>
+      <translation>强制停止正在运行的版本</translation>
     </message>
     <message>
       <source>Launch</source>
@@ -5697,7 +5697,7 @@ Clear the search or turn off Pinned only.</source>
     <message>
       <location filename="src/launcher/ui/InstanceWindow.cpp" line="91" />
       <source>Launch the instance</source>
-      <translation>运行该实例</translation>
+      <translation>运行该版本</translation>
     </message>
   </context>
   <context>
@@ -6191,7 +6191,7 @@ You can change the Java version in the settings later.
     <message>
       <location filename="src/launcher/ui/widgets/JavaSettingsWidget.ui" line="130" />
       <source>If enabled, the launcher will not check if an instance is compatible with the selected Java version.</source>
-      <translation>启用时，启动器将不会检查选中的 Java 是否与实例兼容。</translation>
+      <translation>启用后，启动器不会检查所选 Java 是否与版本兼容。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/JavaSettingsWidget.ui" line="44" />
@@ -6369,7 +6369,7 @@ Please make sure that the maximum memory value is lower.</source>
       <location filename="src/launcher/ui/setupwizard/JavaWizardPage.cpp" line="85" />
       <source>Please select how much memory to allocate to instances and if Awake Launcher should manage Java automatically or manually.</source>
       <oldsource>Please select how much memory to allocate to instances and if Awake Launcher should manage java automatically or manually.</oldsource>
-      <translation>请选择要分配给实例的内存大小，以及应手动管理还是让 Awake Launcher 自动管理 Java。</translation>
+      <translation>请选择分配给各版本的内存大小，以及由 Awake Launcher 自动管理 Java 还是手动管理。</translation>
     </message>
     <message>
       <source>You do not have a working Java set up yet or it went missing.
@@ -6577,7 +6577,7 @@ You can change the Java version in the settings later.
     <message>
       <location filename="src/launcher/LaunchController.cpp" line="68" />
       <source>No instance specified!</source>
-      <translation>未指定实例！</translation>
+      <translation>未指定版本！</translation>
     </message>
     <message>
       <location filename="src/launcher/LaunchController.cpp" line="73" />
@@ -6896,7 +6896,7 @@ Do you want to play the demo?</source>
     <message>
       <location filename="src/launcher/LaunchController.cpp" line="498" />
       <source>This can cause the instance to get corrupted and should only be used if Minecraft is frozen for some reason</source>
-      <translation>这可能导致实例出现错误，这应该只在 Minecraft 由于一些原因冻结的时候使用</translation>
+      <translation>这可能损坏版本，仅在 Minecraft 因故卡死时使用。</translation>
     </message>
   </context>
   <context>
@@ -6980,7 +6980,7 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="278" />
       <source>I&amp;nstances:</source>
-      <translation>实例 (&amp;N)：</translation>
+      <translation>版本 (&amp;N)：</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="298" />
@@ -6995,12 +6995,12 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="62" />
       <source>Instance Sorting</source>
-      <translation>实例排序</translation>
+      <translation>版本排序</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="115" />
       <source>Instance Renaming</source>
-      <translation>实例重命名</translation>
+      <translation>版本重命名</translation>
     </message>
     <message>
       <source>Ask what to do with the folder</source>
@@ -7284,7 +7284,7 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="338" />
       <source>Instance &amp;Icons:</source>
-      <translation>实例图标 (&amp;I)：</translation>
+      <translation>版本图标 (&amp;I)：</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="368" />
@@ -7294,7 +7294,7 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="391" />
       <source>Additional Instance Folders</source>
-      <translation>额外实例文件夹</translation>
+      <translation>额外版本文件夹</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="440" />
@@ -7399,12 +7399,12 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="178" />
       <source>Opens the edit instance window on double-clicking an instance instead of running the instance.</source>
-      <translation>双击实例时打开编辑实例窗口，而不是启动该实例。</translation>
+      <translation>双击版本时打开版本编辑窗口，而不是启动该版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="181" />
       <source>&amp;Open Edit window on instance double-click</source>
-      <translation>双击实例时打开编辑窗口 (&amp;O)</translation>
+      <translation>双击版本时打开编辑窗口 (&amp;O)</translation>
     </message>
     <message>
       <source>Additional instance directories</source>
@@ -7458,12 +7458,12 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="500" />
       <source>When creating a new modpack instance, suggest updating an existing instance instead.</source>
-      <translation>创建新的整合包实例时，提示可以更新现有的该整合包的实例（而不是创建新的实例）。</translation>
+      <translation>创建新的整合包版本时，提示可以更新现有版本（而不是创建新的版本）。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="503" />
       <source>Suggest to update an existing instance during modpack installation</source>
-      <translation>安装整合包时，提示可以更新现有的该整合包的实例</translation>
+      <translation>安装整合包时，提示可以更新现有版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="512" />
@@ -7495,17 +7495,17 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="562" />
       <source>Instance Creation</source>
-      <translation>创建实例</translation>
+      <translation>创建版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="568" />
       <source>Downloads required game files while creating the instance. Disable this to skip the initial download and fetch files when the instance is launched instead.</source>
-      <translation>创建实例时下载所需的游戏文件。禁用此项会跳过初始的下载步骤，改为启动实例时获取文件。</translation>
+      <translation>创建版本时下载所需的游戏文件。禁用此项会跳过初始下载，改为启动版本时获取文件。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="571" />
       <source>Download game files during instance creation</source>
-      <translation>创建实例时下载游戏文件</translation>
+      <translation>创建版本时下载游戏文件</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.ui" line="581" />
@@ -7560,7 +7560,7 @@ You may have to fix your mods because the game is still logging to files and lik
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.cpp" line="100" />
       <source>You're trying to specify an instance folder which's path contains at least one '!'. Java is known to cause problems if that is the case, your instances (probably) won't start!</source>
-      <translation>你试图指定的实例文件夹路径包含至少一个“!”字符。在这种情况下，Java 会出现问题，实例（可能）无法启动！</translation>
+      <translation>你指定的版本文件夹路径中包含“!”字符。Java 可能因此出现问题，导致游戏无法启动！</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.cpp" line="105" />
@@ -7590,7 +7590,7 @@ Granting %1 access to it via Flatseal is recommended.</oldsource>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.cpp" line="139" />
       <source>Additional Instance Folder</source>
-      <translation>额外实例文件夹</translation>
+      <translation>额外版本文件夹</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/global/LauncherPage.cpp" line="145" />
@@ -7738,12 +7738,12 @@ Granting %1 access to it via Flatseal is recommended.</oldsource>
     <message>
       <location filename="src/launcher/minecraft/update/LegacyFMLLibrariesTask.cpp" line="89" />
       <source>Copying FML libraries into the instance...</source>
-      <translation>正在复制 FML 库到实例中…</translation>
+      <translation>正在复制 FML 库到版本目录…</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/update/LegacyFMLLibrariesTask.cpp" line="98" />
       <source>Failed creating FML library folder inside the instance.</source>
-      <translation>在实例中创建 FML 库文件夹时出错。</translation>
+      <translation>在版本目录中创建 FML 库文件夹时出错。</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/update/LegacyFMLLibrariesTask.cpp" line="102" />
@@ -8015,7 +8015,7 @@ Should it be removed now?</source>
     <message>
       <location filename="src/launcher/minecraft/update/LibrariesTask.cpp" line="23" />
       <source>Libraries for instance %1</source>
-      <translation>实例 %1 的依赖库</translation>
+      <translation>版本 %1 的依赖库</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/update/LibrariesTask.cpp" line="31" />
@@ -8503,7 +8503,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="348" />
       <source>Launch the selected instance.</source>
-      <translation>运行选中实例。</translation>
+      <translation>启动选中版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="35" />
@@ -8517,7 +8517,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="293" />
       <source>Add a new instance.</source>
-      <translation>添加一个新的实例。</translation>
+      <translation>添加一个新版本。</translation>
     </message>
     <message>
       <source>&amp;View Instance Folder</source>
@@ -8651,7 +8651,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="359" />
       <source>Kill the running instance.</source>
-      <translation>强制退出运行中的实例。</translation>
+      <translation>强制退出运行中的版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="403" />
@@ -8690,7 +8690,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="91" />
       <source>Instance Toolbar</source>
-      <translation>实例工具栏</translation>
+      <translation>版本工具栏</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="392" />
@@ -8710,7 +8710,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="290" />
       <source>Add Instanc&amp;e...</source>
-      <translation>添加实例 (&amp;E)...</translation>
+      <translation>添加版本 (&amp;E)...</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="185" />
@@ -8726,7 +8726,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="282" />
       <source>&amp;Undo Last Instance Deletion</source>
-      <translation>撤销上一个实例的删除操作 (&amp;U)</translation>
+      <translation>撤销上一个版本的删除操作 (&amp;U)</translation>
     </message>
     <message>
       <source>View &amp;Instance Folder</source>
@@ -8787,11 +8787,11 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="494" />
       <source>Creates a shortcut on a selected folder to launch the selected instance.</source>
-      <translation>在选定文件夹上创建启动此实例的快捷方式。</translation>
+      <translation>在选定文件夹中创建启动此版本的快捷方式。</translation>
     </message>
     <message>
       <source>&amp;Instances</source>
-      <translation>实例 (&amp;I)</translation>
+      <translation>版本 (&amp;I)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="541" />
@@ -8818,12 +8818,12 @@ Reason:
     </message>
     <message>
       <source>Instance Icons</source>
-      <translation>实例图标</translation>
+      <translation>版本图标</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="585" />
       <source>Open the instance icons folder in a file browser.</source>
-      <translation>在文件管理器中打开实例图标文件夹。</translation>
+      <translation>在文件管理器中打开版本图标文件夹。</translation>
     </message>
     <message>
       <source>Logs</source>
@@ -8961,7 +8961,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="538" />
       <source>I&amp;nstances</source>
-      <translation>实例 (&amp;N)</translation>
+      <translation>版本 (&amp;N)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="549" />
@@ -8981,7 +8981,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="582" />
       <source>Instance &amp;Icons</source>
-      <translation>实例图标 (&amp;I)</translation>
+      <translation>版本图标 (&amp;I)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="593" />
@@ -9020,7 +9020,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="459" />
       <source>Export the selected instance to supported formats.</source>
-      <translation>将选中实例导出为支持的格式。</translation>
+      <translation>将选中版本导出为支持的格式。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="467" />
@@ -9112,7 +9112,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="395" />
       <source>Change the selected instance's icon.</source>
-      <translation>更改选中实例的图标。</translation>
+      <translation>更改选中版本的图标。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="370" />
@@ -9122,7 +9122,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="373" />
       <source>Rename the selected instance.</source>
-      <translation>重命名选中实例。</translation>
+      <translation>重命名选中版本。</translation>
     </message>
     <message>
       <source>Launch &amp;Offline</source>
@@ -9233,7 +9233,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="406" />
       <source>Change the instance settings, mods and versions.</source>
-      <translation>修改实例的设置、Mod 和版本。</translation>
+      <translation>修改版本的设置、Mod 和游戏版本。</translation>
     </message>
     <message>
       <source>Edit Notes</source>
@@ -9259,7 +9259,7 @@ Reason:
       <location filename="src/launcher/ui/MainWindow.ui" line="431" />
       <source>Delete the selected instance.</source>
       <oldsource>View the worlds of this instance.</oldsource>
-      <translation>删除所选实例。</translation>
+      <translation>删除所选版本。</translation>
     </message>
     <message>
       <source>Manage Screenshots</source>
@@ -9276,7 +9276,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="384" />
       <source>Change the selected instance's group.</source>
-      <translation>更改选中实例的组。</translation>
+      <translation>更改选中版本的分组。</translation>
     </message>
     <message>
       <source>Minecraft Folder</source>
@@ -9324,7 +9324,7 @@ Reason:
     <message>
       <location filename="src/launcher/ui/MainWindow.ui" line="445" />
       <source>Copy the selected instance.</source>
-      <translation>复制选中实例。</translation>
+      <translation>复制选中版本。</translation>
     </message>
     <message>
       <source>%1 - Version %2</source>
@@ -9341,7 +9341,7 @@ Reason:
       <location filename="src/launcher/ui/MainWindow.cpp" line="444" />
       <location filename="src/launcher/ui/MainWindow.cpp" line="1733" />
       <source>No instance selected</source>
-      <translation>未选择实例</translation>
+      <translation>未选择版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="370" />
@@ -9356,7 +9356,7 @@ Reason:
       <location filename="src/launcher/ui/MainWindow.cpp" line="549" />
       <source>&amp;Create instance</source>
       <oldsource>Create instance</oldsource>
-      <translation>创建实例 (&amp;C)</translation>
+      <translation>创建版本 (&amp;C)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="563" />
@@ -9477,13 +9477,13 @@ Please add your Microsoft or Mojang account.</oldsource>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1412" />
       <location filename="src/launcher/ui/MainWindow.cpp" line="1627" />
       <source>Instance not editable</source>
-      <translation>实例不可被编辑</translation>
+      <translation>版本不可编辑</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1413" />
       <location filename="src/launcher/ui/MainWindow.cpp" line="1628" />
       <source>This instance is not editable. It may be broken, invalid, or too old. Check logs for details.</source>
-      <translation>该实例不可被编辑。也许它损坏，无效或太旧？请查看日志了解详情。</translation>
+      <translation>该版本不可编辑。也许它损坏，无效或太旧？请查看日志了解详情。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1466" />
@@ -9645,14 +9645,14 @@ URL：
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1157" />
       <source>No instance!</source>
-      <translation>没有实例！</translation>
+      <translation>没有可用版本！</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1158" />
       <source>No instance available to add the resource to.
 Please create a new instance before attempting to install this resource again.</source>
-      <translation>没有可以添加资源的实例。
-请先创建新实例，然后再尝试安装该资源。</translation>
+      <translation>没有可添加资源的版本。
+请先创建新版本，然后再尝试安装该资源。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1284" />
@@ -9682,13 +9682,13 @@ Please create a new instance before attempting to install this resource again.</
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1314" />
       <source>Failed to undo trashing instance</source>
-      <translation>无法撤销将实例移至回收站的操作</translation>
+      <translation>无法撤销将版本移至回收站的操作</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1315" />
       <source>Some instances and shortcuts could not be restored.
 Please check your trashbin to manually restore them.</source>
-      <translation>一些实例和快捷方式无法还原。
+      <translation>一些版本和快捷方式无法还原。
 请查看回收站并手动还原它们。</translation>
     </message>
     <message>
@@ -9703,12 +9703,12 @@ To clear the metadata cache manually, press Folders -&gt; View Launcher Root Fol
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1514" />
       <source>Cannot Delete Running Instance</source>
-      <translation>无法删除正在运行的实例</translation>
+      <translation>无法删除正在运行的版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1515" />
       <source>The selected instance is currently running and cannot be deleted. Please stop the instance before attempting to delete it.</source>
-      <translation>所选实例当前正在运行，无法删除。请停止该实例后再尝试删除它。</translation>
+      <translation>所选版本当前正在运行，无法删除。请先停止该版本。</translation>
     </message>
     <message numerus="yes">
       <location filename="src/launcher/ui/MainWindow.cpp" line="1526" />
@@ -9723,8 +9723,8 @@ To clear the metadata cache manually, press Folders -&gt; View Launcher Root Fol
 This may be permanent and will completely delete the instance.
 
 Are you sure?</source>
-      <translation>你将要删除 “%1”%2。
-这可能是永久性的，并将彻底删除该实例。
+      <translation>你将要删除“%1”%2。
+此操作可能无法撤销，并会彻底删除该版本。
 
 你确定要这样做吗？</translation>
     </message>
@@ -9772,12 +9772,12 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1739" />
       <source>Rename Instance</source>
-      <translation>重命名实例</translation>
+      <translation>重命名版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1751" />
       <source>Your instance folder contains '!' and this is known to cause Java problems!</source>
-      <translation>你的实例文件夹名称包含“!”，这可能会导致 Java 出现问题！</translation>
+      <translation>你的版本文件夹名称包含“!”，这可能会导致 Java 出现问题！</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1752" />
@@ -9792,12 +9792,12 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1766" />
       <source>Your instance folder contains 'Rar$' - that means you haven't extracted the launcher archive!</source>
-      <translation>你的实例文件夹包含“Rar$”——这意味着你并未解压启动器压缩包！</translation>
+      <translation>你的版本文件夹包含“Rar$”——这意味着你并未解压启动器压缩包！</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1772" />
       <source>Your instance folder is in a temporary folder: '%1'!</source>
-      <translation>实例文件夹位于临时文件夹：“%1”中！</translation>
+      <translation>版本文件夹位于临时文件夹：“%1”中！</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/MainWindow.cpp" line="1785" />
@@ -9866,15 +9866,15 @@ Are you sure?</source>
     </message>
     <message>
       <source>This instance no longer exists.</source>
-      <translation>此实例已不存在。</translation>
+      <translation>此版本已不存在。</translation>
     </message>
     <message>
       <source>The instance could not be selected.</source>
-      <translation>无法选择此实例。</translation>
+      <translation>无法选择此版本。</translation>
     </message>
     <message>
       <source>This instance cannot be launched right now.</source>
-      <translation>现在无法启动此实例。</translation>
+      <translation>现在无法启动此版本。</translation>
     </message>
     <message>
       <source>Username cannot be empty.</source>
@@ -9898,7 +9898,7 @@ Are you sure?</source>
     </message>
     <message>
       <source>Enter an instance name.</source>
-      <translation>请输入实例名称。</translation>
+      <translation>请输入版本名称。</translation>
     </message>
     <message>
       <source>Choose an archive file or a valid download URL.</source>
@@ -9938,23 +9938,23 @@ Are you sure?</source>
     </message>
     <message>
       <source>Delete instance</source>
-      <translation>删除实例</translation>
+      <translation>删除版本</translation>
     </message>
     <message>
       <source>Delete this instance?</source>
-      <translation>要删除此实例吗？</translation>
+      <translation>要删除此版本吗？</translation>
     </message>
     <message>
       <source>This removes the instance%1, including its worlds, mods and settings. Copy any worlds you want to keep before continuing.</source>
-      <translation>此操作将删除实例%1，包括其中的世界、模组和设置。继续前请复制要保留的世界。</translation>
+      <translation>此操作将删除版本%1，包括其中的世界、模组和设置。继续前请复制要保留的世界。</translation>
     </message>
     <message>
       <source>Keep instance</source>
-      <translation>保留实例</translation>
+      <translation>保留版本</translation>
     </message>
     <message>
       <source>Instance name:</source>
-      <translation>实例名称：</translation>
+      <translation>版本名称：</translation>
     </message>
     <message>
       <source>Unsupported Modrinth link.
@@ -10088,7 +10088,7 @@ Make sure you also trust the URL.
 </source>
       <translation>这是本地整合包。
 只能使用 %1 格式文件或者通过 URL 更新。
-不要使用与上述格式不同的文件更新，这有可能会导致实例无法正常启动。
+不要使用其他格式的文件更新，否则可能导致此版本无法正常启动。
 还要确保你信任这个 URL。
 </translation>
     </message>
@@ -10115,7 +10115,7 @@ Make sure you also trust the URL.
     <message>
       <location filename="src/launcher/ui/pages/instance/ManagedPackPage.cpp" line="286" />
       <source>The instance updated to pack version %1 successfully.</source>
-      <translation>实例已成功升级到整合包版本 %1。</translation>
+      <translation>版本已成功更新到整合包版本 %1。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/ManagedPackPage.cpp" line="291" />
@@ -10125,7 +10125,7 @@ Make sure you also trust the URL.
     <message>
       <location filename="src/launcher/ui/pages/instance/ManagedPackPage.cpp" line="292" />
       <source>The instance failed to update to pack version %1. Please check launcher logs for more information.</source>
-      <translation>无法将实例升级到整合包版本 %1。请查看启动器日志以获取更多信息。</translation>
+      <translation>无法将版本更新到整合包版本 %1。请查看启动器日志了解详情。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/ManagedPackPage.cpp" line="461" />
@@ -10135,8 +10135,8 @@ As such, it is strongly recommended to create a backup copy of the instance.
 
 Are you sure?</source>
       <translation>你将要将整合包升级到新版本。
-这可能会对实例的文件作出不可逆转的改动。
-因此强烈建议你先备份该实例。
+这可能会对版本文件作出不可逆的更改。
+因此强烈建议先备份此版本。
 
 你确定要继续吗？</translation>
     </message>
@@ -10152,9 +10152,9 @@ Irreversible changes may be made to the instance's files.
 As such, it is strongly recommended to create a backup copy of the instance.
 
 Are you sure?</source>
-      <translation>你将要将整合包升级到版本 “%1”。
-这可能会对实例的文件作出不可逆转的改动。
-因此强烈建议你先备份该实例。
+      <translation>你将把整合包更新到版本“%1”。
+这可能会对版本文件作出不可逆的更改。
+因此强烈建议先备份此版本。
 
 你确定要继续吗？</translation>
     </message>
@@ -10318,7 +10318,7 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/minecraft/MinecraftInstance.cpp" line="1132" />
       <source>, total played for %1</source>
-      <translation>，此实例总游玩时长：%1</translation>
+      <translation>，此版本总游玩时长：%1</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/MinecraftInstance.cpp" line="1137" />
@@ -10652,17 +10652,17 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.ui" line="337" />
       <source>Show time spent &amp;playing instances</source>
-      <translation>显示单实例的游玩时长 (&amp;P)</translation>
+      <translation>显示各版本的游玩时长 (&amp;P)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.ui" line="344" />
       <source>&amp;Record time spent playing instances</source>
-      <translation>记录单实例的游玩时长 (&amp;R)</translation>
+      <translation>记录各版本的游玩时长 (&amp;R)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.ui" line="358" />
       <source>Show the &amp;total time played across instances</source>
-      <translation>显示游玩所有实例的总时长 (&amp;T)</translation>
+      <translation>显示所有版本的总游玩时长 (&amp;T)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.ui" line="365" />
@@ -10815,7 +10815,7 @@ It is most likely you will need to change the path - please refer to the mod's w
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.ui" line="351" />
       <source>&amp;Count time playing this instance into total time played</source>
-      <translation>将此实例的游玩时间计入总游玩时长中 (&amp;C)</translation>
+      <translation>将此版本的游玩时间计入总时长 (&amp;C)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.ui" line="375" />
@@ -11006,12 +11006,12 @@ It is most likely you will need to change the path - please refer to the mod's w
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.cpp" line="70" />
       <source>Show time &amp;playing this instance</source>
-      <translation>显示此实例的游玩时间 (&amp;P)</translation>
+      <translation>显示此版本的游玩时间 (&amp;P)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.cpp" line="71" />
       <source>&amp;Record time playing this instance</source>
-      <translation>记录此实例的游玩时间 (&amp;R)</translation>
+      <translation>记录此版本的游玩时间 (&amp;R)</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/widgets/MinecraftSettingsWidget.cpp" line="76" />
@@ -12942,7 +12942,7 @@ NOTE: Make sure you made a backup of your important instance data before updatin
       <location filename="src/launcher/ui/dialogs/NewInstanceDialog.ui" line="17" />
       <location filename="src/launcher/ui/dialogs/NewInstanceDialog.cpp" line="222" />
       <source>New Instance</source>
-      <translation>新实例</translation>
+      <translation>新版本</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/dialogs/NewInstanceDialog.ui" line="32" />
@@ -13484,7 +13484,7 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/modplatform/atlauncher/ATLPackInstallTask.cpp" line="838" />
       <source>The following files are not available for download in third party launchers.&lt;br/&gt;You will need to manually download them and add them to the instance.</source>
-      <translation>下列文件无法在第三方启动器中下载。&lt;br/&gt;你需要手动下载并将它们添加到实例中。</translation>
+      <translation>下列文件无法通过第三方启动器下载。&lt;br/&gt;请手动下载并添加到此版本。</translation>
     </message>
     <message>
       <location filename="src/launcher/modplatform/atlauncher/ATLPackInstallTask.cpp" line="896" />
@@ -14195,7 +14195,7 @@ To overwrite this lock and proceed with this update anyway, select "Ignore" belo
     <message>
       <location filename="src/launcher/ui/dialogs/ProfileSelectDialog.ui" line="39" />
       <source>Use as default for this instance only?</source>
-      <translation>仅用于本实例？</translation>
+      <translation>仅用于此版本？</translation>
     </message>
     <message>
       <source>Name</source>
@@ -14924,7 +14924,7 @@ This message will be displayed until you remove this from the JVM arguments.</so
     <message>
       <location filename="src/launcher/InstanceTask.cpp" line="17" />
       <source>Change instance name</source>
-      <translation>更改实例名称</translation>
+      <translation>更改版本名称</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceTask.cpp" line="18" />
@@ -14932,7 +14932,7 @@ This message will be displayed until you remove this from the JVM arguments.</so
 
 Old name: %1
 New name: %2</source>
-      <translation>实例的名称似乎包含旧版本。 你想更新它吗？
+      <translation>版本名称似乎包含旧版本号。要更新名称吗？
 
 旧名称：%1
 新名称：%2</translation>
@@ -14947,19 +14947,19 @@ New name: %2</source>
       <source>One or more of your instances are from this same modpack%1. Do you want to create a separate instance, or update the existing one?
 
 NOTE: Make sure you made a backup of your important instance data before updating, as worlds can be corrupted and some configuration may be lost (due to pack overrides).</source>
-      <translation>你拥有一个或多个来自此整合包（%1）的实例。你想创建一个独立的实例，还是更新现有的实例？
+      <translation>你已有一个或多个来自此整合包（%1）的版本。要新建一个版本，还是更新现有版本？
 
-注意：在更新实例前请确保备份了实例的重要数据，游戏数据与配置文件可能会损坏或遗失（由于整合包的覆盖）。</translation>
+注意：更新前请备份此版本的重要数据。整合包覆盖可能导致世界或配置损坏、丢失。</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceTask.cpp" line="45" />
       <source>Update existing instance</source>
-      <translation>更新现有实例</translation>
+      <translation>更新现有版本</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceTask.cpp" line="46" />
       <source>Create new instance</source>
-      <translation>创建新实例</translation>
+      <translation>创建新版本</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceTask.cpp" line="104" />
@@ -15275,7 +15275,7 @@ Would you like to remove those existing saves as part of this update?</source>
       <location filename="src/launcher/InstanceDirUpdate.cpp" line="64" />
       <location filename="src/launcher/InstanceDirUpdate.cpp" line="104" />
       <source>Cannot rename instance</source>
-      <translation>无法重命名实例</translation>
+      <translation>无法重命名版本</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceDirUpdate.cpp" line="65" />
@@ -15285,7 +15285,7 @@ Would you like to remove those existing saves as part of this update?</source>
     <message>
       <location filename="src/launcher/InstanceDirUpdate.cpp" line="70" />
       <source>Cannot rename instance folder</source>
-      <translation>无法重命名实例文件夹</translation>
+      <translation>无法重命名版本文件夹</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceDirUpdate.cpp" line="71" />
@@ -15294,7 +15294,7 @@ Would you like to remove those existing saves as part of this update?</source>
 Only the instance name will be changed. The folder will keep its current name.</source>
       <translation>实例处于运行状态时无法重命名该实例的文件夹。
 
-仅会更改实例名称，文件夹名称将会保持不变。</translation>
+仅会更改版本名称，文件夹名称将会保持不变。</translation>
     </message>
     <message>
       <location filename="src/launcher/InstanceDirUpdate.cpp" line="78" />
@@ -15457,7 +15457,7 @@ Do you wish to proceed?</source>
     <message>
       <location filename="src/launcher/minecraft/ShortcutUtils.cpp" line="202" />
       <source>Failed to create instances folder in applications folder!</source>
-      <translation>无法在应用程序文件夹里创建实例文件夹！</translation>
+      <translation>无法在应用程序文件夹里创建版本文件夹！</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/ShortcutUtils.cpp" line="211" />
@@ -15630,7 +15630,7 @@ Error message: %3</source>
     <message>
       <location filename="src/launcher/minecraft/mod/Resource.cpp" line="165" />
       <source>Not marked as compatible with the instance's game version.</source>
-      <translation>未被注明与该实例的游戏版本兼容。</translation>
+      <translation>未注明与此版本的游戏版本兼容。</translation>
     </message>
   </context>
   <context>
@@ -17663,7 +17663,7 @@ Are you sure?</source>
       <source>Instance update failed because: %1
 
 </source>
-      <translation>实例更新失败，因为：%1
+      <translation>版本更新失败，原因：%1
 
 </translation>
     </message>
@@ -17704,7 +17704,7 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/modplatform/technic/SingleZipPackInstallTask.cpp" line="125" />
       <source>Instance import has been aborted.</source>
-      <translation>实例导入操作被中止。</translation>
+      <translation>版本导入操作已中止。</translation>
     </message>
   </context>
   <context>
@@ -17766,7 +17766,7 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/modplatform/technic/SolderPackInstallTask.cpp" line="207" />
       <source>Instance import has been aborted.</source>
-      <translation>实例导入操作被中止。</translation>
+      <translation>版本导入操作已中止。</translation>
     </message>
   </context>
   <context>
@@ -18321,7 +18321,7 @@ Are you sure?</source>
     <message>
       <location filename="src/launcher/minecraft/VanillaInstanceCreationTask.cpp" line="16" />
       <source>Creating instance from version %1</source>
-      <translation>从版本 %1 创建实例</translation>
+      <translation>从版本 %1 创建游戏配置</translation>
     </message>
   </context>
   <context>
@@ -18418,9 +18418,9 @@ Are you sure?</source>
       <source>Max memory allocation exceeds the supported value.
 The selected installation of Java is 32-bit and doesn't support more than 2048MiB of RAM.
 The instance may not start due to this.</source>
-      <translation>设置的最大分配内存大小超过支持的值。
+      <translation>最大内存分配量超过支持的上限。
 目前正在使用的是不支持分配多于 2048 MiB 的 32 位 Java。
-如此设置可能导致实例启动失败。</translation>
+此设置可能导致版本无法启动。</translation>
     </message>
     <message>
       <source>Java major version is incompatible. Things might break.</source>
@@ -18437,8 +18437,8 @@ The instance may not start due to this.</source>
       <location filename="src/launcher/minecraft/launch/VerifyJavaInstall.cpp" line="79" />
       <source>This instance is not compatible with Java version %1.
 Please switch to one of the following Java versions for this instance:</source>
-      <translation>此实例与 Java 版本 %1 不兼容。
-请为此实例切换到以下 Java 版本之一：</translation>
+      <translation>此版本与 Java %1 不兼容。
+请为此版本切换到以下 Java 版本之一：</translation>
     </message>
     <message>
       <location filename="src/launcher/minecraft/launch/VerifyJavaInstall.cpp" line="84" />
@@ -18448,7 +18448,7 @@ Please switch to one of the following Java versions for this instance:</source>
     <message>
       <location filename="src/launcher/minecraft/launch/VerifyJavaInstall.cpp" line="86" />
       <source>Go to instance Java settings to change your Java version or disable the Java compatibility check if you know what you're doing.</source>
-      <translation>请前往实例设置中修改 Java 版本，或者跳过 Java 兼容性检查——如果你明白自己在做什么的话。</translation>
+      <translation>请前往版本的 Java 设置更改 Java 版本；如果你清楚后果，也可以关闭 Java 兼容性检查。</translation>
     </message>
   </context>
   <context>
@@ -18655,7 +18655,7 @@ Please switch to one of the following Java versions for this instance:</source>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.ui" line="135" />
       <source>Remove selected component from the instance.</source>
-      <translation>从实例中删除选中的组件。</translation>
+      <translation>从版本中删除选中的组件。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.ui" line="143" />
@@ -18700,7 +18700,7 @@ Please switch to one of the following Java versions for this instance:</source>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.ui" line="212" />
       <source>Download the files needed to launch the instance now.</source>
-      <translation>立刻下载运行实例需要的文件。</translation>
+      <translation>立刻下载启动此版本所需的文件。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.ui" line="217" />
@@ -18766,7 +18766,7 @@ Please switch to one of the following Java versions for this instance:</source>
     </message>
     <message>
       <source>Couldn't load the instance profile.</source>
-      <translation>无法加载实例配置。</translation>
+      <translation>无法加载版本配置。</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.cpp" line="260" />
@@ -18872,7 +18872,7 @@ Are you sure?</source>
 Please add a Microsoft account.</source>
       <oldsource>Cannot download Minecraft or update instances unless you have at least one account added.
 Please add your Microsoft or Mojang account.</oldsource>
-      <translation>不允许在没有正版账户的情况下下载 Minecraft 或更新实例。
+      <translation>请先添加账户，才能下载 Minecraft 或更新版本。
 请添加一个已购买 Minecraft 的 Microsoft 账户。</translation>
     </message>
     <message>
@@ -18948,7 +18948,7 @@ Please add your Mojang or Minecraft account.</source>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.cpp" line="484" />
       <source>Error updating instance</source>
-      <translation>更新实例时出错</translation>
+      <translation>更新版本时出错</translation>
     </message>
     <message>
       <location filename="src/launcher/ui/pages/instance/VersionPage.h" line="60" />
@@ -19713,15 +19713,15 @@ Please set up your account according to %1.</source>
     <name>Awake::LibraryWidget</name>
     <message>
       <source>Library</source>
-      <translation>实例库</translation>
+      <translation>版本库</translation>
     </message>
     <message>
       <source>Search instances or groups</source>
-      <translation>搜索实例或分组</translation>
+      <translation>搜索版本或分组</translation>
     </message>
     <message>
       <source>Search instances</source>
-      <translation>搜索实例</translation>
+      <translation>搜索版本</translation>
     </message>
     <message>
       <source>Pinned only</source>
@@ -19741,7 +19741,7 @@ Please set up your account according to %1.</source>
     </message>
     <message>
       <source>Library view</source>
-      <translation>实例库视图</translation>
+      <translation>版本库视图</translation>
     </message>
     <message>
       <source>Name</source>
@@ -19757,7 +19757,7 @@ Please set up your account according to %1.</source>
     </message>
     <message>
       <source>Sort instances</source>
-      <translation>排序实例</translation>
+      <translation>排序版本</translation>
     </message>
     <message>
       <source>More actions</source>
@@ -19765,21 +19765,21 @@ Please set up your account according to %1.</source>
     </message>
     <message>
       <source>Choose an instance</source>
-      <translation>选择实例</translation>
+      <translation>选择版本</translation>
     </message>
     <message>
       <source>Create an instance or select one from your library to play and manage it.</source>
-      <translation>创建实例或从实例库中选择一个，以游玩和管理。</translation>
+      <translation>创建版本或从版本库中选择一个，以游玩和管理。</translation>
     </message>
     <message numerus="yes">
       <source>%n instance(s)</source>
       <translation>
-        <numerusform>%n 个实例</numerusform>
+        <numerusform>%n 个版本</numerusform>
       </translation>
     </message>
     <message>
       <source>%1 of %2 instances</source>
-      <translation>%1 / %2 个实例</translation>
+      <translation>%1 / %2 个版本</translation>
     </message>
     <message>
       <source>Java: %1
@@ -19793,23 +19793,23 @@ Play time: %4</source>
     </message>
       <message>
         <source>Your library starts here. Create an instance to add your first world.</source>
-        <translation>创建第一个实例，开始建立你的实例库。</translation>
+        <translation>创建第一个版本，开始建立你的版本库。</translation>
     </message>
     <message>
         <source>No instances match your search.</source>
-        <translation>没有符合搜索条件的实例。</translation>
+        <translation>没有符合搜索条件的版本。</translation>
     </message>
     <message>
         <source>No instances yet.</source>
-        <translation>还没有实例。</translation>
+        <translation>暂无版本</translation>
     </message>
     <message>
         <source>Create or import an instance to start playing.</source>
-        <translation>创建或导入一个实例即可开始游戏。</translation>
+        <translation>创建或导入版本以开始游戏</translation>
     </message>
     <message>
         <source>Choose a world from your library to play and manage it.</source>
-        <translation>从实例库中选择一个世界来游玩和管理。</translation>
+        <translation>从版本库中选择一个世界来游玩和管理。</translation>
     </message>
     <message>
         <source>Loading screenshots…</source>
@@ -19821,7 +19821,7 @@ Play time: %4</source>
     </message>
     <message>
         <source>Screenshots from this instance</source>
-        <translation>此实例的截图</translation>
+        <translation>此版本的截图</translation>
     </message>
     <message>
         <source>Launcher menu</source>
@@ -19847,7 +19847,7 @@ Play time: %4</source>
     <name>Awake::Web::InstanceEditor</name>
     <message>
       <source>This instance no longer exists.</source>
-      <translation>此实例已不存在。</translation>
+      <translation>此版本已不存在。</translation>
     </message>
     <message>
       <source>This editor page is not available.</source>
@@ -19915,7 +19915,7 @@ Play time: %4</source>
     </message>
     <message>
       <source>This file is no longer in the instance.</source>
-      <translation>此文件已不在该实例中。</translation>
+      <translation>此文件已不在该版本中。</translation>
     </message>
     <message>
       <source>Choose whether the mod should be enabled.</source>
@@ -19939,7 +19939,7 @@ Play time: %4</source>
     </message>
     <message>
       <source>Add files to the instance</source>
-      <translation>向实例添加文件</translation>
+      <translation>向版本添加文件</translation>
     </message>
     <message>
       <source>Mods (*.jar *.zip)</source>
@@ -19951,7 +19951,7 @@ Play time: %4</source>
     </message>
     <message>
       <source>Some files could not be added. Files already in this instance were kept. Check the file names and try again.</source>
-      <translation>部分文件无法添加。此实例中已有的文件已保留。请检查文件名后重试。</translation>
+      <translation>部分文件无法添加。该版本中已有的文件已保留。请检查文件名后重试。</translation>
     </message>
     <message>
       <source>Unknown advanced page.</source>
@@ -19970,7 +19970,7 @@ Play time: %4</source>
     </message>
     <message>
       <source>This provider has no compatible Java build for this instance. Choose Awake Optimized, Minecraft Default or Custom Java.</source>
-      <translation>此提供商没有与此实例兼容的 Java 构建。请选择 Awake Optimized、Minecraft Default 或自定义 Java。</translation>
+      <translation>此提供商没有与此版本兼容的 Java 构建。请选择 Awake Optimized、Minecraft Default 或自定义 Java。</translation>
     </message>
     <message>
       <source>Finding a compatible Java runtime</source>
@@ -20029,11 +20029,11 @@ Play time: %4</source>
     <name>Awake::Web::Bridge</name>
     <message>
       <source>The instance editor is paused.</source>
-      <translation>实例编辑器已暂停。</translation>
+      <translation>版本编辑器已暂停。</translation>
     </message>
     <message>
       <source>This instance no longer exists.</source>
-      <translation>此实例已不存在。</translation>
+      <translation>此版本已不存在。</translation>
     </message>
     <message>
       <source>Finish the current native action first.</source>
@@ -20077,7 +20077,7 @@ Play time: %4</source>
     </message>
     <message>
       <source>This Java version is not compatible with the instance. Choose a supported Java version.</source>
-      <translation>此 Java 版本与实例不兼容。请选择支持的 Java 版本。</translation>
+      <translation>此 Java 版本与游戏版本不兼容。请选择受支持的 Java 版本。</translation>
     </message>
   </context>
 </TS>

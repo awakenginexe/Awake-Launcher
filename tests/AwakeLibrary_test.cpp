@@ -218,7 +218,7 @@ class AwakeLibraryTest : public QObject {
         auto* heading = window->findChild<QLabel*>("awakeHeading");
         QVERIFY(heading);
         const QMap<QString, QString> names{ { "th", QString::fromUtf8("คลังอินสแตนซ์") },
-                                            { "zh_CN", QString::fromUtf8("实例库") },
+                                            { "zh_CN", QString::fromUtf8("版本库") },
                                             { "zh_TW", QString::fromUtf8("實例庫") },
                                             { "en_US", "Library" } };
         for (auto i = names.begin(); i != names.end(); ++i) {

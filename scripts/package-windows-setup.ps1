@@ -25,7 +25,7 @@ $lines += @(Get-ChildItem -LiteralPath $packageRoot -Recurse -Directory | Sort-O
 $lines | Set-Content -LiteralPath $deleteList -Encoding utf8
 $setup = Join-Path $outputRoot "Awake-Launcher-v$Version-Windows-x64-Setup.exe"
 $repoRoot = Split-Path $PSScriptRoot -Parent
-& $MakeNsis /WX "/DAWAKE_VERSION=$Version" "/DAWAKE_PACKAGE=$packageRoot" "/DAWAKE_OUTPUT=$setup" "/DAWAKE_ICON=$repoRoot/program_info/awakelauncher.ico" "/DAWAKE_DELETE_MANIFEST=$deleteList" "$repoRoot/program_info/awake_install.nsi"
+& $MakeNsis /WX /INPUTCHARSET UTF8 "/DAWAKE_VERSION=$Version" "/DAWAKE_PACKAGE=$packageRoot" "/DAWAKE_OUTPUT=$setup" "/DAWAKE_ICON=$repoRoot/program_info/awakelauncher.ico" "/DAWAKE_DELETE_MANIFEST=$deleteList" "$repoRoot/program_info/awake_install.nsi"
 if ($LASTEXITCODE) { throw "NSIS failed with exit code $LASTEXITCODE" }
 if (!(Test-Path -LiteralPath $setup)) { throw 'NSIS did not create the setup installer.' }
 $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
