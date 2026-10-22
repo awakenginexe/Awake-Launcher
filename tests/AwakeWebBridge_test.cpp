@@ -399,8 +399,8 @@ private slots:
         QTemporaryDir recycleProbe(instances->primaryDir() + "/recycle-probe-XXXXXX");
         QVERIFY(recycleProbe.isValid());
         QString recycledProbe;
-        if (!FS::trash(recycleProbe.path(), &recycledProbe))
-            QSKIP("Instance recycling is unavailable on this OS or volume (including Windows Server).");
+        if (!FS::trash(recycleProbe.path(), &recycledProbe) && !FS::moveToLocalTrash(recycleProbe.path(), &recycledProbe))
+            QSKIP("Instance recycling and local trash are unavailable on this volume.");
         QVERIFY(QFile(recycledProbe).rename(recycleProbe.path()));
         const QString id = "async-delete-fixture";
         const auto path = instances->primaryDir() + "/" + id;

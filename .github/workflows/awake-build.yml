@@ -134,9 +134,10 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Match the version confirmation to the app's UI.
-          - Fix clipped buttons and file lists during manual modpack updates.
-          - Keep pending confirmations working after minimize/restore.
+          - Fix instance deletion failing when Windows cannot use the Recycle Bin by falling back to recoverable local trash.
+          - Preserve Undo, worlds, mods and settings when the local-trash fallback is used.
+          - Keep running instances and locked files protected during deletion.
+          - Local-trash files remain in the instances folder's `.trash` directory and continue to occupy disk space until removed.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

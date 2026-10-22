@@ -2,6 +2,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtConcurrentRun>
 #include <memory>
 
 #include <tasks/Task.h>
@@ -81,6 +82,69 @@ class FileSystemTest : public QObject {
     const QString leadingSlash = "/foo";
 
    private slots:
+    void localTrashPreservesWorldAndCanBeRestored()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto root = directory.path() + "/instance";
+        const auto world = root + "/.minecraft/saves/World";
+        QVERIFY(QDir().mkpath(world));
+        QFile payload(world + "/level.dat");
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        QCOMPARE(payload.write("saved world"), qint64(11));
+        payload.close();
+        QString trashed;
+        QFile blockedTrash(directory.path() + "/.trash");
+        QVERIFY(blockedTrash.open(QIODevice::WriteOnly));
+        blockedTrash.close();
+        QVERIFY(!FS::moveToLocalTrash(root, &trashed));
+        QVERIFY(QFileInfo::exists(world + "/level.dat"));
+        QVERIFY(blockedTrash.remove());
+        QVERIFY(FS::moveToLocalTrash(root, &trashed));
+        QVERIFY(!QFileInfo::exists(root));
+        QVERIFY(trashed.startsWith(directory.path() + "/.trash/"));
+        QVERIFY(QFile(trashed).rename(root));
+        QVERIFY(payload.open(QIODevice::ReadOnly));
+        QCOMPARE(payload.readAll(), QByteArray("saved world"));
+        payload.close();
+        QVERIFY(!FS::moveToLocalTrash(directory.path() + "/missing", &trashed));
+        QVERIFY(QFileInfo::exists(world + "/level.dat"));
+    }
+
+    void localTrashHandlesLongInstancePaths_data()
+    {
+        QTest::addColumn<int>("rootLength");
+        QTest::addColumn<int>("childLength");
+        QTest::newRow("long-root") << 280 << 0;
+        QTest::newRow("long-child") << 0 << 280;
+    }
+
+    void localTrashHandlesLongInstancePaths()
+    {
+        QFETCH(int, rootLength);
+        QFETCH(int, childLength);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        auto root = directory.path() + "/instance";
+        while (root.size() < rootLength) root += "/long-modpack-directory";
+        auto payloadPath = root;
+        while (payloadPath.size() < root.size() + childLength) payloadPath += "/long-world-directory";
+        QVERIFY(QDir().mkpath(payloadPath));
+        payloadPath += "/level.dat";
+        QFile payload(payloadPath);
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        QCOMPARE(payload.write("world data"), qint64(10));
+        payload.close();
+        QString trashed;
+        auto future = QtConcurrent::run([&] { return FS::moveToLocalTrash(root, &trashed); });
+        future.waitForFinished();
+        QVERIFY(future.result());
+        QVERIFY(!QFileInfo::exists(root));
+        QVERIFY(QFile(trashed).rename(root));
+        QVERIFY(payload.open(QIODevice::ReadOnly));
+        QCOMPARE(payload.readAll(), QByteArray("world data"));
+    }
+
     void test_pathCombine()
     {
         QCOMPARE(QString("/foo/foo"), FS::PathCombine(bothSlash, bothSlash));

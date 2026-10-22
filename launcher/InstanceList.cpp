@@ -96,7 +96,8 @@ protected:
         m_watcher.setFuture(QtConcurrent::run([item = m_item, shortcuts = m_shortcuts] {
             RemovalResult result;
             result.history = item;
-            result.removed = FS::trash(item.path, &result.history.trashPath);
+            result.removed = FS::trash(item.path, &result.history.trashPath) ||
+                             FS::moveToLocalTrash(item.path, &result.history.trashPath);
             if (!result.removed) {
                 result.error = QObject::tr("The instance could not be moved to the recycle bin. Close programs using its files and try again.");
                 return result;
@@ -404,7 +405,7 @@ bool InstanceList::trashInstance(const InstanceId& id)
         saveGroupList();
     }
 
-    if (!FS::trash(inst->instanceRoot(), &trashedLoc)) {
+    if (!FS::trash(inst->instanceRoot(), &trashedLoc) && !FS::moveToLocalTrash(inst->instanceRoot(), &trashedLoc)) {
         qWarning() << "Trash of instance" << id << "has not been completely successful...";
         return false;
     }

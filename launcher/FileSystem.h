@@ -316,6 +316,8 @@ bool removeFiles(const QStringList& listFile);
  */
 bool trash(const QString& path, QString* pathInTrash = nullptr);
 
+bool moveToLocalTrash(const QString& path, QString* pathInTrash);
+
 QString PathCombine(const QString& path1, const QString& path2);
 QString PathCombine(const QString& path1, const QString& path2, const QString& path3);
 QString PathCombine(const QString& path1, const QString& path2, const QString& path3, const QString& path4);

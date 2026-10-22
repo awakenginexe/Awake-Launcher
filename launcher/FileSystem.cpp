@@ -50,6 +50,7 @@
 #include <QStorageInfo>
 #include <QTextStream>
 #include <QUrl>
+#include <QUuid>
 #include <QtNetwork>
 #include <algorithm>
 #include <system_error>
@@ -843,6 +844,22 @@ bool deleteContents(const QString& path)
     }
 
     return ret;
+}
+
+bool moveToLocalTrash(const QString& path, QString* pathInTrash)
+{
+    const QFileInfo source(path);
+    if (!source.isDir() || QDir(path).isRoot())
+        return false;
+    const auto trashDir = source.absolutePath() + "/.trash";
+    const auto target = trashDir + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // Rename on the same volume; never copy/delete a partially locked instance.
+    if (!QDir().mkpath(trashDir) || !QDir().rename(source.absoluteFilePath(), target))
+        return false;
+    if (pathInTrash)
+        *pathInTrash = target;
+    qInfo() << "Recycle bin unavailable; instance preserved in local trash:" << target;
+    return true;
 }
 
 bool trash(const QString& path, QString* pathInTrash)
