@@ -84,8 +84,18 @@ const fixture = `(() => {
     instancePackVersions(request, id, cb) { cb({ok:true}); this.catalogFinished.emit(request, {ok:true,versions:[{id:'release-456',name:'New pack release',minecraft:'1.21.1',loader:'Fabric'},{id:'release-123',name:'Actual API release',minecraft:'1.21.1',loader:'Fabric'}]}); },
     updateInstancePack(id, versionId, cb) {
       window.__nativeTest.calls.push(['updateInstancePack', id, versionId]);
-      window.__nativeTest.editor.pack.versionId = versionId;
-      cb({ok:true}); this.editorChanged.emit(id, 'versions');
+      window.__nativeTest.pendingPackUpdate = {id, versionId};
+      cb({ok:true,confirmation:{instanceName:'Test fixture 00',versionName:'New pack release',warning:'Changing pack versions can replace pack files and may make worlds incompatible. Create a backup of this instance first.'}});
+    },
+    confirmInstancePackUpdate(confirmed, cb) {
+      window.__nativeTest.calls.push(['confirmInstancePackUpdate', confirmed]);
+      const pending = window.__nativeTest.pendingPackUpdate;
+      window.__nativeTest.pendingPackUpdate = null;
+      if (confirmed) {
+        window.__nativeTest.editor.pack.versionId = pending.versionId;
+        this.editorChanged.emit(pending.id, 'versions');
+      }
+      cb({ok:true});
     },
     linkInstancePack(request, id, provider, packId, versionId, cb) {
       window.__nativeTest.calls.push(['linkInstancePack', id, provider, packId, versionId]); cb({ok:true});
@@ -253,6 +263,41 @@ try {
     assert.equal(await page.locator('.pack-link-section').count(), 0);
     await page.locator('.pack-version-section .btn-primary').click();
     assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.find(call => call[0] === 'updateInstancePack')), ['updateInstancePack', 'fixture-0', 'release-456']);
+    const confirmation = page.locator('.pack-version-confirmation');
+    await confirmation.waitFor();
+    assert.match(await confirmation.textContent(), /Create a backup/);
+    assert.equal(await confirmation.locator('.btn-secondary').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.locator('.instance-editor-window').evaluate(el => el.closest('.modal-overlay').inert), true);
+    assert.equal(await page.evaluate(() => window.__nativeTest.editor.pack.versionId), 'release-123');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await confirmation.locator('.btn-primary').evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Escape');
+    await confirmation.waitFor({state:'detached'});
+    assert.equal(await page.evaluate(() => window.__nativeTest.editor.pack.versionId), 'release-123');
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'confirmInstancePackUpdate')), [['confirmInstancePackUpdate', false]]);
+    await page.locator('.pack-version-section .btn-primary').click();
+    await confirmation.waitFor();
+    await confirmation.evaluate(async el => { await Promise.all(el.closest('.modal-overlay').getAnimations({subtree:true}).map(animation => animation.finished)); });
+    await page.screenshot({path:resolve(output, 'pack-version-confirmation.png')});
+    await confirmation.locator('.btn-primary').click();
+    await confirmation.waitFor({state:'detached'});
+    assert.equal(await page.evaluate(() => window.__nativeTest.editor.pack.versionId), 'release-456');
+    assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'confirmInstancePackUpdate')), [['confirmInstancePackUpdate', false], ['confirmInstancePackUpdate', true]]);
+    await page.locator('.instance-editor-window .modal-close-btn').click();
+    await page.locator('.instance-editor-window').waitFor({state:'detached'});
+    await page.evaluate(() => { window.__nativeTest.editor.pack.versionId = 'release-123'; });
+    await page.locator('#play').click();
+    await page.locator('.pack-update-dialog .btn-primary').click();
+    await confirmation.waitFor();
+    await page.locator('.pack-update-dialog').waitFor({state:'detached'});
+    assert.equal(await page.locator('.navigation').evaluate(el => el.inert), true);
+    assert.equal(await confirmation.locator('.btn-secondary').evaluate(el => el === document.activeElement), true);
+    await confirmation.locator('.modal-close-btn').click();
+    await confirmation.waitFor({state:'detached'});
+    assert.equal(await page.locator('.navigation').evaluate(el => el.inert), false);
+    assert.equal(await page.locator('#play').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'launch').length), 0);
     await page.close();
   }
   for (const [locale, provider] of [['th','modrinth'], ['zh_CN','atlauncher'], ['zh_TW','curseforge']]) {

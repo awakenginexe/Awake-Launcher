@@ -627,20 +627,33 @@ QVariantMap Bridge::updateInstancePack(const QString& id, const QString& version
     task->setTargetDir(QFileInfo(instance->instanceRoot()).absolutePath());
     // Confirm here so all version changes show the same backup warning before downloading.
     task->setConfirmUpdate(false);
+    auto warning = tr("Changing %1 to pack version %2 can replace pack files and may make worlds incompatible. Create a backup of this instance first.")
+        .arg(instance->name(), task->version());
+    if (instance->getManagedPackType() == "atlauncher")
+        warning += tr("\n\nATLauncher packs apply their keep/delete rules. Added or disabled mods can be removed.");
+    m_packUpdateTask.reset(task);
+    m_packUpdateInstance = instance;
     m_actionPending = true;
-    QTimer::singleShot(0, this, [this, id, owned = std::unique_ptr<InstanceTask>(task)]() mutable {
-        auto* target = APPLICATION->instances()->getInstanceById(id);
+    return {{"ok", true}, {"confirmation", QVariantMap{{"instanceName", instance->name()}, {"versionName", task->version()}, {"warning", warning}}}};
+}
+
+QVariantMap Bridge::confirmInstancePackUpdate(bool confirmed)
+{
+    if (!m_packUpdateTask && !confirmed) return success();
+    if (!m_packUpdateTask) return fail("updateInstancePack", tr("Check for updates and select an available pack version first."));
+    auto owned = std::move(m_packUpdateTask);
+    const auto target = m_packUpdateInstance;
+    m_packUpdateInstance.clear();
+    if (!confirmed) { m_actionPending = false; return success(); }
+    if (!m_active || !target || target->isRunning() || !target->canLaunch() || APPLICATION->instances()->isRemoving() || m_modCatalog->busy(target->id())) {
+        m_actionPending = false;
+        return fail("updateInstancePack", tr("Stop the game and finish the current action before changing the pack version."));
+    }
+    QTimer::singleShot(0, this, [this, target, owned = std::move(owned)]() mutable {
         if (!m_active || !target || target->isRunning() || !target->canLaunch()) { m_actionPending = false; return; }
         setModalActive(true);
-        auto warning = tr("Changing %1 to pack version %2 can replace pack files and may make worlds incompatible. Create a backup of this instance first.")
-            .arg(target->name(), owned->version());
-        if (target->getManagedPackType() == "atlauncher")
-            warning += tr("\n\nATLauncher packs apply their keep/delete rules. Added or disabled mods can be removed.");
-        const auto response = CustomMessageBox::selectable(nullptr, tr("Change modpack version"),
-            warning + tr("\n\nContinue?"),
-            QMessageBox::Warning, QMessageBox::Yes | QMessageBox::No, QMessageBox::No)->exec();
-        target = APPLICATION->instances()->getInstanceById(id);
-        if (response == QMessageBox::Yes && m_active && target && !target->isRunning() && target->canLaunch()) {
+        const auto id = target->id();
+        {
             auto* task = owned.get();
             const unique_qobject_ptr<Task> wrapped(APPLICATION->instances()->wrapInstanceTask(owned.release()));
             ProgressDialog dialog(nullptr);

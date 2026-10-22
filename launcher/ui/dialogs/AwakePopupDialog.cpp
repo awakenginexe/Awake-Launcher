@@ -19,6 +19,7 @@
 #include "Application.h"
 #include "awake/AwakeTheme.h"
 #include "settings/SettingsObject.h"
+#include "ui/MainWindow.h"
 
 namespace {
 void paintPanel(QPainter& painter, const QRectF& bounds)
@@ -73,6 +74,12 @@ AwakePopupDialog::AwakePopupDialog(QWidget* parent)
     for (auto* ancestor = parentWidget(); ancestor; ancestor = ancestor->parentWidget()) {
         if (!m_anchor || ancestor->width() * ancestor->height() > m_anchor->width() * m_anchor->height())
             m_anchor = ancestor->window();
+    }
+    // A detached download progress window must not constrain the full-size popup.
+    for (auto* window : QApplication::topLevelWidgets()) {
+        if (qobject_cast<MainWindow*>(window) && window->isVisible() &&
+            (!m_anchor || window->width() * window->height() > m_anchor->width() * m_anchor->height()))
+            m_anchor = window;
     }
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);

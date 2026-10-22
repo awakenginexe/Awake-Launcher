@@ -24,6 +24,8 @@
 #include <QPlainTextEdit>
 #include <QGroupBox>
 #include <QDialogButtonBox>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QTcpServer>
 #include "archive/ArchiveWriter.h"
 #include <QTcpSocket>
@@ -1175,6 +1177,56 @@ private slots:
         QTRY_COMPARE(popup.result(), static_cast<int>(QDialog::Accepted));
         APPLICATION->settings()->set("DownloadsDir", previous);
     }
+    void downloadPopupFitsAboveASmallDetachedProgressWindow()
+    {
+        auto* window = APPLICATION->showMainWindow(false);
+        window->resize(1320, 780);
+        window->show();
+        QTemporaryDir downloads;
+        const auto previousDownloads = APPLICATION->settings()->get("DownloadsDir");
+        APPLICATION->settings()->set("DownloadsDir", downloads.path());
+        const auto restore = qScopeGuard([&] { APPLICATION->settings()->set("DownloadsDir", previousDownloads); });
+        QDialog progress;
+        progress.resize(600, 360);
+        progress.show();
+        for (int count : {1, 12}) {
+            QList<BlockedMod> missing;
+            for (int i = 0; i < count; ++i)
+                missing.append({QString("Required file %1.zip").arg(i), "https://www.curseforge.com/minecraft/texture-packs", "abcd", false, {}, "resourcepacks"});
+            BlockedModsDialog popup(&progress, {}, {}, missing);
+            popup.show();
+            QCoreApplication::processEvents();
+            QCOMPARE(popup.size(), window->size());
+            const auto output = QDir(QCoreApplication::applicationDirPath()).filePath(".validation");
+            QDir().mkpath(output);
+            QVERIFY(popup.grab().save(output + QString("/download-small-progress-%1.png").arg(count)));
+            QVERIFY2(popup.panel()->height() >= 600, "Download popup was squeezed into the progress window");
+            auto* rows = popup.findChild<QWidget*>("downloadRows");
+            QVERIFY(rows);
+            for (auto* button : popup.findChildren<QPushButton*>()) {
+                if (button->isVisible()) {
+                    QVERIFY2(button->height() >= button->sizeHint().height(), qPrintable(button->text()));
+                    if (!rows->isAncestorOf(button))
+                        QVERIFY(popup.panel()->rect().contains(QRect(button->mapTo(popup.panel(), QPoint(0, 0)), button->size())));
+                }
+            }
+            QVERIFY(rows->parentWidget()->height() >= 120);
+            if (count > 1) {
+                auto* scroll = popup.findChild<QScrollArea*>();
+                QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+                auto* last = rows->findChildren<QPushButton*>().last();
+                scroll->ensureWidgetVisible(last);
+                QVERIFY(!last->visibleRegion().isEmpty());
+            }
+            auto* buttons = popup.findChild<QDialogButtonBox*>();
+            QVERIFY(buttons);
+            for (auto* button : buttons->buttons()) {
+                if (buttons->buttonRole(button) == QDialogButtonBox::RejectRole) button->click();
+            }
+            QVERIFY(!popup.isVisible());
+            QCOMPARE(popup.result(), static_cast<int>(QDialog::Rejected));
+        }
+    }
     void nativePopupsShowActionsAndKeepHashMatching()
     {
         auto* window = APPLICATION->showMainWindow(false);
@@ -1421,6 +1473,8 @@ private slots:
         QVERIFY(settings->get("AwakeSkippedPackVersion").toString().isEmpty());
         QVERIFY(!bridge.instancePackVersions("request", "missing").value("ok").toBool());
         QVERIFY(!bridge.updateInstancePack("one", "untrusted").value("ok").toBool());
+        QVERIFY(!bridge.confirmInstancePackUpdate(true).value("ok").toBool());
+        QVERIFY(bridge.confirmInstancePackUpdate(false).value("ok").toBool());
         PackCatalog catalog(&assets);
         QString error;
         QVERIFY(!catalog.createUpdateTask("curseforge", "untrusted", "untrusted", "one", nullptr, &error));

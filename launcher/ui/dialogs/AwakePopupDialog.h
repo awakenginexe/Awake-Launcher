@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QPointer>
 
 class QVBoxLayout;
 class QPushButton;
@@ -22,7 +23,7 @@ class AwakePopupDialog : public QDialog {
 
    private:
     void syncGeometry();
-    QWidget* m_anchor;
+    QPointer<QWidget> m_anchor;
     QWidget* m_panel;
     QVBoxLayout* m_content;
     QPushButton* m_close;

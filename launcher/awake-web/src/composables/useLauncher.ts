@@ -20,6 +20,7 @@ export function useLauncher() {
   const accountsRequest = ref(0);
   const gpuChoice = shallowRef<{ id: string; settings: GpuSettings } | null>(null);
   const packChoice = shallowRef<{ id: string; pack: InstalledPack; version: PackVersion } | null>(null);
+  const packConfirmation = shallowRef<{ instanceName: string; versionName: string; warning: string } | null>(null);
   const state = shallowRef({ ...emptySnapshot(), locale: normalizeLocale(navigator.language) });
   const status = ref<'loading' | 'ready' | 'error'>('loading');
   const busy = ref(false);
@@ -177,7 +178,7 @@ export function useLauncher() {
   }
   const select = (id: string) => run('selectInstance', [id]);
   async function launch(id = state.value.selectedId) {
-    if (busy.value || packChoice.value) return;
+    if (busy.value || packChoice.value || packConfirmation.value) return;
     busy.value = true;
     failure.value = null;
     let checkError: unknown;
@@ -197,7 +198,7 @@ export function useLauncher() {
     const pending = packChoice.value;
     if (!pending) return;
     if (choice === 'update') {
-      await javaCall('updateInstancePack', [pending.id, pending.version.id]);
+      await updatePack(pending.id, pending.version.id);
       packChoice.value = null;
       return;
     }
@@ -219,12 +220,20 @@ export function useLauncher() {
   const modService = createModService(queryCatalog);
   const searchPacks = (provider: string, query: string, offset: number) => queryCatalog('searchPacks', [provider, query, offset]);
   const packVersions = (provider: string, id: string) => queryCatalog('packVersions', [provider, id]);
+  async function updatePack(id: string, version: string) {
+    const result = await javaCall('updateInstancePack', [id, version]) as { confirmation: NonNullable<typeof packConfirmation.value> };
+    packConfirmation.value = result.confirmation;
+  }
+  async function confirmPackUpdate(confirmed: boolean) {
+    await javaCall('confirmInstancePackUpdate', [confirmed]);
+    packConfirmation.value = null;
+  }
   const packService = {
     search: searchPacks,
     releases: packVersions,
     link: (id: string, provider: string, packId: string, versionId: string) => queryCatalog('linkInstancePack', [id, provider, packId, versionId], { timeoutMs: 600_000 }),
     versions: (id: string) => queryCatalog('instancePackVersions', [id]),
-    update: (id: string, version: string) => javaCall('updateInstancePack', [id, version]),
+    update: updatePack,
     reminder: (id: string, enabled: boolean) => instanceCommand(id, 'packReminder', { choice: enabled ? 'reset' : 'disable' }),
   };
   const minecraftVersions = () => queryCatalog('minecraftVersions', []);
@@ -269,5 +278,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate };
+  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate, packConfirmation, confirmPackUpdate };
 }

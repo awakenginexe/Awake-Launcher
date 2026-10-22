@@ -134,9 +134,9 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Improve Simplified Chinese Minecraft version terminology throughout the launcher library.
-          - Localize the Windows installer for English, Thai, Simplified Chinese, and Traditional Chinese.
-          - Offer a default-on, optional desktop shortcut during Windows installation.
+          - Match the version confirmation to the app's UI.
+          - Fix clipped buttons and file lists during manual modpack updates.
+          - Keep pending confirmations working after minimize/restore.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

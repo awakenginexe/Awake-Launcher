@@ -46,6 +46,7 @@ public:
     Q_INVOKABLE QVariantMap packVersions(const QString& requestId, const QString& provider, const QString& packId);
     Q_INVOKABLE QVariantMap instancePackVersions(const QString& requestId, const QString& id);
     Q_INVOKABLE QVariantMap updateInstancePack(const QString& id, const QString& versionId);
+    Q_INVOKABLE QVariantMap confirmInstancePackUpdate(bool confirmed);
     Q_INVOKABLE QVariantMap linkInstancePack(const QString& requestId, const QString& id, const QString& provider, const QString& packId, const QString& versionId);
     Q_INVOKABLE QVariantMap modSearch(const QString& requestId, const QString& instanceId, const QString& provider, const QString& query, const QString& sort, int offset);
     Q_INVOKABLE QVariantMap modVersions(const QString& requestId, const QString& instanceId, const QString& provider, const QString& projectId);
@@ -96,6 +97,8 @@ private:
     Task::Ptr m_minecraftTask;
     Task::Ptr m_javaTask;
     Task::Ptr m_packLinkTask;
+    std::unique_ptr<InstanceTask> m_packUpdateTask;
+    QPointer<MinecraftInstance> m_packUpdateInstance;
     bool m_javaPending = false;
     Select m_select;
     Action m_action;

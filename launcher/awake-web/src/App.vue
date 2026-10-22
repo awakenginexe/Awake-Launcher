@@ -13,9 +13,10 @@ import UpdateModal from './components/UpdateModal.vue';
 import GpuLaunchModal from './components/GpuLaunchModal.vue';
 import SkinsModal from './components/SkinsModal.vue';
 import PackUpdateModal from './components/PackUpdateModal.vue';
+import PackVersionConfirmation from './components/PackVersionConfirmation.vue';
 import { formatPlaytime, formatLastPlayed } from './features/library/playtime.ts';
 
-const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate } = useLauncher();
+const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate, packConfirmation, confirmPackUpdate } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -51,8 +52,8 @@ let updatePresentation = 0;
 function markUpdatePresentation(presentation: number) { updatePresentation = Math.max(updatePresentation, presentation); }
 const editingInstance = ref<Instance | null>(null);
 const editorInstance = computed(() => state.value.instances.find(instance => instance.id === editingInstance.value?.id) || editingInstance.value);
-watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive, packChoice.value, busy.value], () => {
-  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive || packChoice.value || busy.value) return;
+watch(() => [state.value.updates.presentation, showAccounts.value, showSkins.value, showSettings.value, showCreate.value, showAppMenu.value, editingInstance.value, state.value.modalActive, packChoice.value, packConfirmation.value, busy.value], () => {
+  if (state.value.updates.presentation <= updatePresentation || showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive || packChoice.value || packConfirmation.value || busy.value) return;
   updatePresentation = state.value.updates.presentation;
   closePopovers(); closeContextMenu(); showUpdates.value = true;
 }, { immediate: true });
@@ -379,8 +380,9 @@ onUnmounted(() => {
       <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :total-memory-mb="state.totalMemoryMb" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" :pack-service="packService" @close="editingInstance = null" />
     </Transition>
 
-    <Transition name="modal">
+    <Transition name="modal" mode="out-in">
       <PackUpdateModal v-if="packChoice" :pack="packChoice.pack" :version="packChoice.version" :decide="decidePackUpdate" :t="t" @close="packChoice = null" />
+      <PackVersionConfirmation v-else-if="packConfirmation" :confirmation="packConfirmation" :decide="confirmPackUpdate" :t="t" />
     </Transition>
 
     <Transition name="modal">
