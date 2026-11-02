@@ -55,6 +55,10 @@ protected:
 
 Shell::Shell(QWidget* parent) : QWidget(parent)
 {
+#ifdef Q_OS_WIN
+    // shortcut: near-opaque layering targets NVIDIA's overlay heuristic; verify after driver updates.
+    window()->setWindowOpacity(254.0 / 255.0);
+#endif
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] { updateArtworkFocus(); });
     setObjectName("awakeWebShell");
     auto* layout = new QVBoxLayout(this);
@@ -129,6 +133,7 @@ void Shell::start(Bridge* bridge)
         qInfo() << "Awake frontend ready" << m_started.elapsed() << "ms";
         m_loading->hide();
         m_view->show();
+        m_view->setFocus();
         setSuspended(m_suspended);
         updateArtworkFocus();
     });
@@ -177,8 +182,12 @@ void Shell::showEvent(QShowEvent* event)
 
 bool Shell::eventFilter(QObject* watched, QEvent* event)
 {
-    if (watched == window() && (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate || event->type() == QEvent::WindowStateChange))
-        updateArtworkFocus();
+    if (watched == window()) {
+        if (event->type() == QEvent::WindowStateChange)
+            setSuspended(window()->isMinimized() || !isVisible());
+        if (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate || event->type() == QEvent::WindowStateChange)
+            updateArtworkFocus();
+    }
     return QWidget::eventFilter(watched, event);
 }
 

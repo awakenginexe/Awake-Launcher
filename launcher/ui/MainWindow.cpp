@@ -56,16 +56,22 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QCheckBox>
+#include <QClipboard>
+#include <QComboBox>
 #include <QFileDialog>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QShortcut>
 #include <QStatusBar>
@@ -664,8 +670,45 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
     } else if (action == "copy") {
         ui->actionCopyInstance->trigger();
     } else if (action == "export") {
-        if (auto* exportMenu = ui->actionExportInstance->menu()) exportMenu->exec(mapToGlobal(QPoint(width() - 280, height() - 240)));
-        else ui->actionExportInstance->trigger();
+        AwakePopupDialog dialog(this);
+        dialog.setObjectName("awakeExportInstance");
+        dialog.setWindowTitle(tr("Export Instance"));
+        dialog.setPanelSize(QSize(480, 340));
+        auto* title = new QLabel(tr("Export Instance"), dialog.panel());
+        title->setProperty("role", "title");
+        dialog.panelLayout()->addWidget(title);
+        auto* subtitle = new QLabel(m_selectedInstance->name(), dialog.panel());
+        subtitle->setTextFormat(Qt::PlainText);
+        subtitle->setWordWrap(true);
+        subtitle->setProperty("role", "muted");
+        dialog.panelLayout()->addWidget(subtitle);
+        QAction* chosenAction = nullptr;
+        const QList<QAction*> exportActions = {ui->actionExportInstanceZip, ui->actionExportInstanceMrPack, ui->actionExportInstanceFlamePack};
+        for (int i = 0; i < exportActions.size(); ++i) {
+            auto* act = exportActions.at(i);
+            if (!act) continue;
+            auto* btn = new QPushButton(act->text(), dialog.panel());
+            if (i == 0) {
+                btn->setProperty("primary", true);
+                btn->setDefault(true);
+            }
+            connect(btn, &QPushButton::clicked, &dialog, [&dialog, &chosenAction, act] {
+                chosenAction = act;
+                dialog.accept();
+            });
+            dialog.panelLayout()->addWidget(btn);
+        }
+        dialog.panelLayout()->addStretch();
+        auto* buttons = new QHBoxLayout;
+        buttons->addStretch();
+        auto* cancel = new QPushButton(tr("Cancel"), dialog.panel());
+        cancel->setAutoDefault(false);
+        connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+        buttons->addWidget(cancel);
+        dialog.panelLayout()->addLayout(buttons);
+        if (dialog.exec() == QDialog::Accepted && chosenAction) {
+            chosenAction->trigger();
+        }
     } else if (action == "delete") {
         ui->actionDeleteInstance->trigger();
     } else if (action == "kill") {
@@ -673,7 +716,52 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
     } else if (action == "settings") {
         ui->actionSettings->trigger();
     } else if (action == "logs") {
-        APPLICATION->showLogWindow()->show();
+        if (!m_webMode) {
+            APPLICATION->showLogWindow()->show();
+        } else {
+            AwakePopupDialog dialog(this);
+            dialog.setObjectName(QStringLiteral("awakeLauncherLogs"));
+            dialog.setWindowTitle(tr("Launcher logs"));
+            dialog.setPanelSize(QSize(720, 480));
+            auto* title = new QLabel(tr("Launcher logs"), dialog.panel());
+            title->setProperty("role", QStringLiteral("title"));
+            auto* subtitle = new QLabel(QStringLiteral("logs/%1-0.log").arg(BuildConfig.LAUNCHER_APP_BINARY_NAME), dialog.panel());
+            subtitle->setProperty("role", QStringLiteral("muted"));
+            auto* viewer = new QPlainTextEdit(dialog.panel());
+            viewer->setReadOnly(true);
+            QFile logFile(QDir(QStringLiteral("logs")).filePath(QStringLiteral("%1-0.log").arg(BuildConfig.LAUNCHER_APP_BINARY_NAME)));
+            if (!logFile.exists())
+                logFile.setFileName(QDir(QStringLiteral("logs")).filePath(QStringLiteral("AwakeLauncher-0.log")));
+            if (logFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                constexpr qint64 maxBytes = 256 * 1024;
+                if (logFile.size() > maxBytes)
+                    logFile.seek(logFile.size() - maxBytes);
+                viewer->setPlainText(QString::fromUtf8(logFile.readAll()));
+                viewer->moveCursor(QTextCursor::End);
+            } else {
+                viewer->setPlainText(tr("No launcher log file found."));
+            }
+            auto* buttons = new QHBoxLayout;
+            auto* openFolder = new QPushButton(tr("Open folder"), dialog.panel());
+            openFolder->setAutoDefault(false);
+            connect(openFolder, &QPushButton::clicked, &dialog, [this] { on_actionViewLogsFolder_triggered(); });
+            auto* copyBtn = new QPushButton(tr("Copy"), dialog.panel());
+            copyBtn->setAutoDefault(false);
+            connect(copyBtn, &QPushButton::clicked, &dialog, [viewer] { QApplication::clipboard()->setText(viewer->toPlainText()); });
+            auto* closeBtn = new QPushButton(tr("Close"), dialog.panel());
+            closeBtn->setProperty("primary", true);
+            closeBtn->setDefault(true);
+            connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+            buttons->addWidget(openFolder);
+            buttons->addWidget(copyBtn);
+            buttons->addStretch();
+            buttons->addWidget(closeBtn);
+            dialog.panelLayout()->addWidget(title);
+            dialog.panelLayout()->addWidget(subtitle);
+            dialog.panelLayout()->addWidget(viewer, 1);
+            dialog.panelLayout()->addLayout(buttons);
+            dialog.exec();
+        }
     } else if (action == "accounts") {
         on_actionManageAccounts_triggered();
     } else if (action == "addMicrosoft") {
@@ -1400,6 +1488,87 @@ void MainWindow::on_actionCopyInstance_triggered()
     if (!m_selectedInstance)
         return;
 
+    if (m_webMode) {
+        AwakePopupDialog dialog(this);
+        dialog.setObjectName(QStringLiteral("awakeCopyInstance"));
+        dialog.setWindowTitle(tr("Copy instance"));
+        dialog.setPanelSize(QSize(520, 420));
+        auto* title = new QLabel(tr("Copy instance"), dialog.panel());
+        title->setProperty("role", QStringLiteral("title"));
+        auto* subtitle = new QLabel(m_selectedInstance->name(), dialog.panel());
+        subtitle->setProperty("role", QStringLiteral("muted"));
+        subtitle->setWordWrap(true);
+
+        auto* nameLabel = new QLabel(tr("Instance name"), dialog.panel());
+        auto* nameInput = new QLineEdit(m_selectedInstance->name(), dialog.panel());
+        nameInput->selectAll();
+
+        auto* groupLabel = new QLabel(tr("Group"), dialog.panel());
+        auto* groupCombo = new QComboBox(dialog.panel());
+        groupCombo->setEditable(true);
+        QStringList groups = APPLICATION->instances()->getGroups();
+        groups.prepend(QString());
+        groupCombo->addItems(groups);
+        const QString currentGroup = APPLICATION->instances()->getInstanceGroup(m_selectedInstance->id());
+        const int groupIdx = groups.indexOf(currentGroup);
+        groupCombo->setCurrentIndex(groupIdx >= 0 ? groupIdx : 0);
+        if (groupCombo->lineEdit())
+            groupCombo->lineEdit()->setPlaceholderText(tr("No group"));
+
+        InstanceCopyPrefs prefs;
+        auto* grid = new QGridLayout;
+        grid->setHorizontalSpacing(16);
+        grid->setVerticalSpacing(8);
+        auto addOption = [&](int row, int col, const QString& label, bool initial, auto setter) {
+            auto* box = new QCheckBox(label, dialog.panel());
+            box->setChecked(initial);
+            connect(box, &QCheckBox::toggled, &dialog, setter);
+            grid->addWidget(box, row, col);
+        };
+        addOption(0, 0, tr("Copy saves"), prefs.isCopySavesEnabled(), [&](bool v) { prefs.enableCopySaves(v); });
+        addOption(0, 1, tr("Copy game options"), prefs.isCopyGameOptionsEnabled(), [&](bool v) { prefs.enableCopyGameOptions(v); });
+        addOption(1, 0, tr("Copy resource packs"), prefs.isCopyResourcePacksEnabled(), [&](bool v) { prefs.enableCopyResourcePacks(v); });
+        addOption(1, 1, tr("Copy shader packs"), prefs.isCopyShaderPacksEnabled(), [&](bool v) { prefs.enableCopyShaderPacks(v); });
+        addOption(2, 0, tr("Copy servers"), prefs.isCopyServersEnabled(), [&](bool v) { prefs.enableCopyServers(v); });
+        addOption(2, 1, tr("Copy mods"), prefs.isCopyModsEnabled(), [&](bool v) { prefs.enableCopyMods(v); });
+        addOption(3, 0, tr("Copy screenshots"), prefs.isCopyScreenshotsEnabled(), [&](bool v) { prefs.enableCopyScreenshots(v); });
+        addOption(3, 1, tr("Keep play time"), prefs.isKeepPlaytimeEnabled(), [&](bool v) { prefs.enableKeepPlaytime(v); });
+
+        auto* buttons = new QHBoxLayout;
+        buttons->addStretch();
+        auto* cancel = new QPushButton(tr("Cancel"), dialog.panel());
+        cancel->setAutoDefault(false);
+        auto* ok = new QPushButton(tr("Copy"), dialog.panel());
+        ok->setProperty("primary", true);
+        ok->setDefault(true);
+        connect(nameInput, &QLineEdit::textChanged, &dialog, [ok](const QString& text) { ok->setEnabled(!text.trimmed().isEmpty()); });
+        connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+        connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
+        buttons->addWidget(cancel);
+        buttons->addWidget(ok);
+
+        dialog.panelLayout()->addWidget(title);
+        dialog.panelLayout()->addWidget(subtitle);
+        dialog.panelLayout()->addWidget(nameLabel);
+        dialog.panelLayout()->addWidget(nameInput);
+        dialog.panelLayout()->addWidget(groupLabel);
+        dialog.panelLayout()->addWidget(groupCombo);
+        dialog.panelLayout()->addLayout(grid);
+        dialog.panelLayout()->addStretch();
+        dialog.panelLayout()->addLayout(buttons);
+        nameInput->setFocus();
+        if (dialog.exec() != QDialog::Accepted || nameInput->text().trimmed().isEmpty())
+            return;
+
+        auto copyTask = new InstanceCopyTask(m_selectedInstance, prefs);
+        copyTask->setName(nameInput->text().trimmed());
+        copyTask->setGroup(groupCombo->currentText().trimmed());
+        copyTask->setIcon(m_selectedInstance->iconKey());
+        unique_qobject_ptr<Task> task(APPLICATION->instances()->wrapInstanceTask(copyTask));
+        runModalTask(task.get());
+        return;
+    }
+
     CopyInstanceDialog copyInstDlg(m_selectedInstance, this);
     if (!copyInstDlg.exec())
         return;
@@ -1791,6 +1960,49 @@ void MainWindow::on_actionChangeInstGroup_triggered()
     QStringList groups = APPLICATION->instances()->getGroups();
     groups.prepend("");
     int index = groups.indexOf(src);
+    if (m_webMode) {
+        AwakePopupDialog dialog(this);
+        dialog.setObjectName("awakeChangeGroup");
+        dialog.setWindowTitle(tr("Group name"));
+        dialog.setPanelSize(QSize(480, 260));
+        auto* title = new QLabel(tr("Group name"), dialog.panel());
+        title->setProperty("role", "title");
+        dialog.panelLayout()->addWidget(title);
+        auto* label = new QLabel(tr("Enter a new group name."), dialog.panel());
+        label->setProperty("role", "muted");
+        dialog.panelLayout()->addWidget(label);
+        auto* combo = new QComboBox(dialog.panel());
+        combo->setObjectName("changeGroupInput");
+        combo->setEditable(true);
+        combo->addItems(groups);
+        if (index >= 0) combo->setCurrentIndex(index);
+        else combo->setEditText(src);
+        if (auto* lineEdit = combo->lineEdit()) {
+            lineEdit->selectAll();
+            connect(lineEdit, &QLineEdit::returnPressed, &dialog, &QDialog::accept);
+        }
+        dialog.panelLayout()->addWidget(combo);
+        dialog.panelLayout()->addStretch();
+        auto* buttons = new QHBoxLayout;
+        buttons->addStretch();
+        auto* cancel = new QPushButton(tr("Cancel"), dialog.panel());
+        cancel->setObjectName("cancelChangeGroup");
+        cancel->setAutoDefault(false);
+        auto* save = new QPushButton(tr("OK"), dialog.panel());
+        save->setObjectName("confirmChangeGroup");
+        save->setProperty("primary", true);
+        save->setDefault(true);
+        buttons->addWidget(cancel);
+        buttons->addWidget(save);
+        dialog.panelLayout()->addLayout(buttons);
+        connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+        connect(save, &QPushButton::clicked, &dialog, &QDialog::accept);
+        combo->setFocus();
+        if (dialog.exec() == QDialog::Accepted) {
+            APPLICATION->instances()->setInstanceGroup(instId, combo->currentText().simplified());
+        }
+        return;
+    }
     bool ok = false;
     QString dst = QInputDialog::getItem(this, tr("Group name"), tr("Enter a new group name."), groups, index, true, &ok);
     dst = dst.simplified();
@@ -1965,11 +2177,34 @@ void MainWindow::on_actionClearMetadata_triggered()
 {
     // This if contains side effects!
     if (!APPLICATION->metacache()->evictAll()) {
-        CustomMessageBox::selectable(this, tr("Error"),
-                                     tr("Metadata cache clear Failed!\nTo clear the metadata cache manually, press Folders -> View "
-                                        "Launcher Root Folder, and after closing the launcher delete the folder named \"meta\"\n"),
-                                     QMessageBox::Warning)
-            ->show();
+        if (m_webMode) {
+            AwakePopupDialog dialog(this);
+            dialog.setObjectName(QStringLiteral("awakeMetadataError"));
+            dialog.setWindowTitle(tr("Error"));
+            dialog.setPanelSize(QSize(460, 220));
+            auto* title = new QLabel(tr("Error"), dialog.panel());
+            title->setProperty("role", QStringLiteral("title"));
+            auto* body = new QLabel(tr("Metadata cache clear failed. Close the launcher and delete the \"meta\" folder inside the launcher root folder."), dialog.panel());
+            body->setWordWrap(true);
+            auto* buttons = new QHBoxLayout;
+            buttons->addStretch();
+            auto* close = new QPushButton(tr("Close"), dialog.panel());
+            close->setProperty("primary", true);
+            close->setDefault(true);
+            connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+            buttons->addWidget(close);
+            dialog.panelLayout()->addWidget(title);
+            dialog.panelLayout()->addWidget(body);
+            dialog.panelLayout()->addStretch();
+            dialog.panelLayout()->addLayout(buttons);
+            dialog.exec();
+        } else {
+            CustomMessageBox::selectable(this, tr("Error"),
+                                         tr("Metadata cache clear Failed!\nTo clear the metadata cache manually, press Folders -> View "
+                                            "Launcher Root Folder, and after closing the launcher delete the folder named \"meta\"\n"),
+                                         QMessageBox::Warning)
+                ->show();
+        }
     }
 
     APPLICATION->metacache()->SaveNow();
@@ -2025,6 +2260,36 @@ void MainWindow::onCatChanged(int)
 
 void MainWindow::on_actionAbout_triggered()
 {
+    if (m_webMode) {
+        AwakePopupDialog dialog(this);
+        dialog.setObjectName("awakeAboutDialog");
+        dialog.setWindowTitle(tr("About %1").arg(BuildConfig.LAUNCHER_DISPLAYNAME));
+        dialog.setPanelSize(QSize(460, 260));
+        auto* title = new QLabel(BuildConfig.LAUNCHER_DISPLAYNAME, dialog.panel());
+        title->setProperty("role", "title");
+        dialog.panelLayout()->addWidget(title);
+        auto* version = new QLabel(tr("Version %1").arg(BuildConfig.printableVersionString()), dialog.panel());
+        version->setProperty("role", "muted");
+        dialog.panelLayout()->addWidget(version);
+        if (!BuildConfig.LAUNCHER_COPYRIGHT.isEmpty()) {
+            auto* copy = new QLabel(BuildConfig.LAUNCHER_COPYRIGHT, dialog.panel());
+            copy->setWordWrap(true);
+            copy->setProperty("role", "muted");
+            dialog.panelLayout()->addWidget(copy);
+        }
+        dialog.panelLayout()->addStretch();
+        auto* buttons = new QHBoxLayout;
+        buttons->addStretch();
+        auto* closeBtn = new QPushButton(tr("Close"), dialog.panel());
+        closeBtn->setProperty("primary", true);
+        closeBtn->setDefault(true);
+        connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+        buttons->addWidget(closeBtn);
+        dialog.panelLayout()->addLayout(buttons);
+        closeBtn->setFocus();
+        dialog.exec();
+        return;
+    }
     AboutDialog dialog(this);
     dialog.exec();
 }
@@ -2141,13 +2406,48 @@ void MainWindow::on_actionRenameInstance_triggered()
     if (m_selectedInstance) {
         if (m_webMode) {
             const auto before = m_selectedInstance->name();
-            bool accepted = false;
-            auto name = QInputDialog::getText(this, tr("Rename Instance"), tr("Instance name:"), QLineEdit::Normal, before, &accepted);
-            name = name.trimmed();
-            name.truncate(128);
-            if (accepted && !name.trimmed().isEmpty() && name != before) {
-                view->model()->setData(view->currentIndex(), name, Qt::EditRole);
-                if (auto* delegate = qobject_cast<ListViewDelegate*>(view->itemDelegate())) delegate->textChanged(before, name);
+            AwakePopupDialog dialog(this);
+            dialog.setObjectName("awakeRenameInstance");
+            dialog.setWindowTitle(tr("Rename Instance"));
+            dialog.setPanelSize(QSize(480, 260));
+            auto* title = new QLabel(tr("Rename Instance"), dialog.panel());
+            title->setProperty("role", "title");
+            dialog.panelLayout()->addWidget(title);
+            auto* label = new QLabel(tr("Instance name:"), dialog.panel());
+            label->setProperty("role", "muted");
+            dialog.panelLayout()->addWidget(label);
+            auto* input = new QLineEdit(before, dialog.panel());
+            input->setObjectName("renameInstanceInput");
+            input->setMaxLength(128);
+            input->selectAll();
+            dialog.panelLayout()->addWidget(input);
+            dialog.panelLayout()->addStretch();
+            auto* buttons = new QHBoxLayout;
+            buttons->addStretch();
+            auto* cancel = new QPushButton(tr("Cancel"), dialog.panel());
+            cancel->setObjectName("cancelRenameInstance");
+            cancel->setAutoDefault(false);
+            auto* save = new QPushButton(tr("Rename"), dialog.panel());
+            save->setObjectName("confirmRenameInstance");
+            save->setProperty("primary", true);
+            save->setDefault(true);
+            buttons->addWidget(cancel);
+            buttons->addWidget(save);
+            dialog.panelLayout()->addLayout(buttons);
+            connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+            connect(save, &QPushButton::clicked, &dialog, &QDialog::accept);
+            connect(input, &QLineEdit::returnPressed, &dialog, &QDialog::accept);
+            connect(input, &QLineEdit::textChanged, save, [save](const QString& text) {
+                save->setEnabled(!text.trimmed().isEmpty());
+            });
+            input->setFocus();
+            if (dialog.exec() == QDialog::Accepted) {
+                auto name = input->text().trimmed();
+                name.truncate(128);
+                if (!name.isEmpty() && name != before) {
+                    view->model()->setData(view->currentIndex(), name, Qt::EditRole);
+                    if (auto* delegate = qobject_cast<ListViewDelegate*>(view->itemDelegate())) delegate->textChanged(before, name);
+                }
             }
             return;
         }

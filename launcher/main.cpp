@@ -46,6 +46,10 @@
 
 #if defined Q_OS_WIN32
 #include "console/WindowsConsole.h"
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000000;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0;
+}
 #endif
 
 int main(int argc, char* argv[])

@@ -131,8 +131,8 @@ onUnmounted(() => { revision++; if (previousFocus?.isConnected) previousFocus.fo
   </div>
 </template>
 <style scoped>
-.skins-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
-.skins-dialog { width: min(1100px, calc(100vw - 48px)); max-width: 1100px; height: min(720px, calc(100vh - 48px)); max-height: none; background: #0a121e; }
+.skins-overlay { background: radial-gradient(circle at 50% 28%, rgba(7, 13, 24, 0.36) 0%, rgba(3, 7, 14, 0.56) 100%); }
+.skins-dialog { width: min(1100px, calc(100vw - 48px)); max-width: 1100px; height: min(720px, calc(100vh - 48px)); max-height: none; background: var(--glass-strong); backdrop-filter: var(--glass-filter-strong); }
 .skins-body { display: grid; grid-template-columns: minmax(300px, 1.15fr) minmax(280px, 1fr); gap: 28px; overflow: hidden; }
 .skin-tools { display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow-y: auto; padding: 2px 12px 2px 2px; scrollbar-gutter: stable; overscroll-behavior: contain; }
 .skin-tools > * { flex-shrink: 0; }

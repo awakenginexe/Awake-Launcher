@@ -21,6 +21,7 @@ const props = defineProps<{
   compact: boolean;
   reducedMotion: boolean;
   locale: string;
+  initialTab?: 'general' | 'java' | 'memory' | 'window' | 'about';
   t: (key: MessageKey) => string;
   javaService: JavaService;
   gpuService: GpuService;
@@ -35,12 +36,17 @@ const emit = defineEmits<{
   (e: 'updates-viewed', presentation: number): void;
 }>();
 
-const activeTab = ref<'general' | 'java' | 'memory' | 'window' | 'about'>('general');
-const visitedTabs = ref(new Set(['general']));
+const activeTab = ref<'general' | 'java' | 'memory' | 'window' | 'about'>(props.initialTab ?? 'general');
+const visitedTabs = ref(new Set<string>(['general', props.initialTab ?? 'general']));
+watch(() => props.initialTab, tab => {
+  if (!tab) return;
+  visitedTabs.value.add(tab);
+  activeTab.value = tab;
+});
 watch(activeTab, tab => { visitedTabs.value.add(tab); closeLanguagePicker(); });
 watch([activeTab, () => props.updates.presentation], () => {
   if (activeTab.value === 'about') emit('updates-viewed', props.updates.presentation);
-});
+}, { immediate: true });
 const languageOptions = [
   { value: 'en', label: 'English' },
   { value: 'th', label: 'ภาษาไทย' },

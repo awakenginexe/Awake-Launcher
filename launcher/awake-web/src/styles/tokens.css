@@ -52,26 +52,38 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 
-  /* Color Palette - Deep Atmospheric Gradient Blue Tone */
-  --background: #060b13;
-  --background-fallback: radial-gradient(ellipse 95% 85% at 75% 25%, #0d1e38 0%, #071120 50%, #030810 100%);
+  /* Color Palette - Vibrant Spatial Atmosphere */
+  --background: #07101e;
+  --background-fallback:
+    radial-gradient(ellipse 95% 85% at 62% 32%, #132a4e 0%, #09162b 56%, #050b16 100%);
 
-  /* Glass Surfaces - Layered, modern with subtle Sapphire reflection */
-  --glass: rgba(10, 18, 30, 0.70);
-  --glass-strong: rgba(7, 13, 23, 0.88);
-  --glass-subtle: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(96, 165, 250, 0.14);
-  --glass-border-focus: rgba(96, 165, 250, 0.65);
-  --glass-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  /* Apple Liquid Glass Surfaces - Translucent dark-mode frosted glass with balanced specular rim */
+  --glass:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.015) 100%),
+    rgba(11, 20, 36, 0.64);
+  --glass-strong:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(10, 19, 34, 0.74);
+  --glass-menu:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(10, 19, 34, 0.82);
+  --glass-subtle: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-border-focus: rgba(147, 197, 253, 0.78);
+  --glass-inner-highlight:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 0 rgba(148, 194, 255, 0.06);
+  --glass-filter: blur(var(--blur)) saturate(135%);
+  --glass-filter-strong: blur(var(--blur-large)) saturate(140%);
   --surface-glass: var(--glass);
   --surface-glass-strong: var(--glass-strong);
 
   /* Surfaces & Controls */
-  --surface: #0e192a;
-  --surface-hover: rgba(255, 255, 255, 0.08);
-  --surface-active: rgba(59, 130, 246, 0.16);
-  --surface-selected: rgba(59, 130, 246, 0.18);
-  --surface-interactive: rgba(14, 25, 42, 0.75);
+  --surface: rgba(14, 26, 46, 0.48);
+  --surface-hover: rgba(255, 255, 255, 0.12);
+  --surface-active: rgba(59, 130, 246, 0.22);
+  --surface-selected: rgba(59, 130, 246, 0.24);
+  --surface-interactive: rgba(255, 255, 255, 0.08);
 
   /* Typography Colors - High Legibility Contrast */
   --text: #f8fafc;
@@ -112,10 +124,10 @@
   --radius-control: 8px;
 
   /* Blur Radii */
-  --blur-small: 12px;
-  --blur-medium: 24px;
-  --blur-large: 40px;
-  --blur: 28px;
+  --blur-small: 10px;
+  --blur-medium: 16px;
+  --blur-large: 22px;
+  --blur: 18px;
 
   /* Shadows - Layered, soft, deep */
   --shadow-small: 0 2px 8px rgba(0, 0, 0, 0.28);
@@ -139,6 +151,9 @@
   --duration: 200ms;
   --duration-artwork: 280ms;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-exit: 120ms;
 }
 
 :root:lang(en) body, :root:lang(en) body *,

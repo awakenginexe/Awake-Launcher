@@ -28,6 +28,7 @@ const contextMenu = ref<{ instance: Instance; x: number; y: number } | null>(nul
 const contextMenuInvoker = ref<HTMLElement | null>(null);
 const failedIcons = ref(new Set<string>());
 const isHidden = ref(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+const isUnfocused = ref(false);
 
 const showAccounts = ref(false);
 const showSkins = ref(false);
@@ -44,6 +45,11 @@ watch(accountsRequest, () => {
   showSkins.value = false;
 });
 const showSettings = ref(false);
+const settingsModalTab = ref<'general' | 'java' | 'memory' | 'window' | 'about'>('general');
+function openSettings(tab: 'general' | 'java' | 'memory' | 'window' | 'about' = 'general') {
+  settingsModalTab.value = tab;
+  showSettings.value = true;
+}
 const showCreate = ref(false);
 const createModalTab = ref('custom');
 const showAppMenu = ref(false);
@@ -79,12 +85,18 @@ const filtered = computed(() => Boolean(query.value || group.value || pinnedOnly
 const enabled = computed(() => status.value === 'ready' && !busy.value && !state.value.deletion.active);
 const selectedStatus = computed(() => selected.value?.running ? 'running' : selected.value?.broken ? 'broken' : selected.value?.canLaunch ? 'ready' : 'unavailable');
 const canPlay = computed(() => enabled.value && selected.value?.canLaunch && !selected.value.running && !selected.value.broken);
+const hasModal = computed(() => Boolean(showAccounts.value || showSkins.value || showSettings.value || showCreate.value || showAppMenu.value || editingInstance.value || state.value.modalActive || packChoice.value || packConfirmation.value || (showUpdates.value && !gpuChoice.value) || gpuChoice.value));
 const metadata = computed(() => [selected.value?.minecraftVersion ? `${t('minecraft')} ${selected.value.minecraftVersion}` : '', [selected.value?.loader, selected.value?.loaderVersion].filter(Boolean).join(' ')].filter(Boolean));
 
 function clearFilters() { query.value = ''; group.value = ''; pinnedOnly.value = false; }
 function changeSort(event: Event) { void preference('sortMode', (event.target as HTMLSelectElement).value as SortMode); }
 function closePopovers() { if (viewOptions.value) viewOptions.value.open = false; if (moreActions.value) moreActions.value.open = false; }
-function onVisibilityChange() { isHidden.value = document.visibilityState === 'hidden'; }
+function onVisibilityChange() {
+  isHidden.value = document.visibilityState === 'hidden';
+  isUnfocused.value = isHidden.value || !document.hasFocus();
+}
+function onWindowFocus() { isUnfocused.value = false; }
+function onWindowBlur() { isUnfocused.value = true; }
 
 function closeContextMenu(restoreFocus = false) {
   if (!contextMenu.value) return;
@@ -179,18 +191,22 @@ watch(groups, values => { if (group.value && !values.includes(group.value)) grou
 
 onMounted(() => {
   window.addEventListener('keydown', keydown);
+  window.addEventListener('focus', onWindowFocus);
+  window.addEventListener('blur', onWindowBlur);
   document.addEventListener('visibilitychange', onVisibilityChange);
   void connect();
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', keydown);
+  window.removeEventListener('focus', onWindowFocus);
+  window.removeEventListener('blur', onWindowBlur);
   document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
 
 <template>
-  <main class="launcher" :class="{ 'reduced-motion': reducedMotion, compact: state.compact, 'is-hidden': isHidden }" :aria-busy="status === 'loading'">
+  <main class="launcher" :class="{ 'reduced-motion': reducedMotion, compact: state.compact, 'is-hidden': isHidden, 'is-unfocused': isUnfocused, 'has-modal': hasModal }" :aria-busy="status === 'loading'">
     <a v-if="selected" class="skip-link" href="#play">{{ t('skipToPlay') }}</a>
     <div class="artwork-canvas" aria-hidden="true">
       <Transition name="artwork"><img v-if="artwork" :key="artwork" :src="artwork" alt="" class="artwork-image" /></Transition>
@@ -249,7 +265,7 @@ onUnmounted(() => {
         <p v-if="status === 'ready'" class="library-playtime"><span>{{ t('allInstancesPlaytime') }}</span><strong>{{ formatPlaytime(totalPlaytime, state.locale) }}</strong></p>
         <button class="quiet" :disabled="!enabled" @click="openSkins()">{{ t('skins') }}</button>
         <div class="creation-actions"><button :disabled="!enabled" @click="openCreate('custom')">{{ t('create') }}</button><button class="quiet" :disabled="!enabled" @click="openCreate('import')">{{ t('import') }}</button></div>
-        <div class="account-actions"><button class="quiet account-button" :disabled="!enabled" @click="showAccounts = true"><span>{{ t('accounts') }}</span><span class="account-name">{{ state.accountName || t('accountUnavailable') }}</span></button><button class="settings-button" :disabled="!enabled" :title="t('settings')" :aria-label="t('settings')" @click="showSettings = true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg></button></div>
+        <div class="account-actions"><button class="quiet account-button" :disabled="!enabled" @click="showAccounts = true"><span>{{ t('accounts') }}</span><span class="account-name">{{ state.accountName || t('accountUnavailable') }}</span></button><button class="settings-button" :disabled="!enabled" :title="t('settings')" :aria-label="t('settings')" @click="openSettings('general')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg></button></div>
       </footer>
     </aside>
 
@@ -337,6 +353,7 @@ onUnmounted(() => {
     <Transition name="modal">
       <SettingsModal
         v-if="showSettings"
+        :initial-tab="settingsModalTab"
         :settings="state.launcherSettings"
         :updates="state.updates"
         :busy="busy"
@@ -400,7 +417,7 @@ onUnmounted(() => {
         @action="name => action(name)"
         @update-pref="(key, val) => preference(key, val)"
         @open-accounts="showAccounts = true"
-        @open-settings="showSettings = true"
+        @open-settings="tab => openSettings(tab || 'general')"
       />
     </Transition>
   </main>
@@ -410,7 +427,11 @@ onUnmounted(() => {
 .welcome-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .welcome-head { image-rendering: pixelated; flex: 0 0 24px; border-radius: 0; }
 .welcome-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
-.skins-enter-active, .skins-leave-active { transition: opacity 120ms ease-out; }
+.skins-enter-active { transition: opacity var(--duration-base) var(--ease-out); }
+.skins-leave-active { transition: opacity var(--duration-exit) var(--ease-in); }
+.skins-enter-active > .modal-dialog { transition: transform var(--duration-base) var(--ease-out); }
+.skins-leave-active > .modal-dialog { transition: transform var(--duration-exit) var(--ease-in); }
 .skins-enter-from, .skins-leave-to { opacity: 0; }
+.skins-enter-from > .modal-dialog, .skins-leave-to > .modal-dialog { transform: translateY(10px); }
 .reduced-motion .skins-enter-active, .reduced-motion .skins-leave-active { transition: none; }
 </style>

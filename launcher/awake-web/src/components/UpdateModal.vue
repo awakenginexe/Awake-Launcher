@@ -110,7 +110,7 @@ function trapFocus(event: KeyboardEvent) {
 .update-automatic input { accent-color: var(--accent); width: 17px; height: 17px; flex-shrink: 0; }
 .update-download-hint { font-size: .85rem; }
 .update-footer { flex-wrap: wrap; }
-.update-embedded .update-dialog { width: 100%; max-height: none; border: 0; background: none; box-shadow: none; }
+.update-embedded .update-dialog { width: 100%; max-height: none; border: 0; border-radius: 0; background: none; box-shadow: none; backdrop-filter: none; }
 .update-embedded .update-body { padding: 20px 0; }
 .update-embedded .update-footer { padding: 16px 0; }
 .update-progress { display: flex; align-items: center; gap: 12px; }

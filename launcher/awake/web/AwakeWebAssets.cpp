@@ -15,19 +15,8 @@ namespace Awake::Web {
 void initialize()
 {
 #ifdef Q_OS_WIN
-    // Keep Qt's window compositor on WARP without opening the game's GPU adapter.
-    qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "1");
+    // Keep GPU compositing available for the glass UI; WARP makes scrolling and blur CPU-bound.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
-    auto flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
-    // Software page rendering avoids the corrupted shared D3D11 frames during textbox repaints.
-    if (!flags.split(' ').contains("--disable-gpu"))
-        flags += " --disable-gpu";
-    if (!flags.split(' ').contains("--ignore-gpu-blocklist"))
-        flags += " --ignore-gpu-blocklist";
-    // Avoid reusing partially rasterized tiles across textbox focus/caret repaints on WARP.
-    if (!flags.split(' ').contains("--disable-partial-raster"))
-        flags += " --disable-partial-raster";
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
 #endif
     QWebEngineUrlScheme scheme("awake");
     scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);

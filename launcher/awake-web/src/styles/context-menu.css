@@ -15,10 +15,9 @@
   padding: 6px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-medium);
-  background: rgba(8, 15, 26, 0.97);
+  background: var(--glass-menu);
+  backdrop-filter: var(--glass-filter-strong);
   box-shadow: var(--glass-inner-highlight), var(--shadow-floating);
-  backdrop-filter: blur(var(--blur-small));
-  -webkit-backdrop-filter: blur(var(--blur-small));
 }
 
 .instance-context-heading {

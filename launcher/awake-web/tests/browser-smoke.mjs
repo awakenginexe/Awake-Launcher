@@ -780,9 +780,14 @@ try {
       assert.ok(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails' && call[2] === 'log').length) > reads, 'Active console did not refresh');
       await page.evaluate(() => { window.__originalHasFocus = document.hasFocus; document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
       const pausedReads = await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length);
+      assert.equal(await page.locator('.launcher').evaluate(el => el.classList.contains('is-unfocused')), true);
+      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).transitionDuration), '0s');
+      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).backdropFilter.includes('blur')), true);
       await page.waitForTimeout(2800);
       assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length), pausedReads, 'Unfocused console still refreshed');
       await page.evaluate(() => { document.hasFocus = window.__originalHasFocus; window.dispatchEvent(new Event('focus')); });
+      assert.equal(await page.locator('.launcher').evaluate(el => el.classList.contains('is-unfocused')), false);
+      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).backdropFilter.includes('blur')), true);
     }
     await page.locator('.editor-toolbar input[type=checkbox]').uncheck();
     assert.equal(await page.locator('.editor-console').evaluate(el => el.classList.contains('wrap-lines')), false);

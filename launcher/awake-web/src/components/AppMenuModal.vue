@@ -13,7 +13,7 @@ const emit = defineEmits<{
   (e: 'action', name: Action): void;
   (e: 'update-pref', key: string, val: unknown): void;
   (e: 'open-accounts'): void;
-  (e: 'open-settings'): void;
+  (e: 'open-settings', tab?: 'general' | 'java' | 'memory' | 'window' | 'about'): void;
 }>();
 
 function triggerAction(actionName: Action) {
@@ -26,9 +26,9 @@ function openAccounts() {
   emit('open-accounts');
 }
 
-function openSettings() {
+function openSettings(tab: 'general' | 'java' | 'memory' | 'window' | 'about' = 'general') {
   emit('close');
-  emit('open-settings');
+  emit('open-settings', tab);
 }
 </script>
 
@@ -106,7 +106,7 @@ function openSettings() {
               <span class="btn-icon">👤</span>
               <span class="btn-label">{{ t('accounts') }}</span>
             </button>
-            <button class="menu-grid-btn" type="button" @click="openSettings">
+            <button class="menu-grid-btn" type="button" @click="openSettings('general')">
               <span class="btn-icon">⚙️</span>
               <span class="btn-label">{{ t('settings') }}</span>
             </button>
@@ -166,7 +166,7 @@ function openSettings() {
               <span class="btn-icon">👽</span>
               <span class="btn-label">Reddit</span>
             </button>
-            <button class="menu-grid-btn" type="button" @click="triggerAction('about')">
+            <button class="menu-grid-btn" type="button" @click="openSettings('about')">
               <span class="btn-icon">ℹ️</span>
               <span class="btn-label">{{ t('aboutAwake') }}</span>
             </button>

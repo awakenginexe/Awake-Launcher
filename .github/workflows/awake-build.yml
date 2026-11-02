@@ -134,10 +134,21 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          - Fix instance deletion failing when Windows cannot use the Recycle Bin by falling back to recoverable local trash.
-          - Preserve Undo, worlds, mods and settings when the local-trash fallback is used.
-          - Keep running instances and locked files protected during deletion.
-          - Local-trash files remain in the instances folder's `.trash` directory and continue to occupy disk space until removed.
+          ## What's new in 2.0.0
+
+          - **A refreshed glass interface:** translucent panels, frosted dialogs, brighter backgrounds, and consistent menus throughout the launcher.
+          - **Smoother scrolling and dialogs:** restored GPU acceleration to fix the heavy lag caused by forced software rendering, with refined opening and closing animations.
+          - **Less NVIDIA overlay interference:** added a window workaround to reduce unwanted game detection and overlay interruptions. Results can vary by driver version.
+          - **Less background activity:** animations pause when the launcher loses focus, and the web interface freezes while minimized.
+          - **Updated instance dialogs:** copy, export, rename, and change groups using dialogs that match the launcher. Choose which worlds, mods, resource packs, and other files to copy.
+          - **Easier troubleshooting:** view and copy launcher logs from a built-in dialog, or open the logs folder.
+          - **About is easier to find:** the app menu now opens the About page directly inside Settings, including update information.
+
+          ## Which download should I choose?
+
+          - **Setup.exe:** recommended for most users; installs or updates Awake Launcher.
+          - **Windows-x64.zip:** portable version for running from a folder.
+          - **.sha256:** checksums for verifying the downloads.
           '@ | Set-Content $notes -Encoding utf8
           $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
           gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes

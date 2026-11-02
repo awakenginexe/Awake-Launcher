@@ -7,6 +7,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
@@ -25,9 +26,16 @@ namespace {
 void paintPanel(QPainter& painter, const QRectF& bounds)
 {
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setBrush(QColor("#0e182b"));
-    painter.setPen(QPen(QColor("#2a3e60"), 1));
+    QLinearGradient glass(bounds.topLeft(), bounds.bottomLeft());
+    glass.setColorAt(0.0, QColor(19, 34, 58, 226));
+    glass.setColorAt(0.5, QColor(13, 24, 42, 232));
+    glass.setColorAt(1.0, QColor(9, 17, 31, 238));
+    painter.setBrush(glass);
+    painter.setPen(QPen(QColor(255, 255, 255, 48), 1));
     painter.drawRoundedRect(bounds.adjusted(.5, .5, -.5, -.5), 18, 18);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 255, 255, 22), 1));
+    painter.drawRoundedRect(bounds.adjusted(1.5, 1.5, -1.5, -1.5), 17, 17);
 }
 
 void paintClose(QPainter& painter, const QRectF& bounds, const QPushButton* button)
@@ -46,11 +54,7 @@ class PopupPanel : public QWidget {
 public:
     using QWidget::QWidget;
 protected:
-    void paintEvent(QPaintEvent*) override
-    {
-        QPainter painter(this);
-        paintPanel(painter, rect());
-    }
+    void paintEvent(QPaintEvent*) override {}
 };
 
 class PopupCloseButton : public QPushButton {
@@ -89,10 +93,18 @@ AwakePopupDialog::AwakePopupDialog(QWidget* parent)
     const auto regularFont = Awake::useRegularUiFont();
     m_panel->setStyleSheet(QStringLiteral(
         "QWidget { font-family: K2D; %1 }"
-        "QWidget#awakePopupPanel { background: #0e182b; border: 1px solid #2a3e60; border-radius: 18px; color: #eef4ff; }"
+        "QWidget#awakePopupPanel { background: transparent; border: none; border-radius: 18px; color: #eef4ff; }"
         "QLabel { color: #dce7f9; background: transparent; }"
         "QLabel[role=title] { font-size: 22px; font-weight: %2; color: #f3f7ff; }"
         "QLabel[role=muted] { color: #b0bfd5; }"
+        "QLineEdit, QComboBox { color: #eef4ff; background: #08101d; border: 1px solid #3a5177; border-radius: 8px; padding: 9px 12px; font-size: 14px; selection-background-color: #326bc9; selection-color: #ffffff; }"
+        "QLineEdit:focus, QComboBox:focus { border: 2px solid #94baff; padding: 8px 11px; }"
+        "QComboBox::drop-down { border: none; width: 28px; }"
+        "QComboBox QAbstractItemView { color: #eef4ff; background: #08101d; border: 1px solid #3a5177; selection-background-color: #1c2e4c; selection-color: #eef4ff; outline: 0; padding: 4px; }"
+        "QCheckBox { color: #dce7f9; spacing: 8px; font-size: 13px; background: transparent; }"
+        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #3a5177; background: #08101d; }"
+        "QCheckBox::indicator:checked { background: #326bc9; border-color: #6a9ced; }"
+        "QPlainTextEdit { color: #dbeafe; background: #070e1b; border: 1px solid #2a3e60; border-radius: 8px; padding: 10px; font-family: Consolas, monospace; font-size: 12px; selection-background-color: #326bc9; selection-color: #ffffff; }"
         "QPushButton, QPushButton:default { font-weight: %3; color: #eaf2ff; background: #1c2e4c; border: 1px solid #3a5177; border-radius: 8px; padding: 9px 15px; }"
         "QPushButton:hover { background: #29456e; border-color: #6085bd; }"
         "QPushButton:focus { border: 2px solid #94baff; padding: 8px 14px; }"
@@ -216,12 +228,8 @@ void AwakePopupDialog::showEvent(QShowEvent* event)
 void AwakePopupDialog::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(3, 8, 18, 185));
+    painter.fillRect(rect(), QColor(4, 10, 22, 165));
     paintPanel(painter, m_panel->geometry());
-    if (m_close->isVisible()) {
-        const QRectF closeBounds(m_close->mapTo(this, QPoint(0, 0)), m_close->size());
-        paintClose(painter, closeBounds, m_close);
-    }
 }
 
 bool AwakePopupDialog::eventFilter(QObject* watched, QEvent* event)

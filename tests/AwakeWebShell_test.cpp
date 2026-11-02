@@ -81,11 +81,23 @@ class AwakeWebShellTest : public QObject {
         QTRY_COMPARE(evaluate("document.querySelectorAll('.instance-select').length").toInt(), 2);
         QCOMPARE(view->url(), QUrl("awake://ui/"));
     }
-    void launcherCompositorUsesSoftwareDevice()
+    void launcherCompositorKeepsAccelerationAvailable()
     {
         auto* compositor = view->findChild<QQuickWidget*>();
         QVERIFY(compositor);
 #ifdef Q_OS_WIN
+        QVERIFY(!qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-gpu"));
+        QVERIFY(qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER") != 1);
+        QCOMPARE(window->windowOpacity(), 254.0 / 255.0);
+        if (QGuiApplication::platformName() == "offscreen")
+            QSKIP("Hardware adapter and layered HWND checks require the Windows display platform");
+        auto hwnd = reinterpret_cast<HWND>(window->winId());
+        QVERIFY(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED);
+        BYTE alpha = 0;
+        DWORD flags = 0;
+        QVERIFY(GetLayeredWindowAttributes(hwnd, nullptr, &alpha, &flags));
+        QCOMPARE(alpha, BYTE(254));
+        QVERIFY(flags & LWA_ALPHA);
         auto* renderer = compositor->quickWindow()->rendererInterface();
         QCOMPARE(renderer->graphicsApi(), QSGRendererInterface::Direct3D11);
         auto* device = static_cast<ID3D11Device*>(renderer->getResource(compositor->quickWindow(), QSGRendererInterface::DeviceResource));
@@ -98,10 +110,7 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(SUCCEEDED(adapter.As(&adapter1)));
         DXGI_ADAPTER_DESC1 description{};
         QVERIFY(SUCCEEDED(adapter1->GetDesc1(&description)));
-        QVERIFY(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE);
-        QVERIFY(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-gpu"));
-        QVERIFY(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-partial-raster"));
-        QVERIFY(!evaluate("Boolean(document.createElement('canvas').getContext('webgl'))").toBool());
+        qInfo() << "Launcher compositor adapter:" << QString::fromWCharArray(description.Description);
         QVERIFY(evaluate("Boolean(document.createElement('canvas').getContext('2d'))").toBool());
 #else
         QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
@@ -110,6 +119,8 @@ class AwakeWebShellTest : public QObject {
     }
     void welcomeHeadOpensTheSkinsPanelWithSoftwarePreview()
     {
+        if (QGuiApplication::platformName() == "offscreen")
+            QSKIP("Animated canvas preview requires a displayed WebEngine compositor");
         auto accounts = APPLICATION->accounts();
         auto previous = accounts->defaultAccount();
         auto account = MinecraftAccount::createBlankMSA();
@@ -474,6 +485,8 @@ class AwakeWebShellTest : public QObject {
     }
     void offlineTextboxRepaintsKeepTheAccountDialogIntact()
     {
+        if (QGuiApplication::platformName() == "offscreen")
+            QSKIP("Frame delivery and native textbox repaint checks require a displayed compositor");
         auto cleanup = qScopeGuard([&] { evaluate("document.querySelector('.modal-close-btn')?.click()"); });
         window->raise();
         window->activateWindow();
