@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import '../styles/java-picker.css';
@@ -57,9 +58,10 @@ watch(() => props.revision, () => { if (!working.value) void load(); });
 
 <template>
   <section class="java-picker" :aria-label="t('javaRuntime')" :aria-busy="working">
-    <div class="java-picker-heading"><h3>{{ t('javaRuntime') }}</h3><span class="editor-feedback" role="status">{{ working ? t('working') : saved ? t('editorSaved') : '' }}</span></div>
+    <div class="java-picker-heading"><h3>{{ t('javaRuntime') }}</h3><span class="editor-feedback" role="status">{{ saved ? t('editorSaved') : '' }}</span></div>
     <p class="java-picker-hint">{{ instanceId ? t('javaInstanceHint') : t('javaGlobalHint') }}</p>
     <p v-if="error" class="editor-error" role="alert">{{ error }} <button class="btn-subtle" :disabled="working" @click="load">{{ t('retry') }}</button></p>
+    <LoadingSkeleton v-if="working && !data" :label="t('working')" :rows="3" />
     <template v-if="data">
       <label v-if="instanceId" class="check java-inherit"><input type="checkbox" :checked="data.inherited" :disabled="working || data.running" @change="select(($event.target as HTMLInputElement).checked ? 'inherit' : data.profile)" />{{ t('javaUseGlobal') }}<span>{{ name(options.find(option => option.id === data?.globalProfile) || options[0]) }}</span></label>
       <p v-if="data.majors.length" class="java-picker-hint">{{ t('javaCompatibleVersions').replace('{versions}', data.majors.join(', ')) }}</p>

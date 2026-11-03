@@ -28,6 +28,7 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrl>
+#include <algorithm>
 #include <cmath>
 
 namespace Awake::Web {
@@ -50,24 +51,38 @@ QString directory(MinecraftInstance* instance, const QString& section)
     if (section == "overview") return instance->gameRoot();
     return {};
 }
-QString readLog(const QString& path)
+QString readLog(const QString& path, int limit)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) return {};
-    if (file.size() > 1024 * 1024) file.seek(file.size() - 1024 * 1024);
-    return QString::fromUtf8(file.read(1024 * 1024));
+    if (file.size() > limit) file.seek(file.size() - limit);
+    return QString::fromUtf8(file.read(limit));
 }
-QString currentLog(MinecraftInstance* instance)
+QString currentLog(MinecraftInstance* instance, int limit = 64 * 1024)
 {
-    if (auto* task = instance->getLaunchTask()) return task->getLogModel()->toPlainText().right(1024 * 1024);
+    if (auto* task = instance->getLaunchTask()) return editorLogTail(task->getLogModel().get(), limit);
     const auto file = QDir(instance->gameRoot()).filePath("logs/latest.log");
-    return QFileInfo(file).isSymLink() ? QString{} : readLog(file);
+    return QFileInfo(file).isSymLink() ? QString{} : readLog(file, limit);
 }
 bool safeFileId(const QString& id)
 {
     return !id.isEmpty() && id.size() <= 255 && id != "." && id != ".." &&
         !id.contains('/') && !id.contains('\\') && !id.contains(':') && !id.contains(QChar::Null);
 }
+}
+
+QString editorLogTail(LogModel* model, int limit)
+{
+    QStringList chunks;
+    int remaining = limit;
+    for (int i = model->rowCount() - 1; i >= 0 && remaining > 0; --i) {
+        const auto line = model->data(model->index(i, 0), Qt::DisplayRole).toString();
+        const auto chunk = (line.right(remaining) + '\n').right(remaining);
+        chunks.append(chunk);
+        remaining -= chunk.size();
+    }
+    std::reverse(chunks.begin(), chunks.end());
+    return chunks.join(QString());
 }
 
 InstanceEditor::InstanceEditor(Assets* assets, QObject* parent) : QObject(parent), m_assets(assets) {}
@@ -205,7 +220,7 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
             settings->set("LaunchMaximized", options.value("fullscreen"));
         }
     } else if (name == "clearLog" || name == "copyLog") {
-        if (name == "copyLog") QApplication::clipboard()->setText(currentLog(instance));
+        if (name == "copyLog") QApplication::clipboard()->setText(currentLog(instance, 1024 * 1024));
         else if (auto* task = instance->getLaunchTask()) task->getLogModel()->clear();
         else return failure(tr("There is no active console to clear. Saved log files are kept."));
     } else if (name == "openFolder") {

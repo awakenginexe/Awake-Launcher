@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import SkinPreview from './SkinPreview.vue';
 import ThemedSelect from './ThemedSelect.vue';
@@ -124,7 +125,7 @@ onUnmounted(() => { revision++; if (previousFocus?.isConnected) previousFocus.fo
             <button v-for="cape in state?.capes" :key="cape.id" type="button" class="skin-cape-choice" :aria-pressed="capeId === cape.id" :disabled="busy || !state?.editable" @click="capeId = cape.id"><span class="skin-cape-image" aria-hidden="true" :style="{ backgroundImage: cape.textureUrl ? `url(${cape.textureUrl})` : undefined }" /><span>{{ cape.name }}</span></button>
           </div></div>
         </div>
-        <div class="skin-display"><SkinPreview :texture-url="selected?.textureUrl ?? ''" :variant="variant" :name="selected?.name ?? ''" :cape-url="capeUrl" :t="t" /><p class="skin-selected-name">{{ selected?.name ?? t('skinNoPreview') }}</p><p v-if="busy" class="skin-feedback" role="status">{{ t('skinWorking') }}</p><p v-if="failure" class="skin-feedback skin-error" role="alert">{{ failure }}</p><p v-if="message" class="skin-feedback" role="status">{{ message }}</p></div>
+        <div class="skin-display"><SkinPreview :texture-url="selected?.textureUrl ?? ''" :variant="variant" :name="selected?.name ?? ''" :cape-url="capeUrl" :t="t" /><p class="skin-selected-name">{{ selected?.name ?? t('skinNoPreview') }}</p><LoadingSkeleton v-if="busy" :label="t('skinWorking')" :rows="1" /><p v-if="failure" class="skin-feedback skin-error" role="alert">{{ failure }}</p><p v-if="message" class="skin-feedback" role="status">{{ message }}</p></div>
       </div>
       <footer class="modal-footer"><div class="skin-reset-actions"><button type="button" class="btn-subtle skin-reset-current" :disabled="busy || !hasChanges" @click="resetCurrent">{{ t('skinReset') }}</button><button type="button" class="btn-subtle skin-reset-minecraft" :disabled="busy || !state?.editable || !state?.minecraftDefault" @click="resetMinecraft">{{ t('skinResetMinecraft') }}</button></div><div class="skin-local-save"><input v-model="localName" class="styled-input" maxlength="64" :aria-label="t('skinName')" :placeholder="t('skinName')" :disabled="busy || !selected" /><button type="button" class="btn-subtle" :disabled="busy || !selected || !localName.trim()" @click="run('saveLocal')">{{ t('skinSaveLocal') }}</button></div><button type="button" class="btn-primary" :disabled="!canApply" @click="run('apply')">{{ t('skinApplyAccount') }}</button></footer>
     </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './components/LoadingSkeleton.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useLauncher } from './composables/useLauncher.ts';
 import { presentInstances } from './features/library/model.ts';
@@ -16,7 +17,7 @@ import PackUpdateModal from './components/PackUpdateModal.vue';
 import PackVersionConfirmation from './components/PackVersionConfirmation.vue';
 import { formatPlaytime, formatLastPlayed } from './features/library/playtime.ts';
 
-const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, instanceDetails, instanceCommand, editorRevision, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate, packConfirmation, confirmPackUpdate } = useLauncher();
+const { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, instanceDetails, instanceCommand, editorChange, accountsRequest, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate, packConfirmation, confirmPackUpdate } = useLauncher();
 const query = ref('');
 const group = ref('');
 const pinnedOnly = ref(false);
@@ -237,7 +238,7 @@ onUnmounted(() => {
       <button v-if="filtered" class="clear-filters quiet" @click="clearFilters">{{ t('clearFilters') }}</button>
 
       <div class="instance-list" @keydown="listKeydown">
-        <div v-if="status === 'loading'" class="instance-skeletons" aria-hidden="true">
+        <div v-if="status === 'loading'" class="instance-skeletons" role="status" aria-busy="true"><span class="visually-hidden">{{ t('loading') }}</span>
           <div v-for="n in 5" :key="n" class="skeleton-row">
             <div class="skeleton-icon shimmer"></div>
             <div class="skeleton-copy">
@@ -280,7 +281,7 @@ onUnmounted(() => {
       <div v-if="selected && status === 'ready'" class="selected-instance">
         <Transition name="hero" mode="out-in">
           <div :key="selected.id" class="instance-identity">
-            <p v-if="artworkLoading" class="artwork-caption secondary" role="status">{{ t('artworkLoading') }}</p>
+            <LoadingSkeleton v-if="artworkLoading" class="artwork-caption" :label="t('artworkLoading')" :rows="1" />
             <p v-else-if="!artwork && !artworkFailure" class="artwork-caption secondary">{{ t('noArtwork') }}</p>
             <div v-if="artworkFailure" class="artwork-error" role="alert"><span>{{ t('artworkError') }}</span><details><summary>{{ t('technicalDetails') }}</summary><pre>{{ artworkFailure.detail }}</pre></details><button class="quiet" :disabled="!enabled" @click="artworkFailure.retry">{{ t('artworkRetry') }}</button></div>
             <p v-if="selected.group" class="selected-group">{{ selected.group }}</p>
@@ -296,7 +297,7 @@ onUnmounted(() => {
         </Transition>
 
         <div class="launch-dock glass">
-          <p class="launch-status" role="status">{{ busy ? t('working') : t(selectedStatus) }}</p>
+          <LoadingSkeleton v-if="busy" class="launch-status" :label="t('working')" :rows="1" /><p v-else class="launch-status" role="status">{{ t(selectedStatus) }}</p>
           <button id="play" class="play-button" :disabled="!canPlay" @click="launch()"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="m5 3 11 7-11 7Z" /></svg>{{ t(selected.running ? 'running' : 'play') }}</button>
           <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button></div></details>
         </div>
@@ -394,7 +395,7 @@ onUnmounted(() => {
     </Transition>
 
     <Transition name="modal">
-      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :revision="editorRevision" :busy="busy" :total-memory-mb="state.totalMemoryMb" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" :pack-service="packService" @close="editingInstance = null" />
+      <InstanceEditorModal v-if="editorInstance" :key="editorInstance.id" :instance="editorInstance" :initial-section="editorSection" :change="editorChange" :busy="busy" :total-memory-mb="state.totalMemoryMb" :t="t" :details="instanceDetails" :command="instanceCommand" :java-service="javaService" :mod-service="modService" :pack-service="packService" @close="editingInstance = null" />
     </Transition>
 
     <Transition name="modal" mode="out-in">

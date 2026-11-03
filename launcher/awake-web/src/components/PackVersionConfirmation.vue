@@ -51,7 +51,7 @@ function keydown(event: KeyboardEvent) {
       </div>
       <footer class="modal-footer">
         <button class="btn-secondary" type="button" :disabled="working" @click="choose(false)">{{ t('cancel') }}</button>
-        <button class="btn-primary" type="button" :disabled="working" @click="choose(true)">{{ t(working ? 'working' : 'packChangeVersion') }}</button>
+        <button class="btn-primary" type="button" :disabled="working" @click="choose(true)">{{ t('packChangeVersion') }}</button>
       </footer>
     </section>
   </div>

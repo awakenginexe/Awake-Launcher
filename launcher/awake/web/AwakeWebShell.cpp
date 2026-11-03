@@ -8,6 +8,7 @@
 #include <QEvent>
 #include <QCoreApplication>
 #include <QLabel>
+#include <QPainter>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWebChannel>
@@ -63,7 +64,21 @@ Shell::Shell(QWidget* parent) : QWidget(parent)
     setObjectName("awakeWebShell");
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    m_loading = new QLabel(tr("Loading Awake…"), this);
+    m_loading = new QLabel(this);
+    m_loading->setObjectName("awakeStartupSkeleton");
+    m_loading->setAccessibleName(tr("Loading Awake…"));
+    QPixmap skeleton(360, 160);
+    skeleton.fill(Qt::transparent);
+    {
+        QPainter painter(&skeleton);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(96, 165, 250, 28));
+        painter.drawRoundedRect(QRectF(0, 0, 360, 40), 8, 8);
+        painter.drawRoundedRect(QRectF(0, 56, 280, 40), 8, 8);
+        painter.drawRoundedRect(QRectF(0, 112, 320, 40), 8, 8);
+    }
+    m_loading->setPixmap(skeleton);
     m_loading->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_loading);
     m_profile = new QWebEngineProfile(this);
@@ -100,8 +115,11 @@ Shell::Shell(QWidget* parent) : QWidget(parent)
     // Keep this reference-only slot connection free of typed metatype registration.
     connect(page, SIGNAL(permissionRequested(QWebEnginePermission)), this, SLOT(denyPermission(QWebEnginePermission)));
     connect(page, &QWebEnginePage::fileSystemAccessRequested, this, [](QWebEngineFileSystemAccessRequest request) { request.reject(); });
-    connect(page, &QWebEnginePage::renderProcessTerminated, this, [this] {
-        if (!m_stopped) emit failed(tr("The Awake web renderer stopped. The widget interface is available."));
+    connect(page, &QWebEnginePage::renderProcessTerminated, this, [this](QWebEnginePage::RenderProcessTerminationStatus status, int exitCode) {
+        if (!m_stopped) {
+            qWarning() << "Awake web renderer terminated:" << status << "exit code:" << exitCode;
+            emit failed(tr("The Awake web renderer stopped. The widget interface is available."));
+        }
     });
     connect(m_view, &QWebEngineView::loadFinished, this, [this](bool ok) {
         if (!ok && !m_stopped) emit failed(tr("The bundled Awake interface could not be loaded. The widget interface is available."));

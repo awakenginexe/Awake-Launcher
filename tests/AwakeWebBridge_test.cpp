@@ -67,6 +67,8 @@
 #include "java/RuntimeSelection.h"
 #include "minecraft/launch/AutoInstallJava.h"
 #include "launch/LaunchTask.h"
+#include "launch/LogModel.h"
+#include "awake/web/AwakeInstanceEditor.h"
 #include "java/JavaUtils.h"
 #include "SysInfo.h"
 #include "FileSystem.h"
@@ -87,6 +89,20 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void editorConsoleTailIsBounded()
+    {
+        LogModel log;
+        log.append(MessageLevel::Message, QString(100000, 'a'));
+        log.append(MessageLevel::Message, "last line");
+        QCOMPARE(editorLogTail(&log, 16), log.toPlainText().right(16));
+        QCOMPARE(editorLogTail(&log, 200000), log.toPlainText());
+        log.clear();
+        QCOMPARE(editorLogTail(&log, 16), QString());
+        log.setMaxLines(3);
+        for (const auto* line : {"one", "two", "three", "four"}) log.append(MessageLevel::Message, line);
+        QCOMPARE(editorLogTail(&log, 7), log.toPlainText().right(7));
+        QCOMPARE(editorLogTail(&log, 0), QString());
+    }
     void playtimeDoesNotCountPreparingOrCompletedSessionsTwice()
     {
         class TimedInstance : public MinecraftInstance {

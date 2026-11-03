@@ -4,6 +4,7 @@ import type { Instance } from '../features/library/model.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import { BridgeError } from '../bridge/client.ts';
 import '../styles/instance-editor.css';
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import JavaPicker from './JavaPicker.vue';
 import type { JavaService } from './JavaPicker.vue';
 import JvmPresetPicker from './JvmPresetPicker.vue';
@@ -21,7 +22,7 @@ interface EditorSettings { minMemory: number; maxMemory: number; width: number; 
 interface JvmConfig { jvmArgs: string; jvmPreset: JvmPreset }
 interface Details { ok: boolean; error?: string; field?: string; rows?: Row[]; text?: string; settings?: EditorSettings; running?: boolean; pack?: InstalledPack; jvmConfig?: { local: JvmConfig; global: JvmConfig } }
 const props = defineProps<{
-  instance: Instance; initialSection?: string; revision?: number; busy: boolean; totalMemoryMb: number; t: (key: MessageKey) => string;
+  instance: Instance; initialSection?: string; change?: { id: string; section: string } | null; busy: boolean; totalMemoryMb: number; t: (key: MessageKey) => string;
   details: (id: string, section: string) => Promise<unknown>;
   command: (id: string, command: string, payload?: unknown) => Promise<unknown>;
   javaService: JavaService;
@@ -40,6 +41,7 @@ const section = ref(props.initialSection || 'overview');
 const data = ref<Details | null>(null);
 const loading = ref(false);
 const working = ref(false);
+const javaRevision = ref(0);
 const error = ref('');
 const fieldErrors = ref<Record<string, string>>({});
 const validationAttempted = ref(false);
@@ -113,6 +115,7 @@ async function load(quiet = false) {
   const request = ++revision;
   const activeSection = section.value;
   if (!quiet) { loading.value = true; data.value = null; error.value = ''; fieldErrors.value = {}; validationAttempted.value = false; }
+  else if (!data.value) loading.value = true;
   try {
     const result = await props.details(props.instance.id, settingsSection.value ? 'settings' : activeSection) as Details;
     if (closed || request !== revision) return;
@@ -148,7 +151,7 @@ async function run(name: string, payload?: unknown, refresh = true) {
     }
     pendingRemoval.value = null;
     feedback.value = name === 'saveNotes' || name === 'saveSettings' ? props.t('editorSaved') : name === 'copyLog' ? props.t('editorConsoleCopied') : '';
-    if (refresh && activeSection === section.value) await load();
+    if (refresh && activeSection === section.value) await load(true);
     return !error.value;
   } catch (reason) {
     if (!closed && request === revision) {
@@ -211,9 +214,8 @@ function discardChanges() {
 }
 function activity() {
   stopPoll();
-  if (section.value !== 'log') return;
+  if (section.value !== 'log' || working.value) return;
   ++revision;
-  loading.value = false;
   if (document.visibilityState === 'visible' && document.hasFocus()) void load(true);
 }
 function keyboard(event: KeyboardEvent) {
@@ -227,11 +229,16 @@ function keyboard(event: KeyboardEvent) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
 }
 watch(() => props.instance.id, () => { pendingRemoval.value = null; void load(); });
-watch(() => props.revision, () => { if (!working.value && !dirty.value) void load(); });
+watch(() => props.change, change => {
+  if (!change || change.id !== props.instance.id) return;
+  if (change.section === 'java' || !change.section) javaRevision.value++;
+  const active = settingsSection.value ? 'settings' : section.value;
+  if ((change.section === active || (active === 'overview' && change.section === 'versions') || !change.section) && !working.value && !dirty.value) void load(Boolean(data.value));
+});
 watch(settings, () => { fieldErrors.value = {}; }, { deep: true });
 watch(showModBrowser, async value => {
   if (value) return;
-  await load();
+  await load(true);
   await nextTick();
   if (!closed) dialog.value?.querySelector<HTMLButtonElement>('.editor-download-mods')?.focus();
 });
@@ -268,18 +275,19 @@ onUnmounted(() => {
           <button v-for="item in sections" :key="item.id" :data-section="item.id" class="platform-tab" :class="{ 'is-active': section === item.id }" :aria-current="section === item.id ? 'page' : undefined" :disabled="working" @click="changeSection(item.id)">{{ t(item.label) }}</button>
         </nav>
         <div class="editor-content" :aria-busy="loading || working">
-          <div class="editor-section-header"><h3>{{ title }}</h3><button class="btn-subtle" :disabled="disabled || dirty" @click="fileSection ? run('refreshFiles', { section }) : load()">{{ t('refresh') }}</button></div>
+          <div class="editor-section-header"><h3>{{ title }}</h3><button class="btn-subtle" :disabled="disabled || dirty" @click="fileSection ? run('refreshFiles', { section }) : load(true)">{{ t('refresh') }}</button></div>
           <div v-if="error" class="editor-message editor-error" role="alert" tabindex="-1"><p>{{ error }}</p><button v-if="!dirty" class="btn-subtle" :disabled="disabled" @click="load()">{{ t('retry') }}</button></div>
           <p v-if="feedback" class="editor-feedback" role="status">{{ feedback }}</p>
-          <p v-if="loading" class="editor-message" role="status">{{ t('working') }}</p>
+          <LoadingSkeleton v-if="loading && !data" :label="t('working')" />
           <template v-else-if="data">
             <template v-if="section === 'log'">
               <div class="editor-toolbar"><button class="btn-subtle" :disabled="disabled || !data.text" @click="run('copyLog', undefined, false)">{{ t('editorCopy') }}</button><button class="btn-subtle" :disabled="disabled || !data.text || !data.running" :title="!data.running ? t('editorClearLogHint') : undefined" @click="run('clearLog')">{{ t('editorClear') }}</button><label class="check"><input v-model="wrap" type="checkbox" />{{ t('editorWrapLines') }}</label><span class="editor-live-status">{{ data.running ? t('running') : t('editorStopped') }}</span></div>
+              <p v-if="data.text" class="editor-hint">{{ t('editorConsoleRecent') }}</p>
               <pre v-if="data.text" class="editor-console" :class="{ 'wrap-lines': wrap }" tabindex="0" :aria-label="t('editorMinecraftConsole')">{{ data.text }}</pre><p v-else class="editor-message">{{ t('editorNoConsoleOutput') }}</p>
             </template>
             <template v-else-if="section === 'notes'"><label class="visually-hidden" for="editor-notes">{{ t('editorNotes') }}</label><textarea id="editor-notes" v-model="notes" class="glass-input editor-notes" :disabled="working" :placeholder="t('editorNotesPlaceholder')"></textarea></template>
             <template v-else-if="settingsSection">
-              <JavaPicker v-if="section === 'java'" :instance-id="instance.id" :revision="revision" :service="javaService" :t="t" @loaded="Object.keys(visibleErrors).length && focusError(Object.keys(visibleErrors)[0])" />
+              <JavaPicker v-if="section === 'java'" :instance-id="instance.id" :revision="javaRevision" :service="javaService" :t="t" @loaded="Object.keys(visibleErrors).length && focusError(Object.keys(visibleErrors)[0])" />
               <div v-if="settings" class="editor-settings">
                 <p v-if="instance.running" class="editor-hint" role="status">{{ t('editorStopGameSettings') }}</p>
                 <fieldset v-if="section === 'memory'"><legend>{{ t('editorMemory') }}</legend>

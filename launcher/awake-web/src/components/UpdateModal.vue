@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { UpdateState } from '../features/library/model.ts';
 import type { MessageKey } from '../i18n/catalogs.ts';
@@ -59,7 +60,7 @@ function trapFocus(event: KeyboardEvent) {
             <template v-else><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 6a8 8 0 0 1 13 2M18 18A8 8 0 0 1 5 16" /></template>
           </svg>
           <h2>{{ title }}</h2>
-          <p v-if="state.status === 'checking'">{{ t('updateCheckingHint') }}</p>
+          <LoadingSkeleton v-if="state.status === 'checking'" :label="t('updateCheckingHint')" :rows="2" />
           <p v-else-if="state.status === 'available'">{{ t('updateAvailableHint') }}</p>
           <p v-else-if="state.status === 'upToDate'">{{ t('updateCurrentHint') }}</p>
           <p v-else-if="state.status === 'error'">{{ t('updateFailedHint') }}</p>

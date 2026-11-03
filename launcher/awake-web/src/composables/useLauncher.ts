@@ -16,7 +16,7 @@ interface Failure { code: ErrorCode | 'artworkError'; detail: string; retry: () 
 interface ArtworkEvent { id: string; url: string; error: string }
 
 export function useLauncher() {
-  const editorRevision = ref(0);
+  const editorChange = shallowRef<{ id: string; section: string } | null>(null);
   const accountsRequest = ref(0);
   const gpuChoice = shallowRef<{ id: string; settings: GpuSettings } | null>(null);
   const packChoice = shallowRef<{ id: string; pack: InstalledPack; version: PackVersion } | null>(null);
@@ -125,8 +125,10 @@ export function useLauncher() {
       disposeSignals.push(subscribe(connection, 'accountsRequested', () => {
         if (revision === connectionRevision) accountsRequest.value++;
       }));
-      disposeSignals.push(subscribe(connection, 'editorChanged', () => {
-        if (revision === connectionRevision) editorRevision.value++;
+      disposeSignals.push(subscribe(connection, 'editorChanged', (id, section) => {
+        if (revision === connectionRevision && typeof id === 'string' && typeof section === 'string') {
+          editorChange.value = { id, section };
+        }
       }));
       disposeSignals.push(subscribe(connection, 'stateChanged', (raw) => {
         if (revision !== connectionRevision) return;
@@ -278,5 +280,5 @@ export function useLauncher() {
     disposeSignals.forEach(dispose => dispose());
     motionQuery.removeEventListener('change', motionChanged);
   });
-  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, editorRevision, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate, packConfirmation, confirmPackUpdate };
+  return { state, status, selected, totalPlaytime, busy, failure, artwork, artworkLoading, artworkFailure, reducedMotion, systemMotion, t, connect, select, launch, action, preference, searchPacks, packVersions, minecraftVersions, browseArchive, localInstances, editorChange, accountsRequest, instanceDetails, instanceCommand, javaService, modService, skinService, gpuService, gpuChoice, continueGpuLaunch, updateService, packService, packChoice, decidePackUpdate, packConfirmation, confirmPackUpdate };
 }

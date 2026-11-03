@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { onMounted, onUnmounted, ref } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import type { InstalledPack } from '../features/library/packUpdates.ts';
@@ -53,7 +54,8 @@ onMounted(check);
 
 <template>
   <section class="pack-version-section" :aria-busy="loading">
-    <div class="editor-toolbar"><div class="editor-file-copy"><strong>{{ pack.name }}</strong><p>{{ t('packInstalled') }}: {{ pack.versionName || pack.versionId }}</p></div><button class="btn-subtle" :disabled="loading" @click="check">{{ t(loading ? 'working' : 'packCheckUpdates') }}</button></div>
+    <LoadingSkeleton v-if="loading && !versions.length" :label="t('working')" :rows="1" />
+    <div class="editor-toolbar"><div class="editor-file-copy"><strong>{{ pack.name }}</strong><p>{{ t('packInstalled') }}: {{ pack.versionName || pack.versionId }}</p></div><button class="btn-subtle" :disabled="loading" @click="check">{{ t('packCheckUpdates') }}</button></div>
     <label :for="`pack-version-${id}`">{{ t('packVersion') }}</label>
     <div class="editor-toolbar">
       <select :id="`pack-version-${id}`" v-model="selected" class="glass-input" :disabled="loading || !versions.length">

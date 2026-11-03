@@ -875,6 +875,7 @@ body:has(.launcher .modal-overlay) > .themed-select-menu {
   background: rgba(3, 8, 16, 0.44);
   pointer-events: all;
 }
+.loading-skeleton:is(.launch-status, .artwork-caption) .loading-skeleton-row { height: 1em; }
 .backdrop-enter-active, .backdrop-leave-active {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }

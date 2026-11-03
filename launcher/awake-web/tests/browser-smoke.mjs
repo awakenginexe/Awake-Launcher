@@ -46,7 +46,9 @@ const fixture = `(() => {
       window.__nativeTest.calls.push(['instanceDetails', id, section]);
       const editor = window.__nativeTest.editor;
       if (editor.failSection === section) { cb({ok:false,error:'Fixture editor read failed'}); return; }
-      cb({ok:true, name:'Test fixture', section, pack:section === 'versions' ? editor.pack : undefined, running:Boolean(editor.running) || section === 'log', rows:section === 'mods' ? editor.mods : section === 'versions' ? [{id:'minecraft',name:'Minecraft',detail:'1.21.1'}] : [], text:section === 'notes' ? editor.notes : section === 'log' ? editor.log : '', settings:section === 'settings' ? editor.settings : undefined,jvmConfig:{local:editor.localJvm || {jvmPreset:'custom',jvmArgs:''},global:{jvmPreset:state.launcherSettings.jvmPreset,jvmArgs:state.launcherSettings.jvmArgs}}});
+      const deliver = () => cb({ok:true, name:'Test fixture', section, pack:section === 'versions' ? editor.pack : undefined, running:Boolean(editor.running) || section === 'log', rows:section === 'mods' ? editor.mods : section === 'versions' ? [{id:'minecraft',name:'Minecraft',detail:'1.21.1'}] : [], text:section === 'notes' ? editor.notes : section === 'log' ? editor.log : '', settings:section === 'settings' ? editor.settings : undefined,jvmConfig:{local:editor.localJvm || {jvmPreset:'custom',jvmArgs:''},global:{jvmPreset:state.launcherSettings.jvmPreset,jvmArgs:state.launcherSettings.jvmArgs}}});
+      if (editor.holdSection === section) (editor.pending ??= []).push(deliver);
+      else deliver();
     },
     instanceCommand(id, command, payload, cb) {
       window.__nativeTest.calls.push(['instanceCommand', id, command, payload]);
@@ -181,6 +183,51 @@ async function assertStableModalFrost(page) {
     elements.filter(el => getComputedStyle(el).backdropFilter !== 'none').map(el => el.className)), []);
 }
 try {
+  {
+    const page = await browser.newPage({viewport:{width:1320,height:780}});
+    await page.goto(`${origin}/?count=2`);
+    await page.locator('.instance-row').first().click({button:'right'});
+    await page.locator('.instance-context-menu button').nth(1).click();
+    await page.locator('.editor-sidebar').waitFor();
+    await page.evaluate(() => { window.__nativeTest.editor.holdSection = 'log'; });
+    await page.locator('[data-section=log]').click();
+    await page.locator('.editor-content > .loading-skeleton').waitFor();
+    await page.screenshot({path:resolve(output, 'editor-loading-skeleton.png')});
+    assert.equal(await page.locator('.editor-content .editor-message').count(), 0);
+    await page.evaluate(() => {
+      document.hasFocus = () => false; window.dispatchEvent(new Event('blur'));
+      document.hasFocus = () => true; window.dispatchEvent(new Event('focus'));
+    });
+    assert.equal(await page.locator('.instance-editor-window').isVisible(), true);
+    await page.evaluate(() => {
+      const editor = window.__nativeTest.editor; editor.holdSection = '';
+      editor.pending.splice(0).forEach(deliver => deliver());
+    });
+    await page.locator('.editor-console').waitFor();
+    const reads = await page.evaluate(() => {
+      window.__consoleElement = document.querySelector('.editor-console');
+      return window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length;
+    });
+    await page.evaluate(() => window.__nativeTest.host.editorChanged.emit('other-instance', 'log'));
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length), reads);
+    await page.evaluate(() => {
+      window.__nativeTest.editor.holdSection = 'log';
+      window.__nativeTest.host.editorChanged.emit('fixture-0', 'log');
+    });
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    assert.equal(await page.evaluate(() => document.querySelector('.editor-console') === window.__consoleElement), true);
+    assert.equal(await page.locator('.editor-content > .loading-skeleton').count(), 0);
+    await page.locator('[data-section=notes]').click();
+    await page.locator('#editor-notes').waitFor();
+    await page.evaluate(() => {
+      const editor = window.__nativeTest.editor; editor.holdSection = ''; editor.log = 'Late console refresh';
+      editor.pending.splice(0).forEach(deliver => deliver());
+    });
+    assert.equal(await page.locator('#editor-notes').inputValue(), 'Existing notes');
+    assert.equal(await page.locator('.instance-editor-window').isVisible(), true);
+    await page.close();
+  }
   for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
     const page = await browser.newPage({viewport:{width:1100,height:750}});
     await page.goto(`${origin}/?locale=${locale}`);
@@ -1093,6 +1140,20 @@ try {
   await page.getByRole('button',{name:'Save locally',exact:true}).click();
   await page.getByText('Saved to your local library.',{exact:true}).waitFor();
   assert.equal(await page.locator('.skin-library-grid .skin-thumbnail-canvas').count(), 1);
+  assert.equal(await page.locator('canvas.skin-thumbnail-canvas').count(), 0);
+  await page.waitForFunction(() => [...document.querySelectorAll('img.skin-thumbnail-canvas')].every(image => image.complete && image.naturalWidth > 0));
+  const thumbnails = await page.locator('img.skin-thumbnail-canvas').evaluateAll(images => images.map(image => image.src));
+  await page.evaluate(async () => {
+    const scroller = document.querySelector('.skin-tools');
+    for (let step = 0; step < 30; step++) {
+      scroller.scrollTop = step % 2 ? 0 : scroller.scrollHeight;
+      await new Promise(requestAnimationFrame);
+    }
+  });
+  await page.mouse.wheel(0, 1800);
+  await page.mouse.wheel(0, -1800);
+  assert.equal(await page.locator('.skins-dialog').isVisible(), true);
+  assert.deepEqual(await page.locator('img.skin-thumbnail-canvas').evaluateAll(images => images.map(image => image.src)), thumbnails);
   assert.equal(await page.locator('.skin-selected-name').textContent(), 'Saved skin');
   assert.equal(await page.locator('.skin-canvas').getAttribute('data-variant'), 'CLASSIC');
   assert.equal(await page.locator('.skins-dialog .btn-primary').isEnabled(), true);

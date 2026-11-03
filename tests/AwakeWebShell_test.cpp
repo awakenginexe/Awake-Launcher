@@ -74,6 +74,8 @@ class AwakeWebShellTest : public QObject {
     {
         QTRY_COMPARE_WITH_TIMEOUT(APPLICATION->status(), Application::Initialized, 15000);
         window = APPLICATION->showMainWindow(false);
+        auto* startup = window->findChild<QLabel*>("awakeStartupSkeleton");
+        QVERIFY(startup && startup->text().isEmpty() && !startup->pixmap().isNull());
         view = window->findChild<QWebEngineView*>("awakeWebView");
         bridge = window->findChild<Awake::Web::Bridge*>();
         QVERIFY(view && bridge);

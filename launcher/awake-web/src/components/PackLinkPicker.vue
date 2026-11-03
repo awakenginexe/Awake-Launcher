@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { onUnmounted, ref } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import type { PackEntry, PackVersion } from '../bridge/catalog.ts';
@@ -67,7 +68,7 @@ async function link() {
       <input id="pack-link-query" v-model="query" type="search" class="glass-input" :disabled="loading || busy || running" @input="reset" @keydown.enter.prevent="search()" />
       <button class="btn-subtle pack-link-search" :disabled="loading || busy || running" @click="search()">{{ t('packLinkSearch') }}</button>
     </div>
-    <p v-if="loading" class="editor-hint" role="status">{{ t('working') }}</p>
+    <LoadingSkeleton v-if="loading && !packs.length" :label="t('working')" :rows="3" />
     <p v-if="error" role="alert">{{ error }}</p>
     <ul v-if="packs.length" class="editor-file-list pack-link-results">
       <li v-for="pack in packs" :key="pack.id" class="editor-file-row"><div class="editor-file-copy"><strong>{{ pack.name }}</strong><p>{{ pack.author }}</p></div><button class="btn-subtle" :aria-pressed="selected?.id === pack.id" :disabled="loading || busy || running" @click="select(pack)">{{ selected?.id === pack.id ? t('packSelected') : t('selectPack') }}</button></li>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { computed, onMounted, ref } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import type { GpuSettings } from '../features/library/hardware.ts';
@@ -44,9 +45,9 @@ async function openWindows() {
 onMounted(() => { if (!data.value) void run(); });
 </script>
 <template>
-  <div class="setting-block gpu-picker">
+  <div class="setting-block gpu-picker" :aria-busy="working">
     <div class="hardware-label"><label for="gpu-preference">{{ t('gpuSelection') }}</label><HardwareVisibility :visible="gpuVisible" :label="t(gpuVisible ? 'hideGpu' : 'showGpu')" @toggle="gpuVisible = !gpuVisible" /></div>
-    <p v-if="working" class="setting-hint" role="status">{{ t('working') }}</p>
+    <LoadingSkeleton v-if="working && !data" :label="t('working')" :rows="2" />
     <template v-if="data?.supported">
       <ul class="gpu-devices"><li v-for="(device, index) in data.devices" :key="index">{{ privateGpuName(device.name, gpuVisible) }}</li></ul>
       <ThemedSelect id="gpu-preference" :label="t('gpuSelection')" :model-value="data.mode" :options="options" :disabled="working" @update:model-value="run($event)" />

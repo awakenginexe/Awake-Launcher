@@ -145,11 +145,12 @@ jobs:
         run: |
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @'
-          ## What's fixed in 2.0.1
+          ## What's new in 2.0.2
 
-          - **Smoother immediately after updating:** the installer now clears old software-rendering settings before reopening the launcher. You no longer need an extra restart to get normal performance.
-          - **More stable Settings and Create Instance dialogs:** replaced live backdrop blur with a stable frosted background to address flashing during hover, selection, and typing on affected graphics drivers, including hybrid AMD/NVIDIA laptops.
-          - **Keeps the glass look and GPU acceleration:** dialogs stay translucent, and the library's normal glass effects return when dialogs close.
+          - **Lighter Skin scrolling:** thumbnails now use cached images instead of separate live canvases, and high-resolution previews have a bounded rendering size to reduce memory and rendering pressure.
+          - **More responsive Console:** loading and refreshing now reads only recent log output instead of rebuilding the entire log. Saved log files are unchanged.
+          - **A steadier instance editor:** background refreshes keep the current page visible, ignore updates for other instances, and discard late replies after you switch pages.
+          - **Skeleton loading throughout the launcher:** replaced generic Working messages with placeholders in startup, catalogs, skins, hardware pickers, and editor pages. Existing content stays visible during refreshes where possible; real progress and errors remain visible.
 
           ## Which download should I choose?
 

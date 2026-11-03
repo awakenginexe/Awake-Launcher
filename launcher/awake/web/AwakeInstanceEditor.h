@@ -8,8 +8,10 @@
 class QAbstractItemModel;
 class MinecraftInstance;
 class ResourceFolderModel;
+class LogModel;
 namespace Awake::Web {
 class Assets;
+QString editorLogTail(LogModel* model, int limit);
 class InstanceEditor final : public QObject {
     Q_OBJECT
 public:

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingSkeleton from './LoadingSkeleton.vue';
 import { computed, onScopeDispose, ref, watch } from 'vue';
 import type { MessageKey } from '../i18n/catalogs.ts';
 import type { CatalogResult, LocalInstance, MinecraftVersion, PackEntry, PackVersion } from '../bridge/catalog.ts';
@@ -206,7 +207,7 @@ onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision;
             <div class="custom-tab-header"><h3>{{ t('custom') }}</h3><p class="custom-subtitle-text">{{ t('customSubtitle') }}</p></div>
             <div class="version-search-box"><input v-model="versionSearchQuery" type="search" class="version-search-input" :placeholder="t('searchVersions')" :aria-label="t('searchVersions')" /></div>
             <div class="catalog-filter-row"><label class="filter-check"><input v-model="filterReleases" type="checkbox" />{{ t('releases') }}</label><label class="filter-check"><input v-model="filterSnapshots" type="checkbox" />{{ t('snapshots') }} / Beta / Alpha</label><button class="btn-subtle" type="button" :disabled="loading" @click="loadCatalog()">{{ t('refresh') }}</button></div>
-            <p v-if="loading" class="catalog-status" role="status">{{ t('working') }}</p>
+            <LoadingSkeleton v-if="loading" :label="t('working')" :rows="3" />
             <div class="version-table-container"><table class="version-table"><thead><tr><th>{{ t('versionLabel') }}</th><th>{{ t('released') }}</th><th>{{ t('type') }}</th></tr></thead><tbody><tr v-for="v in filteredVersions" :key="v.version" class="version-row" :class="{ 'is-selected': selectedVersion === v.version }"><td><button class="version-choice" type="button" :aria-pressed="selectedVersion === v.version" @click="selectedVersion = v.version">{{ v.version }}</button></td><td>{{ v.released }}</td><td>{{ v.type }}</td></tr></tbody></table></div>
             <div class="mod-loader-card"><label for="new-inst-loader">{{ t('loaderLabel') }}</label><select id="new-inst-loader" v-model="selectedLoader" class="glass-select"><option v-for="loader in loaders" :key="loader" :value="loader">{{ loader }}</option></select></div>
           </div>
@@ -226,7 +227,7 @@ onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision;
             </div>
             <p id="local-folder-help" class="local-folder-help">{{ t(localHelp) }}</p>
             <div class="local-instance-list" :aria-busy="localLoading">
-              <p v-if="localLoading" class="catalog-status" role="status">{{ t('working') }}</p>
+              <LoadingSkeleton v-if="localLoading" :label="t('working')" :rows="3" />
               <p v-else-if="!localEntries.length" class="catalog-status">{{ t('localNoInstances') }}</p>
               <div v-for="entry in localEntries" :key="entry.id" class="local-instance-row" :class="{ 'is-selected': selectedLocal?.id === entry.id }">
                 <div class="modpack-info"><h4>{{ entry.name }}</h4><p class="modpack-meta">{{ [entry.source, entry.minecraft, entry.loader.replace('net.fabricmc.fabric-loader', 'Fabric').replace('org.quiltmc.quilt-loader', 'Quilt').replace('net.neoforged', 'NeoForge').replace('net.minecraftforge', 'Forge'), entry.loaderVersion].filter(Boolean).join(' · ') }}</p><p class="local-instance-path">{{ entry.path }}</p><p v-if="entry.error" class="local-instance-error">{{ entry.error }}</p></div>
@@ -244,12 +245,12 @@ onScopeDispose(() => { clearTimeout(timer); ++searchRevision; ++versionRevision;
                   <div class="modpack-info"><h4>{{ pack.name }}</h4><p class="modpack-description">{{ pack.description }}</p><p class="modpack-meta">{{ [pack.author, pack.minecraft, pack.loader, pack.downloads ? t('downloadsCount').replace('{count}', String(pack.downloads)) : ''].filter(Boolean).join(' · ') }}</p></div>
                   <button class="btn-subtle" type="button" :aria-pressed="selectedPack?.id === pack.id" @click="selectModpack(pack)">{{ selectedPack?.id === pack.id ? t('packSelected') : t('selectPack') }}</button>
                 </div>
-                <p v-if="loading" class="catalog-status" role="status">{{ t('working') }}</p>
+                <LoadingSkeleton v-if="loading" :label="t('working')" :rows="3" />
                 <p v-else-if="!error && !packs.length" class="catalog-status">{{ t('noPacks') }}</p>
                 <button v-if="hasMore" class="btn-subtle catalog-more" type="button" :disabled="loading" @click="loadCatalog(true)">{{ t('loadMore') }}</button>
               </div>
               <div v-if="selectedPack" class="pack-version-selection">
-                <p v-if="versionsLoading" role="status">{{ t('working') }}</p>
+                <LoadingSkeleton v-if="versionsLoading" :label="t('working')" :rows="2" />
                 <div v-else-if="versionError" role="alert"><p>{{ versionError }}</p><button class="btn-subtle" type="button" @click="selectModpack(selectedPack)">{{ t('retry') }}</button></div>
                 <template v-else><label for="pack-version">{{ t('packVersion') }}</label><select id="pack-version" v-model="packVersionId" class="glass-select"><option v-for="v in versions" :key="v.id" :value="v.id">{{ [v.name, v.minecraft, v.loader].filter(Boolean).join(' · ') }}</option></select><p v-if="!versions.length">{{ t('noPackVersions') }}</p></template>
               </div>

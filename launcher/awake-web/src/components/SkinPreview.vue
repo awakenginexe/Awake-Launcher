@@ -7,6 +7,8 @@ const props = defineProps<{ textureUrl: string; variant: SkinVariant; name: stri
 const yaw = ref(-25), pitch = ref(-10), zoom = ref(props.thumbnail ? 3 : 9);
 const stage = ref<HTMLElement>(), canvas = ref<HTMLCanvasElement>();
 const texture = shallowRef<ImageData>(), cape = shallowRef<ImageData>();
+const thumbnailUrl = ref(''), imageLoading = ref(false);
+let thumbnailCanvas: HTMLCanvasElement | undefined;
 const layers: { id: string; label: MessageKey }[] = [
   { id: 'cape', label: 'skinCape' }, { id: 'body-overlay', label: 'skinJacket' },
   { id: 'left-arm-overlay', label: 'skinLeftSleeve' }, { id: 'right-arm-overlay', label: 'skinRightSleeve' },
@@ -30,8 +32,10 @@ function loadImage(url: string): Promise<ImageData | undefined> {
 }
 watch(() => [props.textureUrl, props.capeUrl], async () => {
   const revision = ++generation;
+  imageLoading.value = Boolean(props.textureUrl);
   const images = await Promise.all([loadImage(props.textureUrl), loadImage(props.capeUrl ?? '')]);
   if (revision !== generation) return;
+  imageLoading.value = false;
   texture.value = images[0]; cape.value = images[1]; scheduleDraw();
 }, { immediate: true });
 watch([yaw, pitch, zoom, () => props.variant], scheduleDraw);
@@ -39,15 +43,18 @@ watch(visible, scheduleDraw);
 function scheduleDraw() { if (!frame) frame = requestAnimationFrame(draw); }
 function draw() {
   frame = 0;
-  const target = canvas.value, host = stage.value, context = target?.getContext('2d');
+  const target = props.thumbnail ? (thumbnailCanvas ??= document.createElement('canvas')) : canvas.value;
+  const host = stage.value, context = target?.getContext('2d', { willReadFrequently: true });
   if (!target || !host || !context) return;
-  const ratio = window.devicePixelRatio || 1, width = host.clientWidth, height = host.clientHeight;
+  // Skin textures are pixel art; higher scales only inflate the raster buffers on high-DPI screens.
+  const ratio = Math.min(window.devicePixelRatio || 1, 2), width = host.clientWidth, height = host.clientHeight;
   if (width < 1 || height < 1) return;
   if (target.width !== Math.round(width * ratio)) target.width = Math.round(width * ratio);
   if (target.height !== Math.round(height * ratio)) target.height = Math.round(height * ratio);
   const faces = projectSkin(props.variant, Boolean(cape.value), yaw.value, pitch.value, visible);
   const pixels = rasterSkin(faces, texture.value, cape.value, target.width, target.height, zoom.value * ratio);
   context.putImageData(new ImageData(pixels, target.width, target.height), 0, 0);
+  if (props.thumbnail) thumbnailUrl.value = target.toDataURL('image/png');
   target.dataset.yaw = String(yaw.value); target.dataset.variant = props.variant;
   target.dataset.layers = JSON.stringify(visible);
 }
@@ -78,8 +85,10 @@ function rotate(event: KeyboardEvent) {
     <div class="skin-preview-layout">
     <div ref="stage" :class="thumbnail ? 'skin-thumbnail-stage' : 'skin-stage'" :tabindex="thumbnail ? undefined : 0" :role="thumbnail ? 'img' : 'group'" :aria-label="thumbnail ? name : `${t('skinPreview')}: ${name}. ${t('skinRotateHint')}`"
       @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="drag = null" @pointercancel="drag = null" @lostpointercapture="drag = null" @keydown="rotate">
-      <canvas ref="canvas" :class="thumbnail ? 'skin-thumbnail-canvas' : 'skin-canvas'" aria-hidden="true" />
-      <span v-if="!textureUrl" class="skin-placeholder">{{ t('skinNoPreview') }}</span>
+      <img v-if="thumbnail" class="skin-thumbnail-canvas" :src="thumbnailUrl || undefined" alt="" aria-hidden="true" />
+      <canvas v-else ref="canvas" class="skin-canvas" aria-hidden="true" />
+      <div v-if="imageLoading" class="skin-image-skeleton shimmer" aria-hidden="true"></div>
+      <span v-else-if="!texture" class="skin-placeholder">{{ t('skinNoPreview') }}</span>
     </div>
     <fieldset v-if="!thumbnail" class="skin-layer-options">
       <legend>{{ t('skinParts') }}</legend>
@@ -112,6 +121,7 @@ function rotate(event: KeyboardEvent) {
 .skin-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .skin-canvas { width: 100%; height: 100%; display: block; }
 .skin-placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-secondary); }
+.skin-image-skeleton { position: absolute; inset: 16%; border-radius: 12px; }
 .skin-view-controls { display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 14px; }
 .skin-view-controls label { display: flex; gap: 8px; align-items: center; font-size: 12px; }
 .skin-view-controls input { width: 110px; accent-color: var(--accent); }

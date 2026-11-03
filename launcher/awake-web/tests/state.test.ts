@@ -52,6 +52,18 @@ test('new state signal wins over initial snapshot and preference callback never 
   assert.equal(fixture.launcher.state.value.compact, true);
   fixture.scope.stop();
 });
+
+test('editor changes retain instance and section and disconnect on disposal', async () => {
+  const fixture = environment();
+  await fixture.launcher.connect();
+  fixture.native.editorChanged.emit('one', 'log');
+  assert.deepEqual(fixture.launcher.editorChange.value, { id: 'one', section: 'log' });
+  fixture.native.editorChanged.emit('one', undefined);
+  assert.deepEqual(fixture.launcher.editorChange.value, { id: 'one', section: 'log' });
+  fixture.scope.stop();
+  fixture.native.editorChanged.emit('two', 'mods');
+  assert.deepEqual(fixture.launcher.editorChange.value, { id: 'one', section: 'log' });
+});
 test('combined playtime includes every instance, regardless of selection, pins or group', async () => {
   const fixture = environment();
   await fixture.launcher.connect();

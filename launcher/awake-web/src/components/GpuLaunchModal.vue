@@ -58,7 +58,7 @@ async function save() {
       </div>
       <footer class="modal-footer">
         <button class="btn-secondary" type="button" :disabled="saving" @click="close">{{ t('cancel') }}</button>
-        <button class="btn-primary" type="button" :disabled="saving" @click="save">{{ t(saving ? 'working' : 'gpuSaveContinue') }}</button>
+        <button class="btn-primary" type="button" :disabled="saving" @click="save">{{ t('gpuSaveContinue') }}</button>
       </footer>
     </section>
   </div>
