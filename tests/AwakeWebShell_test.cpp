@@ -68,6 +68,20 @@ class AwakeWebShellTest : public QObject {
         loop.exec();
         return *result;
     }
+    bool thumbnailsHavePixels(const QString& selector, int count)
+    {
+        return evaluate(QString(R"JS((() => {
+            const images = [...document.querySelectorAll('%1')];
+            return images.length === %2 && images.every(image => {
+                if (!(image instanceof HTMLImageElement) || !image.complete || !image.naturalWidth) return false;
+                const canvas = document.createElement('canvas');
+                canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+                const context = canvas.getContext('2d');
+                context.drawImage(image, 0, 0);
+                return context.getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0);
+            });
+        })())JS").arg(selector).arg(count)).toBool();
+    }
    private slots:
     void recordFolder(const QUrl& url) { folderUrl = url; }
     void initTestCase()
@@ -119,6 +133,24 @@ class AwakeWebShellTest : public QObject {
         QCOMPARE(compositor->quickWindow()->rendererInterface()->graphicsApi(), QSGRendererInterface::Software);
 #endif
         QVERIFY(!view->grab().isNull());
+    }
+    void thumbnailReadbackChecksImagePixelsWithoutDisplay()
+    {
+        auto cleanup = qScopeGuard([&] { evaluate("document.querySelectorAll('.thumbnail-readback-fixture').forEach(image => image.remove())"); });
+        evaluate(R"JS((() => {
+            const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 4;
+            const context = canvas.getContext('2d'); context.fillStyle = 'red'; context.fillRect(0, 0, 4, 4);
+            for (const id of ['filled', 'empty']) {
+                if (id === 'empty') context.clearRect(0, 0, 4, 4);
+                const image = document.createElement('img'); image.id = 'thumbnail-' + id;
+                image.className = 'thumbnail-readback-fixture'; image.hidden = true;
+                image.src = canvas.toDataURL(); document.body.append(image);
+            }
+        })())JS");
+        QTRY_VERIFY(thumbnailsHavePixels("#thumbnail-filled", 1));
+        QTRY_VERIFY(evaluate("document.querySelector('#thumbnail-empty').complete && document.querySelector('#thumbnail-empty').naturalWidth > 0").toBool());
+        QVERIFY(!thumbnailsHavePixels("#thumbnail-empty", 1));
+        QVERIFY(!thumbnailsHavePixels("#thumbnail-filled", 9));
     }
     void welcomeHeadOpensTheSkinsPanelWithSoftwarePreview()
     {
@@ -247,10 +279,10 @@ class AwakeWebShellTest : public QObject {
         evaluate("document.querySelector('.skin-default').click()");
         QTRY_COMPARE(evaluate("document.querySelector('.skin-canvas').dataset.variant").toString(), QString("SLIM"));
         QTRY_VERIFY(!evaluate("document.querySelector('.skins-dialog .btn-primary').disabled").toBool());
-        QTRY_VERIFY(evaluate("document.querySelectorAll('.skin-default .skin-thumbnail-canvas').length === 9 && [...document.querySelectorAll('.skin-default .skin-thumbnail-canvas')].every(canvas => canvas.width > 0 && canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((value,index) => index % 4 === 3 && value > 0))").toBool());
+        QTRY_VERIFY(thumbnailsHavePixels(".skin-default .skin-thumbnail-canvas", 9));
         evaluate("document.querySelector('.skin-local-save button').click()");
         QTRY_VERIFY(evaluate("Boolean(document.querySelector('.skin-library-grid .skin-thumbnail-canvas'))").toBool());
-        QTRY_VERIFY(evaluate("(() => { const canvas = document.querySelector('.skin-library-grid .skin-thumbnail-canvas'); return canvas.width > 0 && canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((value,index) => index % 4 === 3 && value > 0); })()").toBool());
+        QTRY_VERIFY(thumbnailsHavePixels(".skin-library-grid .skin-thumbnail-canvas", 1));
         evaluate("document.querySelector('.skin-stage').dispatchEvent(new KeyboardEvent('keydown', {key:'Home', bubbles:true})); document.querySelector('[data-skin-part=body-overlay]').click()");
         QTRY_COMPARE(evaluate("getComputedStyle(document.querySelector('.skins-overlay')).opacity").toString(), QString("1"));
         QTest::qWait(300);
