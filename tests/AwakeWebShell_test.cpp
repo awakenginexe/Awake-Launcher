@@ -87,6 +87,7 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(compositor);
 #ifdef Q_OS_WIN
         QVERIFY(!qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-gpu"));
+        QVERIFY(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").split(' ').contains("--disable-partial-raster"));
         QVERIFY(qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER") != 1);
         QCOMPARE(window->windowOpacity(), 254.0 / 255.0);
         if (QGuiApplication::platformName() == "offscreen")

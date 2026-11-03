@@ -17,6 +17,11 @@ void initialize()
 #ifdef Q_OS_WIN
     // Keep GPU compositing available for the glass UI; WARP makes scrolling and blur CPU-bound.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
+    auto flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+    // Reusing partially rasterized tiles can corrupt textbox repaints on WARP.
+    if (!flags.split(' ').contains("--disable-partial-raster"))
+        flags += " --disable-partial-raster";
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
 #endif
     QWebEngineUrlScheme scheme("awake");
     scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);
