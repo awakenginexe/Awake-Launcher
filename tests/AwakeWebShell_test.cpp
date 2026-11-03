@@ -496,6 +496,8 @@ class AwakeWebShellTest : public QObject {
         QTRY_VERIFY(evaluate("document.querySelector('.modal-footer .btn-subtle') !== null").toBool());
         evaluate("document.querySelector('.modal-footer .btn-subtle').click()");
         QTRY_VERIFY(evaluate("document.querySelector('.inline-offline-box input') !== null").toBool());
+        QCOMPARE(evaluate("getComputedStyle(document.querySelector('.modal-dialog')).backdropFilter").toString(), QString("none"));
+        QVERIFY(evaluate("getComputedStyle(document.querySelector('.stage')).filter.includes('blur(')").toBool());
         view->setFocus();
         evaluate("document.querySelector('.inline-offline-box input').focus()");
         QTRY_VERIFY(evaluate("document.activeElement.matches('.inline-offline-box input')").toBool());

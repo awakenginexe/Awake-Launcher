@@ -211,6 +211,8 @@ FunctionEnd
 
 Function .onInstSuccess
   ${If} $AwakeUpdateParent != ""
+    System::Call 'kernel32::SetEnvironmentVariableW(w "QSG_RHI_PREFER_SOFTWARE_RENDERER", p 0)'
+    System::Call 'kernel32::SetEnvironmentVariableW(w "QTWEBENGINE_CHROMIUM_FLAGS", p 0)'
     ${If} $AwakeUpdateData != ""
       Exec '"$INSTDIR\awakelauncher.exe" --dir "$AwakeUpdateData"'
     ${Else}

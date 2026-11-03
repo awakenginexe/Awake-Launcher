@@ -172,7 +172,13 @@ const errors = [];
 const requests = [];
 async function chooseDropdown(page, id, value) {
   await page.locator(`#${id}`).click();
+  assert.equal(await page.locator(`#${id}-listbox`).evaluate(el => getComputedStyle(el).backdropFilter), 'none');
   await page.locator(`#${id}-listbox [data-value="${value}"]`).click();
+}
+async function assertStableModalFrost(page) {
+  assert.equal(await page.locator('.stage').evaluate(el => getComputedStyle(el).filter.includes('blur(')), true);
+  assert.deepEqual(await page.locator('.modal-overlay, .modal-overlay *').evaluateAll(elements =>
+    elements.filter(el => getComputedStyle(el).backdropFilter !== 'none').map(el => el.className)), []);
 }
 try {
   for (const locale of ['en_US', 'th', 'zh_CN', 'zh_TW']) {
@@ -180,6 +186,9 @@ try {
     await page.goto(`${origin}/?locale=${locale}`);
     await page.locator('.account-actions .settings-button').click();
     assert.equal(await page.locator('.settings-tab-btn').count(), 5);
+    await assertStableModalFrost(page);
+    await page.locator('.settings-tab-btn').first().hover();
+    await assertStableModalFrost(page);
     if (locale !== 'en_US') {
       for (const english of ['App display language', 'Free up system resources when playing', 'Show condensed instance items in library', 'Disable blur animations and transitions']) {
         assert.equal((await page.locator('.settings-dialog').innerText()).includes(english), false);
@@ -334,6 +343,9 @@ try {
     await page.goto(origin);
     await page.locator('.creation-actions button').first().click();
     await page.locator('.platform-tab[data-source="local"]').click({timeout:3000});
+    await assertStableModalFrost(page);
+    await page.locator('.platform-tab[data-source="local"]').hover();
+    await assertStableModalFrost(page);
     await page.locator('.local-source-controls button').nth(1).click();
     assert.deepEqual(await page.evaluate(() => window.__nativeTest.calls.at(-1)), ['localInstances', 'auto', false]);
     await page.locator('#local-source').focus();
@@ -782,12 +794,12 @@ try {
       const pausedReads = await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length);
       assert.equal(await page.locator('.launcher').evaluate(el => el.classList.contains('is-unfocused')), true);
       assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).transitionDuration), '0s');
-      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).backdropFilter.includes('blur')), true);
+      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).backdropFilter), 'none');
       await page.waitForTimeout(2800);
       assert.equal(await page.evaluate(() => window.__nativeTest.calls.filter(call => call[0] === 'instanceDetails').length), pausedReads, 'Unfocused console still refreshed');
       await page.evaluate(() => { document.hasFocus = window.__originalHasFocus; window.dispatchEvent(new Event('focus')); });
       assert.equal(await page.locator('.launcher').evaluate(el => el.classList.contains('is-unfocused')), false);
-      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).backdropFilter.includes('blur')), true);
+      assert.equal(await page.locator('.navigation.glass').evaluate(el => getComputedStyle(el).backdropFilter), 'none');
     }
     await page.locator('.editor-toolbar input[type=checkbox]').uncheck();
     assert.equal(await page.locator('.editor-console').evaluate(el => el.classList.contains('wrap-lines')), false);

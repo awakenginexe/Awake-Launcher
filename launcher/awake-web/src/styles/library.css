@@ -859,6 +859,15 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.84rem; font-f
   .play-button { border: 1px solid ButtonText; }
 }
 
+/* Qt WebEngine can flash live backdrop layers on hybrid GPUs; frost the background once per dialog instead. */
+.launcher:is(.has-modal, :has(.modal-overlay)) > :is(.artwork-canvas, .navigation, .stage) {
+  filter: blur(12px);
+}
+.launcher:is(.has-modal, :has(.modal-overlay)) *,
+body:has(.launcher .modal-overlay) > .themed-select-menu {
+  backdrop-filter: none !important;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
