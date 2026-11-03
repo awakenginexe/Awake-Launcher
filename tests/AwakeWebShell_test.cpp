@@ -76,7 +76,7 @@ class AwakeWebShellTest : public QObject {
                 if (!(image instanceof HTMLImageElement) || !image.complete || !image.naturalWidth) return false;
                 const canvas = document.createElement('canvas');
                 canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
-                const context = canvas.getContext('2d');
+                const context = canvas.getContext('2d', { willReadFrequently: true });
                 context.drawImage(image, 0, 0);
                 return context.getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0);
             });
@@ -139,7 +139,7 @@ class AwakeWebShellTest : public QObject {
         auto cleanup = qScopeGuard([&] { evaluate("document.querySelectorAll('.thumbnail-readback-fixture').forEach(image => image.remove())"); });
         evaluate(R"JS((() => {
             const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 4;
-            const context = canvas.getContext('2d'); context.fillStyle = 'red'; context.fillRect(0, 0, 4, 4);
+            const context = canvas.getContext('2d', { willReadFrequently: true }); context.fillStyle = 'red'; context.fillRect(0, 0, 4, 4);
             for (const id of ['filled', 'empty']) {
                 if (id === 'empty') context.clearRect(0, 0, 4, 4);
                 const image = document.createElement('img'); image.id = 'thumbnail-' + id;
