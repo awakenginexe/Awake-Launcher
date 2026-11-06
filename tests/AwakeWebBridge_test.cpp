@@ -598,6 +598,20 @@ version="fixture-version"
         QVERIFY2(capeResponse.value("ok").toBool(), qPrintable(capeResponse.value("error").toString()));
         QVERIFY(capeResponse.value("capes").toList().first().toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
     }
+    void externallyOwnedInstancesAreNotLoadedForNativeMutation()
+    {
+        auto* instances = APPLICATION->instances();
+        const QString id = "core-owned-fixture";
+        const auto root = instances->primaryDir() + '/' + id;
+        QVERIFY(QDir().mkpath(root + "/.awake-integration"));
+        const QByteArray original("InstanceType=OneSix\nname=Owned fixture\n");
+        QFile config(root + "/instance.cfg"); QVERIFY(config.open(QIODevice::WriteOnly)); config.write(original); config.close();
+        QFile marker(root + "/.awake-integration/ownership.json"); QVERIFY(marker.open(QIODevice::WriteOnly)); marker.write("ownership fixture"); marker.close();
+        instances->loadList();
+        QVERIFY(!instances->getInstanceById(id));
+        QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(), original); config.close();
+        QVERIFY(QDir(root).removeRecursively());
+    }
     void deletingInstanceReturnsToTheEventLoopAndPublishesStatus()
     {
         auto* instances = APPLICATION->instances();

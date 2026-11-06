@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QDir>
+#include <QCryptographicHash>
+#include "awake/integration/ProfileAccess.h"
+#include "IntegrationFixture.h"
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -23,7 +26,7 @@ bool put(const QString& path, const QByteArray& bytes)
 }
 std::shared_ptr<PhysicalInstanceLease> leaseFor(const QString& root)
 {
-    return PhysicalInstanceLease::acquire(root, physicalIdentityV2(root), QFileInfo(root).absolutePath() + "/leases");
+    return fixtureLease(root, physicalIdentityV2(root), QFileInfo(root).absolutePath() + "/leases");
 }
 QString operation(OperationStore& store)
 {
@@ -68,6 +71,61 @@ bool keeperFinished(const QString& registry)
 class AwakeTransactionsTest : public QObject {
     Q_OBJECT
    private slots:
+    void lostCanonicalOwnershipCannotBeReenrolledAsANewInstance()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        { auto lease = fixtureLease(root, id, registry); QVERIFY(lease); }
+        const auto key = QString::fromLatin1(QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex());
+        QVERIFY(QFile::remove(privateCoordinationBase() + "/authority-v1/" + key + ".json"));
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(!fixtureLease(root, id, registry));
+    }
+    void unknownOwnershipAndUnsealedGameEvidenceFailClosed()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        { auto lease = fixtureLease(root, id, registry); QVERIFY(lease); }
+        QVERIFY(InstanceAuthority::requireGameRecord(id));
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        auto edited = InstanceAuthority::binding(id);
+        edited["gameRecordRequired"] = false;
+        const auto key = QString::fromLatin1(QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex());
+        QVERIFY(put(privateCoordinationBase() + "/authority-v1/" + key + ".json", QJsonDocument(edited).toJson(QJsonDocument::Compact)));
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+    }
+    void differentRegistriesCannotBypassPhysicalExclusion()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto lease = fixtureLease(root, id, temporary.path() + "/first");
+        QVERIFY(lease);
+        QCOMPARE(child({"--probe-lease", root, id, temporary.path() + "/second"}), 23);
+    }
+    void unrelatedEditDuringApplyCannotBecomeTheVerifiedBaseline()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+        const auto plan = threeFilePlan(store, root); QVERIFY(!plan.isEmpty());
+        auto lease = leaseFor(root); QVERIFY(lease);
+        TransactionEngine engine(store, root, ".minecraft/mods");
+        const auto result = engine.apply(plan["operationId"].toString(), plan["planDigest"].toString(), plan["instanceRevision"].toString(), lease,
+            [&](const QString& phase, int index) {
+                if (phase == "after_replace" && index == 1) return put(root + "/.minecraft/mods/manual.jar", "user edit");
+                return true;
+            });
+        QVERIFY(result.contains("error"));
+        QCOMPARE(bytes(root + "/.minecraft/mods/manual.jar"), QByteArray("user edit"));
+        QCOMPARE(store.get(plan["operationId"].toString())["result"].toObject()["state"].toString(), QString("recovery_required"));
+    }
     void keeperRejectsMalformedInvocationAndRequiresVerifiedCompletion()
     {
         QCOMPARE(child({"--integration-game-keeper"}), 61);
@@ -76,7 +134,7 @@ class AwakeTransactionsTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(put(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto lease = PhysicalInstanceLease::acquire(root, id, registry); QVERIFY(lease);
+        auto lease = fixtureLease(root, id, registry); QVERIFY(lease);
         auto group = GameProcessGroup::create(lease); QVERIFY(group);
         const auto pending = QDir(registry + "/games").entryList({"*.pending"}, QDir::Files);
         QCOMPARE(pending.size(), 1);
@@ -85,7 +143,7 @@ class AwakeTransactionsTest : public QObject {
         group.reset(); lease.reset();
         QTRY_COMPARE_WITH_TIMEOUT(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Unknown, 5000);
         QCOMPARE(bytes(path).size(), 36);
-        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(!fixtureLease(root, id, registry));
         QVERIFY(QFileInfo(path.chopped(8)).isDir());
     }
     void gameOwnershipIsDurableAndGuardsOtherProcesses()
@@ -94,11 +152,11 @@ class AwakeTransactionsTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(put(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Untracked);
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Unknown);
         OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
         const auto plan = threeFilePlan(store, root); QVERIFY(!plan.isEmpty());
         TransactionEngine engine(store, root, ".minecraft/mods");
-        auto lease = PhysicalInstanceLease::acquire(root, id, registry); QVERIFY(lease);
+        auto lease = fixtureLease(root, id, registry); QVERIFY(lease);
         QString error;
         auto group = GameProcessGroup::create(lease, &error); QVERIFY2(group, qPrintable(error));
         QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Inactive);
@@ -116,12 +174,12 @@ class AwakeTransactionsTest : public QObject {
         process.setCreateProcessArgumentsModifier({});
         group.reset(); lease.reset();
         QTRY_VERIFY_WITH_TIMEOUT(keeperFinished(registry), 5000);
-        QVERIFY(PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(fixtureLease(root, id, registry));
         const auto records = QDir(registry + "/games").entryList({"*.json"}, QDir::Files);
         QCOMPARE(records.size(), 1);
         QVERIFY(put(registry + "/games/" + records[0], "corrupt ownership"));
         QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Unknown);
-        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(!fixtureLease(root, id, registry));
     }
     void launcherCrashDoesNotReleaseRunningDescendants()
     {
@@ -137,12 +195,12 @@ class AwakeTransactionsTest : public QObject {
         QCOMPARE(child({"--crash-game", root, registry, stopName, readyName}), 90);
         QCOMPARE(WaitForSingleObject(ready, 5000), DWORD(WAIT_OBJECT_0));
         QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Running);
-        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(!fixtureLease(root, id, registry));
         QCOMPARE(child({"--probe-lease", root, id, registry}), 23);
         QVERIFY(SetEvent(stop));
         QTRY_COMPARE_WITH_TIMEOUT(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Inactive, 5000);
         QTRY_VERIFY_WITH_TIMEOUT(keeperFinished(registry), 5000);
-        QVERIFY(PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(fixtureLease(root, id, registry));
     }
     void physicalIdentityV2IncludesVolumeAndFileIdentifiersWithoutChangingV1()
     {
@@ -163,16 +221,16 @@ class AwakeTransactionsTest : public QObject {
         QVERIFY(put(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
         const auto registry = temporary.path() + "/leases";
-        auto lease = PhysicalInstanceLease::acquire(root, id, registry);
+        auto lease = fixtureLease(root, id, registry);
         QVERIFY(lease);
-        QVERIFY(!PhysicalInstanceLease::acquire(root + "/../instance", id, registry));
+        QVERIFY(!fixtureLease(root + "/../instance", id, registry));
         QProcess child;
         child.start(QCoreApplication::applicationFilePath(), {"--probe-lease", root, id, registry});
         QVERIFY(child.waitForFinished(5000)); QCOMPARE(child.exitCode(), 23);
         lease.reset();
         child.start(QCoreApplication::applicationFilePath(), {"--probe-lease", root, id, registry});
         QVERIFY(child.waitForFinished(5000)); QCOMPARE(child.exitCode(), 0);
-        QVERIFY(!PhysicalInstanceLease::acquire(root, "wrong-physical-id", registry));
+        QVERIFY(!fixtureLease(root, "wrong-physical-id", registry));
     }
     void physicalLeaseFollowsIdentityAcrossRenameAndAllowsOwnerRemoval()
     {
@@ -180,15 +238,15 @@ class AwakeTransactionsTest : public QObject {
         const auto root = temporary.path() + "/instance", moved = temporary.path() + "/renamed";
         QVERIFY(put(root + "/instance.cfg", "fixture"));
         const auto identity = physicalIdentityV2(root), registry = temporary.path() + "/leases";
-        auto lease = PhysicalInstanceLease::acquire(root, identity, registry); QVERIFY(lease);
-        QVERIFY(!QFile::exists(root + "/.awake-integration"));
+        auto lease = fixtureLease(root, identity, registry); QVERIFY(lease);
+        QVERIFY(QFile::exists(root + "/.awake-integration/ownership.json"));
         QVERIFY(QDir().rename(root, moved));
         QCOMPARE(physicalIdentityV2(moved), identity);
-        QVERIFY(!PhysicalInstanceLease::acquire(moved, identity, registry));
+        QVERIFY(!fixtureLease(moved, identity, registry));
         lease.reset();
-        lease = PhysicalInstanceLease::acquire(moved, identity, registry); QVERIFY(lease);
+        lease = fixtureLease(moved, identity, registry); QVERIFY(lease);
         QVERIFY(QDir(moved).removeRecursively());
-        QVERIFY(!PhysicalInstanceLease::acquire(moved, identity, registry));
+        QVERIFY(!fixtureLease(moved, identity, registry));
     }
     void invalidAndCollidingTargetsNeverProduceAPlan()
     {
@@ -534,7 +592,7 @@ int main(int argc, char** argv)
         ExitProcess(91);
     }
     if (arguments.size() == 6 && arguments[1] == "--crash-game") {
-        auto lease = PhysicalInstanceLease::acquire(arguments[2], physicalIdentityV2(arguments[2]), arguments[3]);
+        auto lease = fixtureLease(arguments[2], physicalIdentityV2(arguments[2]), arguments[3]);
         auto group = GameProcessGroup::create(lease);
         QProcess process;
         process.setProcessChannelMode(QProcess::ForwardedChannels);
@@ -548,7 +606,7 @@ int main(int argc, char** argv)
         ExitProcess(90);
     }
     if (arguments.size() == 5 && arguments[1] == "--probe-lease")
-        return PhysicalInstanceLease::acquire(arguments[2], arguments[3], arguments[4]) ? 0 : 23;
+        return fixtureLease(arguments[2], arguments[3], arguments[4]) ? 0 : 23;
     if ((arguments.size() == 7 && (arguments[1] == "--crash-apply" || arguments[1] == "--crash-verified" || arguments[1] == "--crash-complete")) ||
         (arguments.size() == 5 && arguments[1] == "--crash-recover")) {
         OperationStore store(arguments[2]);

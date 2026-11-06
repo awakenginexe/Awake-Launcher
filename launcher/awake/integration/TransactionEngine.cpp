@@ -6,6 +6,7 @@
 #include "ProfileAccess.h"
 #include "GameProcessGroup.h"
 #include "Protocol.h"
+#include "InstanceAuthority.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -133,7 +134,8 @@ QJsonObject planAt(OperationStore& store, const QString& id, const QString& root
 }
 bool owns(const QString& root, const std::shared_ptr<PhysicalInstanceLease>& lease)
 {
-    if (!lease || lease->root() != root || lease->physicalId() != physicalIdentityV2(root)) return false;
+    if (!lease || lease->root() != root || lease->physicalId() != physicalIdentityV2(root) ||
+        !InstanceAuthority::validate(root, lease->physicalId(), lease->registryDirectory())) return false;
     const auto game = GameProcessGroup::probe(lease->physicalId(), lease->registryDirectory());
     return game != GameProcessGroup::State::Running && game != GameProcessGroup::State::Unknown;
 }
@@ -191,6 +193,11 @@ TransactionEngine::TransactionEngine(OperationStore& store, QString root, QStrin
     : m_store(store), m_root(QFileInfo(root).canonicalFilePath()), m_mods(std::move(mods)) {}
 QString TransactionEngine::revision(QString* error) const
 {
+    const auto state = snapshot(error);
+    return state.isEmpty() ? QString{} : digest(state);
+}
+QJsonObject TransactionEngine::snapshot(QString* error) const
+{
     if (m_root.isEmpty() || !relative(m_mods) || !m_mods.endsWith("/mods")) { if (error) *error = "Invalid instance root or mod directory."; return {}; }
     QMap<QString, QString> nodes;
     for (const auto* name : {"instance.cfg", "mmc-pack.json", ".awake-integration/policies.json"}) {
@@ -222,7 +229,7 @@ QString TransactionEngine::revision(QString* error) const
     if (identity.isEmpty() || !walk(m_mods) || identity != physicalIdentityV2(m_root)) return {};
     QJsonObject files;
     for (auto it = nodes.begin(); it != nodes.end(); ++it) files[it.key()] = it.value();
-    return digest({{"physicalId", identity}, {"modsRelative", m_mods}, {"files", files}});
+    return {{"physicalId", identity}, {"modsRelative", m_mods}, {"files", files}};
 }
 QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange>& changes, const QString& expected)
 {
@@ -238,6 +245,9 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
     if (!privateDirectory(directory) || !privateDirectory(directory + "/staging")) return failure("IO_ERROR", "Private staging is unavailable.");
     QSet<QString> targets;
     QJsonArray files;
+    auto expectedState = snapshot(&error);
+    if (expectedState.isEmpty() || digest(expectedState) != baseline) return failure("STALE_INSTANCE", "Instance changed before planning.");
+    auto expectedFiles = expectedState["files"].toObject();
     quint64 bytes = 16 * 1024 * 1024;
     for (const auto& change : changes) {
         const auto path = change.relativePath;
@@ -257,6 +267,7 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
         bytes += quint64(sizeBefore) + quint64(sizeAfter);
         files.append(QJsonObject{{"path", path}, {"stagedName", change.stagedName}, {"beforeHash", before}, {"afterHash", after},
                                  {"sizeBefore", QString::number(sizeBefore)}, {"sizeAfter", QString::number(sizeAfter)}});
+        if (after == "missing") expectedFiles.remove(path); else expectedFiles[path] = after;
     }
     const QStorageInfo targetVolume(m_root), storeVolume(directory);
     if (!targetVolume.isValid() || !storeVolume.isValid() || targetVolume.bytesAvailable() < 0 || storeVolume.bytesAvailable() < 0 ||
@@ -265,6 +276,8 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
     if (revision(&error) != baseline) return failure("STALE_INSTANCE", "Instance changed during preparation.");
     QJsonObject plan{{"format", 1}, {"operationId", id}, {"physicalId", physicalIdentityV2(m_root)}, {"modsRelative", m_mods},
                      {"instanceRevision", baseline}, {"requiredDiskBytes", QString::number(bytes)}, {"files", files}};
+    expectedState["files"] = expectedFiles;
+    plan["expectedInstanceRevision"] = digest(expectedState);
     const auto planDigest = digest(plan); plan["planDigest"] = planDigest;
     if (!save(directory + "/plan.json", plan, &error) || !writeJournal(directory, id, planDigest, "prepared", 0, &error)) return failure("IO_ERROR", error);
     const auto prepared = m_store.transition(id, "prepared", plan);
@@ -279,6 +292,7 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return failure("RECOVERY_REQUIRED", error);
     if (claimed != plan["planDigest"] || expected != plan["instanceRevision"]) return failure("STALE_PLAN", "Apply does not identify the reviewed plan.");
+    if (plan["expectedInstanceRevision"].toString().size() != 64) return failure("STALE_PLAN", "This older plan requires fresh preparation and review.");
     const auto current = m_store.get(id)["result"].toObject();
     if (current["state"] != "prepared") return failure("INVALID_STATE", "The operation is not awaiting Apply.");
     const auto directory = area(m_store, id);
@@ -343,8 +357,12 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
         if (!replaced || DurableIO::hash(destination, &error) != file["afterHash"] || !inject("after_replace", int(index))) return interrupted();
     }
     if (!writeJournal(directory, id, claimed, "verifying", int(files.size()), &error) || !verifyFiles(m_root, files, "afterHash", &error)) return interrupted();
-    summary["instanceRevision"] = revision(&error);
-    if (summary["instanceRevision"].toString().isEmpty()) return interrupted();
+    const auto expectedAfter = plan["expectedInstanceRevision"].toString();
+    if (expectedAfter.size() != 64 || revision(&error) != expectedAfter) {
+        error = "The final inventory differs from the reviewed changes.";
+        return interrupted();
+    }
+    summary["instanceRevision"] = expectedAfter;
     const auto verified = m_store.transition(id, "verifying", summary);
     if (verified.contains("error")) return interrupted();
     return verified;

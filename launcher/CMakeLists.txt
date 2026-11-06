@@ -1262,11 +1262,15 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp
 if(Launcher_ENABLE_AWAKE_WEB)
     include(${CMAKE_SOURCE_DIR}/cmake/AwakeWeb.cmake)
 endif()
-add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES} ${AWAKE_WEB_SOURCES}
+set(INTEGRATION_BRIDGE_SOURCES
     awake/integration/Protocol.cpp awake/integration/Protocol.h
     awake/integration/InstanceDiscovery.cpp awake/integration/InstanceDiscovery.h
     awake/integration/IntegrationServer.cpp awake/integration/IntegrationServer.h
-    awake/integration/ProfileAccess.cpp awake/integration/ProfileAccess.h
+    awake/integration/ProfileAccess.cpp awake/integration/ProfileAccess.h)
+if(WIN32)
+    set(INTEGRATION_BRIDGE_SOURCES)
+endif()
+add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES} ${AWAKE_WEB_SOURCES} ${INTEGRATION_BRIDGE_SOURCES}
     awake/integration/Coordinator.cpp awake/integration/Coordinator.h
     awake/LocalePolicy.cpp awake/LocalePolicy.h
     awake/DesignTokens.cpp awake/DesignTokens.h awake/AwakeTheme.cpp awake/AwakeTheme.h
@@ -1277,13 +1281,7 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
     awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h
     ${AWAKE_QM_FILES} ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp)
 if(WIN32)
-    target_sources(Launcher_logic PRIVATE awake/integration/DurableIO.cpp awake/integration/DurableIO.h
-        awake/integration/OperationStore.cpp awake/integration/OperationStore.h
-        awake/integration/PhysicalInstanceLease.cpp awake/integration/PhysicalInstanceLease.h
-        awake/integration/InstanceOperationScope.h
-        awake/integration/GameProcessGroup.cpp awake/integration/GameProcessGroup.h
-        awake/integration/TransactionEngine.cpp awake/integration/TransactionEngine.h)
-    target_link_libraries(Launcher_logic advapi32)
+    target_link_libraries(Launcher_logic AwakeCore)
 endif()
 
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

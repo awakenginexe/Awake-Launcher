@@ -3,6 +3,7 @@
 #include "DurableIO.h"
 #include "PhysicalInstanceLease.h"
 #include "ProfileAccess.h"
+#include "InstanceAuthority.h"
 #include <QCryptographicHash>
 #include <QCoreApplication>
 #include <QDir>
@@ -61,11 +62,14 @@ GameProcessGroup::~GameProcessGroup() = default;
 GameProcessGroup::State GameProcessGroup::probe(const QString& id, const QString& directory, QString* error)
 {
     const auto unknown = [error](const QString& message) { if (error) *error = message; return State::Unknown; };
-    if (!id.startsWith("win2:")) return unknown("Strong physical identity is required for game ownership.");
+    const auto authority = InstanceAuthority::binding(id, error);
+    if (authority.isEmpty() || QFileInfo(directory).canonicalFilePath() != authority["registry"].toString())
+        return unknown("Game ownership has no compatible enrollment.");
     const auto record = path(directory, id);
     if (QFileInfo::exists(directory) && !storageAccessIsPrivate(directory)) return unknown("Private coordination storage cannot be verified.");
     if (QFileInfo::exists(directory + "/games") && !storageAccessIsPrivate(directory + "/games")) return unknown("Private game storage cannot be verified.");
     if (!QFileInfo::exists(record)) {
+        if (authority["gameRecordRequired"].toBool()) return unknown("Recorded game ownership evidence is missing.");
         if (QFileInfo(record).isSymLink() || QFileInfo(record).isJunction()) return unknown("Linked game ownership record.");
         return State::Untracked;
     }
@@ -111,6 +115,7 @@ std::shared_ptr<GameProcessGroup> GameProcessGroup::create(const std::shared_ptr
     const auto state = probe(lease->physicalId(), lease->registryDirectory(), error);
     if (state == State::Running || state == State::Unknown) return reject("Existing game ownership is busy or unverifiable.");
     const auto sid = userSid();
+    if (!InstanceAuthority::requireGameRecord(lease->physicalId(), error)) return {};
     if (sid.isEmpty() || !createPrivateStorageDirectory(lease->registryDirectory() + "/games")) return reject("Private game ownership storage is unavailable.");
     const auto nonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const auto name = "Global\\AwakeLauncherGame-" + sid + '-' + nonce;

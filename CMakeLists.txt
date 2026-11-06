@@ -553,6 +553,9 @@ add_subdirectory(libraries/qdcss) # css parser
 ############################### Built Artifacts ###############################
 
 add_subdirectory(buildconfig)
+if(WIN32)
+    add_subdirectory(native-core)
+endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

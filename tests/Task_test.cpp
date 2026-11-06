@@ -15,6 +15,7 @@
 #ifdef Q_OS_WIN
 #include <QTemporaryDir>
 #include <QDir>
+#include "IntegrationFixture.h"
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/InstanceDiscovery.h"
 #include "awake/integration/InstanceOperationScope.h"
@@ -152,7 +153,7 @@ class TaskTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        auto acquire = [&] { return fixtureLease(root, id, registry); };
         std::unique_ptr<ConcurrentTask> parent;
         Task::Ptr child;
         {
@@ -172,7 +173,7 @@ class TaskTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        auto acquire = [&] { return fixtureLease(root, id, registry); };
         QNetworkAccessManager network;
         std::unique_ptr<NetJob> parent;
         Task::Ptr child;
@@ -193,7 +194,7 @@ class TaskTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        auto acquire = [&] { return fixtureLease(root, id, registry); };
         std::unique_ptr<ReentrantLeaseTask> task;
         {
             auto lease = acquire(); QVERIFY(lease);
@@ -211,7 +212,7 @@ class TaskTest : public QObject {
         const auto root = temporary.path() + "/instance";
         QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto lease = PhysicalInstanceLease::acquire(root, id, temporary.path() + "/leases"); QVERIFY(lease);
+        auto lease = fixtureLease(root, id, temporary.path() + "/leases"); QVERIFY(lease);
         InstanceOperationScope scope(lease);
         BasicTask task;
         std::atomic_bool observed{false}, restored{false};
@@ -233,7 +234,7 @@ class TaskTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        auto acquire = [&] { return fixtureLease(root, id, registry); };
         std::unique_ptr<QueuedLeaseTask> task;
         {
             auto lease = acquire(); QVERIFY(lease);
@@ -262,7 +263,7 @@ class TaskTest : public QObject {
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
-        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        auto acquire = [&] { return fixtureLease(root, id, registry); };
         std::unique_ptr<BasicTask> task;
         {
             auto lease = acquire(); QVERIFY(lease);

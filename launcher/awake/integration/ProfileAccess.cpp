@@ -8,12 +8,13 @@
 #ifdef Q_OS_WIN
 #include <aclapi.h>
 #include <qt_windows.h>
+#include <shlobj.h>
 #else
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
 namespace Awake::Integration {
-static bool accessIsPrivate(const QString& directory, bool privateRead, bool allowFiles = false)
+static bool accessIsPrivate(const QString& directory, bool privateRead, bool allowFiles = false, bool ownershipOnly = false)
 {
     const auto path = QFileInfo(directory).canonicalFilePath();
     if (path.isEmpty() || (!QFileInfo(path).isDir() && !(allowFiles && QFileInfo(path).isFile())))
@@ -42,6 +43,7 @@ static bool accessIsPrivate(const QString& directory, bool privateRead, bool all
                               &descriptor) != ERROR_SUCCESS)
         return false;
     bool safe = owner && EqualSid(owner, sid) && acl;
+    if (ownershipOnly) { LocalFree(descriptor); return safe; }
     BYTE system[SECURITY_MAX_SID_SIZE], admins[SECURITY_MAX_SID_SIZE];
     DWORD systemSize = sizeof(system), adminSize = sizeof(admins);
     safe = safe && CreateWellKnownSid(WinLocalSystemSid, nullptr, system, &systemSize) &&
@@ -73,6 +75,7 @@ static bool accessIsPrivate(const QString& directory, bool privateRead, bool all
     return safe;
 #else
     Q_UNUSED(privateRead)
+    Q_UNUSED(ownershipOnly)
     struct stat info{};
     return ::stat(QFile::encodeName(path).constData(), &info) == 0 && info.st_uid == geteuid() && !(info.st_mode & 0022);
 #endif
@@ -88,12 +91,12 @@ bool storageAccessIsPrivate(const QString& path)
     return false;
 #endif
 }
-bool createPrivateStorageDirectory(const QString& directory)
+static bool createPrivateStorageDirectoryImpl(const QString& directory, bool knownUserDataParent)
 {
 #ifdef Q_OS_WIN
     const QFileInfo info(directory);
     if (info.exists() || info.isSymLink() || info.isJunction()) return storageAccessIsPrivate(directory) && info.isDir();
-    if (!profileAccessIsPrivate(info.absolutePath())) return false;
+    if (!profileAccessIsPrivate(info.absolutePath()) && !(knownUserDataParent && accessIsPrivate(info.absolutePath(), false, false, true))) return false;
     HANDLE token = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
     auto close = qScopeGuard([&] { CloseHandle(token); });
@@ -132,7 +135,27 @@ bool createPrivateStorageDirectory(const QString& directory)
     return storageAccessIsPrivate(directory);
 #else
     Q_UNUSED(directory)
+    Q_UNUSED(knownUserDataParent)
     return false;
+#endif
+}
+bool createPrivateStorageDirectory(const QString& directory)
+{
+    return createPrivateStorageDirectoryImpl(directory, false);
+}
+QString privateCoordinationBase()
+{
+#ifdef Q_OS_WIN
+    PWSTR value = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &value))) return {};
+    const auto parent = QFileInfo(QString::fromWCharArray(value)).canonicalFilePath(); CoTaskMemFree(value);
+    if (parent.isEmpty()) return {};
+    // The OS-selected parent can have capability ACEs; the new child has a protected user-only DACL.
+    const auto directory = parent + "/AwakeSharedCore";
+    if (!createPrivateStorageDirectoryImpl(directory, true)) return {};
+    return QFileInfo(directory).canonicalFilePath();
+#else
+    return {};
 #endif
 }
 }  // namespace Awake::Integration

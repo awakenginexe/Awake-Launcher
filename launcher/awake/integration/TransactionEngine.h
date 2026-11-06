@@ -22,6 +22,7 @@ class TransactionEngine {
     QJsonObject complete(const QString& operationId, const std::shared_ptr<PhysicalInstanceLease>& lease, FaultHook fault = {});
     QJsonObject recover(const QString& operationId, const std::shared_ptr<PhysicalInstanceLease>& lease, FaultHook fault = {});
    private:
+    QJsonObject snapshot(QString* error = nullptr) const;
     OperationStore& m_store;
     QString m_root, m_mods;
 };

@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "InstanceAuthority.h"
+#include "DurableIO.h"
+#include "InstanceDiscovery.h"
+#include "ProfileAccess.h"
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QRegularExpression>
+#include <QScopeGuard>
+#include <QUuid>
+#include <qt_windows.h>
+#include <shlobj.h>
+namespace Awake::Integration::InstanceAuthority {
+namespace {
+QString base(QString* error)
+{
+    const auto parent = privateCoordinationBase(), directory = parent + "/authority-v1";
+    if (parent.isEmpty() || !createPrivateStorageDirectory(directory)) {
+        if (error) *error = "Canonical ownership storage is not private.";
+        return {};
+    }
+    return QFileInfo(directory).canonicalFilePath();
+}
+QString stem(const QString& id, QString* error)
+{
+    static const QRegularExpression valid(QRegularExpression::anchoredPattern("win2:[0-9a-f-]{36}:[0-9a-f]{32}"));
+    if (!valid.match(id).hasMatch()) { if (error) *error = "Strong physical identity is required."; return {}; }
+    const auto directory = base(error); if (directory.isEmpty()) return {};
+    return directory + '/' + QString::fromLatin1(QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+QJsonObject read(const QString& path, QString* error)
+{
+    if (!storageAccessIsPrivate(path) || DurableIO::hash(path, error).isEmpty()) return {};
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() > 16384) return {};
+    const auto envelope = QJsonDocument::fromJson(file.readAll()).object();
+    const auto object = envelope["body"].toObject();
+    const auto hash = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(object).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+    if (envelope.size() != 2 || object.isEmpty() || envelope["sha256"] != hash) {
+        if (error) *error = "Ownership evidence is missing or corrupt.";
+        return {};
+    }
+    return object;
+}
+QJsonObject withoutGame(QJsonObject object) { object.remove("gameRecordRequired"); return object; }
+bool write(const QString& path, const QJsonObject& object, QString* error)
+{
+    const auto hash = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(object).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+    return DurableIO::write(path, QJsonDocument(QJsonObject{{"body", object}, {"sha256", hash}}).toJson(QJsonDocument::Compact), error);
+}
+}
+void* lock(const QString& id, QString* error)
+{
+    const auto name = stem(id, error); if (name.isEmpty()) return nullptr;
+    const auto path = "\\\\?\\" + QDir::toNativeSeparators(name + ".lock");
+    const auto handle = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+        OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (handle == INVALID_HANDLE_VALUE || !GetFileInformationByHandle(handle, &info) || info.nNumberOfLinks != 1 ||
+        (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) || !storageAccessIsPrivate(name + ".lock")) {
+        if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+        if (error) *error = "The physical instance is busy or canonical ownership cannot be locked.";
+        return nullptr;
+    }
+    return handle;
+}
+QJsonObject binding(const QString& id, QString* error)
+{
+    const auto name = stem(id, error); if (name.isEmpty()) return {};
+    const auto object = read(name + ".json", error);
+    if (object.size() != 9 || object["format"] != 1 || object["kernelMajor"] != 1 || object["published"] != true || object["physicalId"] != id ||
+        object["ownerProfile"].toString().isEmpty() || QUuid(object["registrationId"].toString()).isNull() ||
+        !object["gameRecordRequired"].isBool() || object["registryIdentity"].toString().isEmpty() ||
+        physicalIdentityV2(object["registry"].toString()) != object["registryIdentity"].toString()) {
+        if (error) *error = "Unknown, incompatible or incomplete instance ownership.";
+        return {};
+    }
+    return object;
+}
+bool validate(const QString& root, const QString& id, const QString& registry, QString* error)
+{
+    const auto object = binding(id, error);
+    if (object.isEmpty() || physicalIdentityV2(root) != id || QFileInfo(registry).canonicalFilePath() != object["registry"].toString() ||
+        read(root + "/.awake-integration/ownership.json", error) != withoutGame(object)) {
+        if (error && error->isEmpty()) *error = "Enrollment and canonical ownership do not match.";
+        return false;
+    }
+    return true;
+}
+bool enroll(const QString& root, const QString& id, const QString& registry, const QString& owner, const QString& registration, QString* error)
+{
+    if (owner.isEmpty() || owner.size() > 128 || QUuid(registration).isNull() || physicalIdentityV2(root) != id ||
+        !profileAccessIsPrivate(root) || !createPrivateStorageDirectory(registry)) return false;
+    const auto held = lock(id, error); if (!held) return false;
+    auto release = qScopeGuard([&] { CloseHandle(held); });
+    const auto markerDirectory = root + "/.awake-integration";
+    if (!createPrivateStorageDirectory(markerDirectory)) return false;
+    const auto name = stem(id, error), marker = markerDirectory + "/ownership.json";
+    QJsonObject expected{{"format", 1}, {"kernelMajor", 1}, {"published", true}, {"physicalId", id}, {"ownerProfile", owner},
+        {"registrationId", registration}, {"registry", QFileInfo(registry).canonicalFilePath()}, {"registryIdentity", physicalIdentityV2(registry)}};
+    if (expected["registryIdentity"].toString().isEmpty()) return false;
+    if (QFileInfo::exists(name + ".json")) {
+        const auto current = binding(id, error);
+        if (withoutGame(current) != expected) return false;
+        auto pending = expected; pending["published"] = false;
+        const auto local = read(marker, error);
+        if (local != expected && (local != pending || current["gameRecordRequired"] != false || !write(marker, expected, error))) return false;
+        return validate(root, id, registry, error);
+    }
+    auto pending = expected; pending["published"] = false;
+    // A lost published authority must never reset detached-game or recovery evidence.
+    if (QFileInfo::exists(marker) && read(marker, error) != pending) return false;
+    if (!write(marker, pending, error)) return false;
+    auto global = expected; global["gameRecordRequired"] = false;
+    return write(name + ".json", global, error) && write(marker, expected, error) && validate(root, id, registry, error);
+}
+bool requireGameRecord(const QString& id, QString* error)
+{
+    auto object = binding(id, error); if (object.isEmpty()) return false;
+    object["gameRecordRequired"] = true;
+    return write(stem(id, error) + ".json", object, error);
+}
+}

@@ -3,6 +3,7 @@
 #include "InstanceDiscovery.h"
 #include "ProfileAccess.h"
 #include "GameProcessGroup.h"
+#include "InstanceAuthority.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
@@ -20,14 +21,12 @@ std::shared_ptr<PhysicalInstanceLease> PhysicalInstanceLease::acquire(const QStr
     const QFileInfo before(directory);
     if (before.isSymLink() || before.isJunction() || !createPrivateStorageDirectory(directory))
         return reject("Private instance coordination storage is unavailable.");
-    const auto key = QString::fromLatin1(QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex());
-    const auto path = "\\\\?\\" + QDir::toNativeSeparators(QDir(QFileInfo(directory).canonicalFilePath()).filePath(key + ".lock"));
-    const auto handle = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                                    OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) return reject("The physical instance is busy or cannot be locked.");
+    const auto handle = InstanceAuthority::lock(id, error);
+    if (!handle) return {};
     BY_HANDLE_FILE_INFORMATION info{};
     if (!GetFileInformationByHandle(handle, &info) || info.nNumberOfLinks != 1 ||
-        (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) || physicalIdentityV2(canonical) != id) {
+        (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) || physicalIdentityV2(canonical) != id ||
+        !InstanceAuthority::validate(canonical, id, directory, error)) {
         CloseHandle(handle);
         return reject("The physical instance lock identity changed.");
     }
