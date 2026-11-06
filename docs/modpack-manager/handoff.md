@@ -17,7 +17,7 @@ Manager must select/resolve the installation and data profile; there is no globa
 Native unloaded collisions are listing-only; UUID/name are unknown beyond their folder label, and mods.list returns NOT_FOUND for those physicalIds. A conflict never permits fallback to a native folder ID.
 
 ## Windows client connection
-Contract pin for interoperability: `058714ec72ce2db19913f8540b6c4784a9d6ccd2` (protocol 1.0). Retrieve all three linked contract/schema files from that commit when implementing a client; later prose clarifications do not add capabilities.
+Current contract/schema pin: `d3e6731a8a3d9a668ad6509eb795eb73030c0823` (implemented protocol 1.0). Retrieve protocol.md, wire.schema.json and requests.schema.json together from that commit. Existing read-only clients pinned to `058714ec72ce2db19913f8540b6c4784a9d6ccd2` remain compatible. The newer pin adds only reserved rolling_back/terminal consistency and ownership clarifications; no operation RPC or new capability is enabled. Re-pin again when concrete operation schemas and negotiated extensions are implemented.
 Parallel agents use distinct private profiles. A shared session requires agreement on contract pin, profile/descriptor and shutdown owner first; never stop another agent's Launcher or edit the other project.
 1. Select an installation **and data profile** explicitly. If needed, Manager starts the feature build with that profile; a stable installed binary does not contain this branch automatically.
 2. Read `<effective dataRoot>/integration/v1/endpoint.json` with bounded retries during startup/publication, open `\\.\pipe\<serverName>` from a native Windows transport, verify the server's OS identity, then send the documented hello using a 1.0 envelope. A plain browser/Vite frontend cannot open this pipe itself.
@@ -28,7 +28,7 @@ Parallel agents use distinct private profiles. A shared session requires agreeme
 ## Manager compatibility snapshot
 Read-only inspection at Manager commit `84e4228ae6ff8a31f85b6e350b36d589db093433` found the native desktop client in `src/backend/launcher/LauncherClient.ts`, serialized transport, paging and capability-gated draft operations. The earlier `bafd5d5` stub comparison below is historical; it does not describe the current desktop client. Concurrent untracked Manager work was untouched. The user reports a successful real Tauri/pipe connection with 300+ entries; this Launcher session did not independently rerun Manager end-to-end tests.
 
-| Manager assumption | Required adaptation |
+| Historical Manager assumption | Contract requirement (verify current client before adapting) |
 |---|---|
 | Handshake capability array; mods.inventory | Consume the Launcher boolean map; use mods.list. Only hello, launcher.info, instances.list and mods.list are enabled. |
 | installations.discover gates refreshInstallations in state/session.ts | Provide explicit profile selection and selected launcher.info; there is no global discovery RPC. Do not advertise a fabricated server capability. |
@@ -37,7 +37,7 @@ Read-only inspection at Manager commit `84e4228ae6ff8a31f85b6e350b36d589db093433
 | getInventory returns one complete array | Aggregate all pages, preserving metadataState and the observation revision. Missing/conflicting metadata remains unknown. |
 | Lowercase BackendError codes | Map STALE_INSTANCE to stale-revision; UNSUPPORTED_CAPABILITY to unsupported; BUSY to instance-busy. Preserve protocol/validation/IO failures and retryable; transport unavailability is distinct from unsupported functionality. |
 
-Required client tests: actual native transport/framing and fragmented responses, hello mismatch, selected-profile/session mismatch, empty/305-mod inventories, stale-page restart, collision/unloaded rows, unknown status/metadata, BUSY and unsupported UI gating, unavailable Launcher and reconnect after idle/restart. Keep all planning, provider, export, launch and operation/recovery calls disabled; mock success is not IPC evidence.
+Required client tests: actual native transport/framing and fragmented responses, hello mismatch, selected-profile/session mismatch, empty/305-mod inventories, stale-page restart, collision/unloaded rows, unknown status/metadata, BUSY and unsupported UI gating, unavailable Launcher and reconnect after idle/restart. Keep unsupported Launcher IPC calls disabled; mock success is not IPC evidence. This does not redefine the mandatory standalone Manager scope.
 
 ## Unavailable; do not enable in Manager
 Internal Windows foundations now include durable idempotent operation records, private recovery storage, strong volume/file identities, a cross-process physical lease and a recoverable multi-file executor. Apply requires exact hashes/revision/digest and stops at verifying until native refresh permits explicit completion. Restart rolls back before durable commit intent, or verifies and completes after it. Unknown bytes and corrupt records retain recovery evidence. These foundations are not advertised IPC capabilities; native writers, game ownership, startup recovery and supported filesystem metadata handling must be integrated before external writes.
@@ -98,3 +98,17 @@ Shared ResourceAPI callbacks now report unsupported requests and malformed versi
 Native network completion now uses Task lifecycle notifications after sink cleanup. Cancellation closes partial files immediately, cancels queued children and releases their leases; retained failed download history no longer retains an active lease. Retry, cache-hit and request-body failure fixtures cover cleanup ordering. Full Windows build and 40/40 non-visible CTest suites passed; focused Task results: 22 passed, provider: 23 passed/5 skipped, authentication: 20 passed/1 skipped. Skipped live-service tests remain unverified.
 
 Not executed: the visible AwakeWebShell suite, real Minecraft launches, live sign-in, hardware selection, cross-user/remote IPC attempts, or Manager writable workflows. Public gate, Apply and recovery capabilities remain unavailable. Test tools/logs stay outside the committed product; no validator dependency was added to Launcher.
+
+## Launcher-only performance comparison
+Measured native source at `69ebde4f5e8730bd99b641166bd70ffeb9bea1c3` against detached main `6d91edbe0f168c18a334811d7b08e1b6ce89ef16`. Both Windows x64 builds used MSVC 2022, Qt 6.11.2, Release, LTO off and web assets compiled. Runtime exercised offscreen widgets on Windows build 26300 / i5-13400F (16 logical processors), without Manager or IPC clients. External HTTP used a refused loopback proxy.
+
+Fresh private synthetic profiles, alternating build order: one discarded warm-up and five measured runs per build/workload (24 total). Startup ends at the same native main-window log milestone; idle sampling follows five seconds of settling and lasts ten seconds. These are synthetic files, not real mods.
+
+| Mods | Main startup median (range), ms | Feature startup median (range), ms | Main / feature private memory median, MiB |
+|---|---|---|---|
+| 0 | 796 (727–866) | 782 (666–979) | 38.879 / 38.988 |
+| 305 | 938 (816–1728) | 949 (896–3531) | 38.980 / 38.945 |
+
+Idle CPU medians were zero; maximum measured empty-profile samples were 1.562 CPU ms/second in each build. All sampled idle read/write byte deltas were zero. Feature startup created only integration/v1/endpoint.json and coordinator.lock in integration storage; no operation/staging activity was observed. All fixture mod counts and hashes were preserved.
+
+Memory/idle overhead was small in this fixture. Startup variance, particularly the 3.53-second feature outlier, remains unexplained; these samples cannot establish absence of startup regressions. Visible WebEngine, real authentication, Java/GPU behavior and Minecraft launch performance were not measured. Recheck after shared-core/native gate integration and in representative interactive use. Local reproducible harness/raw results are retained under ignored .superpowers; no performance tooling dependency ships with Launcher.
