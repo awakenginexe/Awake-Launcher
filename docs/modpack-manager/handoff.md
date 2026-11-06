@@ -1,5 +1,5 @@
 # Manager client handoff
-**Current external delivery: read-only status/discovery.** Shared native core is approved as the preferred direction for bounded feasibility validation. Full migration has not started. Existing transaction/recovery foundations are retained; write acceptance criteria are incomplete and no write capability is enabled.
+**Current Launcher delivery: protocol 1.0 read-only status/discovery.** The standalone Modrinth-first backend is now authorized for implementation. Its separate [protocol 2.0](core-protocol.md) and [strict schemas](core.schema.json) define the helper client contract. Method definitions are not availability claims: use the helper's capability map and the verified runtime table when delivered. Launcher 1.0 schemas and endpoint stay unchanged. Existing-instance adoption/shared Launcher writes remain disabled until native writer coordination is complete.
 Use [protocol.md](protocol.md), [wire.schema.json](wire.schema.json), and [requests.schema.json](requests.schema.json). Version 1.0 is experimental.
 
 ## Implemented
