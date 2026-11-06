@@ -12,9 +12,39 @@
 #include <QTimer>
 #include <QUuid>
 #include <QtEndian>
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#include <QScopeGuard>
+#endif
 #include "InstanceDiscovery.h"
 #include "ProfileAccess.h"
 namespace Awake::Integration {
+namespace {
+bool trustedPeer(QLocalSocket* socket)
+{
+#ifdef Q_OS_WIN
+    ULONG pid = 0;
+    if (!GetNamedPipeClientProcessId(reinterpret_cast<HANDLE>(socket->socketDescriptor()), &pid) || !pid) return false;
+    const auto process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return false;
+    auto closeProcess = qScopeGuard([&] { CloseHandle(process); });
+    HANDLE own = nullptr, peer = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &own)) return false;
+    auto closeOwn = qScopeGuard([&] { CloseHandle(own); });
+    if (!OpenProcessToken(process, TOKEN_QUERY, &peer)) return false;
+    auto closePeer = qScopeGuard([&] { CloseHandle(peer); });
+    const auto user = [](HANDLE token) { DWORD size = 0; GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+        QByteArray result(int(size), Qt::Uninitialized);
+        if (!size || !GetTokenInformation(token, TokenUser, result.data(), size, &size)) result.clear(); return result; };
+    const auto a = user(own), b = user(peer);
+    return !a.isEmpty() && !b.isEmpty() && EqualSid(reinterpret_cast<const TOKEN_USER*>(a.constData())->User.Sid,
+        reinterpret_cast<const TOKEN_USER*>(b.constData())->User.Sid);
+#else
+    Q_UNUSED(socket)
+    return false;
+#endif
+}
+}
 IntegrationServer::IntegrationServer(QObject* parent) : QObject(parent)
 {
     connect(&m_server, &QLocalServer::newConnection, this, &IntegrationServer::acceptClients);
@@ -24,6 +54,8 @@ IntegrationServer::~IntegrationServer()
     stop();
 }
 bool IntegrationServer::start(const QString& dataRoot, QJsonObject info, Handler handler, QString* reason)
+{ return start(dataRoot, std::move(info), std::move(handler), Options{}, reason); }
+bool IntegrationServer::start(const QString& dataRoot, QJsonObject info, Handler handler, Options options, QString* reason)
 {
     const auto reject = [reason](const QString& message) {
         if (reason)
@@ -43,7 +75,7 @@ bool IntegrationServer::start(const QString& dataRoot, QJsonObject info, Handler
     if (!profileAccessIsPrivate(root))
         return reject("Integration requires a current-user-owned local profile without public write access.");
     QString directory = root;
-    for (const auto* part : { "integration", "v1" }) {
+    for (const auto& part : QStringList{ "integration", options.directory }) {
         directory = QDir(directory).filePath(part);
         const QFileInfo before(directory);
         if (before.isSymLink() || before.isJunction())
@@ -61,14 +93,14 @@ bool IntegrationServer::start(const QString& dataRoot, QJsonObject info, Handler
         return reject("The endpoint descriptor must not be a link.");
     }
     const auto session = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const auto serverName = "awake-manager-v1-" + session;
+    const auto serverName = options.prefix + session;
     m_server.setSocketOptions(QLocalServer::UserAccessOption);
     m_server.setMaxPendingConnections(8);
     if (!m_server.listen(serverName)) {
         m_descriptor.clear();
         return reject("Cannot listen on the integration endpoint.");
     }
-    info["protocol"] = version();
+    info["protocol"] = QJsonObject{{"major", options.major}, {"minor", 0}};
     info["sessionId"] = session;
     info["serverName"] = serverName;
     info["pid"] = QString::number(QCoreApplication::applicationPid());
@@ -83,6 +115,8 @@ bool IntegrationServer::start(const QString& dataRoot, QJsonObject info, Handler
     }
     m_info = std::move(info);
     m_handler = std::move(handler);
+    m_capabilities = options.capabilities.isEmpty() ? capabilities() : options.capabilities;
+    m_options = std::move(options);
     m_owner = std::move(owner);
     return true;
 #endif
@@ -115,7 +149,7 @@ void IntegrationServer::acceptClients()
         if (!socket)
             break;
         socket->setParent(this);
-        if (m_clients.size() >= 8) {
+        if (m_clients.size() >= 8 || !trustedPeer(socket)) {
             socket->abort();
             socket->deleteLater();
             continue;
@@ -136,21 +170,21 @@ void IntegrationServer::acceptClients()
             bool negotiated = false, busy = false;
         };
         auto state = std::make_shared<Client>();
-        const auto send = [socket = QPointer<QLocalSocket>(socket), state, timer](const QString& id, QJsonObject body, bool close = false) {
+        const auto send = [socket = QPointer<QLocalSocket>(socket), state, timer, protocol = m_info["protocol"]](const QString& id, QJsonObject body, bool close = false) {
             if (!socket)
                 return;
             if (socket->state() != QLocalSocket::ConnectedState || socket->bytesToWrite() > 0) {
                 socket->abort();
                 return;
             }
-            body["protocol"] = version();
+            body["protocol"] = protocol;
             body["requestId"] = id.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(id);
             auto bytes = frame(body);
             if (bytes.isEmpty()) {
-                auto small = failure("LIMIT_EXCEEDED", "Response exceeds the frame limit; use a smaller page.");
-                small["protocol"] = version();
-                small["requestId"] = body["requestId"];
-                bytes = frame(small);
+                auto bounded = failure("LIMIT_EXCEEDED", "Response exceeds the frame limit; use a smaller page.");
+                bounded["protocol"] = protocol;
+                bounded["requestId"] = body["requestId"];
+                bytes = frame(bounded);
             }
             socket->write(bytes);
             state->busy = false;
@@ -177,7 +211,7 @@ void IntegrationServer::acceptClients()
             state->buffer += socket->read(state->expected - state->buffer.size());
             if (quint32(state->buffer.size()) < state->expected)
                 return;
-            const auto request = parseRequest(state->buffer);
+            const auto request = parseRequest(state->buffer, m_options.major);
             state->buffer.clear();
             state->expected = 0;
             timer->start(30000);
@@ -203,9 +237,9 @@ void IntegrationServer::acceptClients()
                     valid = valid && candidate.size() == 2 && candidate["major"].isDouble() && candidate["minor"].isDouble() &&
                             candidate["major"].toDouble() == candidate["major"].toInt(-1) &&
                             candidate["minor"].toDouble() == candidate["minor"].toInt(-1) && candidate["minor"].toInt(-1) >= 0;
-                    supported = supported || (candidate["major"].toInt() == 1 && candidate["minor"].toInt(-1) >= 0);
+                    supported = supported || (candidate["major"].toInt() == m_options.major && candidate["minor"].toInt(-1) >= 0);
                 }
-                if (!valid) {
+                if (!valid || (m_options.validate && !m_options.validate("hello", params))) {
                     send(request.id, failure("INVALID_REQUEST", "Invalid hello parameters."));
                     return;
                 }
@@ -214,6 +248,13 @@ void IntegrationServer::acceptClients()
                     return;
                 }
                 state->negotiated = true;
+                if (m_options.major != 1) {
+                    auto result = m_options.hello;
+                    result["protocol"] = m_info["protocol"]; result["profileId"] = m_info["profileId"];
+                    result["sessionId"] = m_info["sessionId"]; result["capabilities"] = m_capabilities;
+                    result["limits"] = QJsonObject{{"frameBytes", int(MaxFrameBytes)}, {"clients", 8}, {"pageItems", 200}};
+                    send(request.id, {{"result", result}}); return;
+                }
                 send(request.id, { { "result", QJsonObject{ { "protocol", version() },
                                                             { "installationId", m_info["installationId"] },
                                                             { "profileId", m_info["profileId"] },
@@ -228,11 +269,15 @@ void IntegrationServer::acceptClients()
                 send(request.id, failure("HANDSHAKE_REQUIRED", "Send hello first."));
                 return;
             }
-            if (!capabilities().value(request.method).toBool()) {
+            if (!m_capabilities.value(request.method).toBool()) {
                 send(request.id, failure("UNSUPPORTED_CAPABILITY", "This capability is not enabled."));
                 return;
             }
+            if (m_options.validate && !m_options.validate(request.method, request.params)) {
+                send(request.id, failure("INVALID_REQUEST", "Parameters do not match the method schema.")); return;
+            }
             state->busy = true;
+            timer->stop();
             auto reply = [guard = QPointer<QLocalSocket>(socket), state, send, id = request.id](QJsonObject result) {
                 if (!guard)
                     return;

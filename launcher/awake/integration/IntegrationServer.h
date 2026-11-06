@@ -14,13 +14,21 @@ class IntegrationServer : public QObject {
    public:
     using Reply = std::function<void(QJsonObject)>;
     using Handler = std::function<void(const Request&, Reply)>;
+    struct Options {
+        int major = 1;
+        QString directory = "v1", prefix = "awake-manager-v1-";
+        QJsonObject capabilities, hello;
+        std::function<bool(const QString&, const QJsonObject&)> validate;
+    };
     explicit IntegrationServer(QObject* parent = nullptr);
     ~IntegrationServer() override;
     bool start(const QString& dataRoot, QJsonObject info, Handler handler, QString* reason = nullptr);
+    bool start(const QString& dataRoot, QJsonObject info, Handler handler, Options options, QString* reason = nullptr);
     void stop();
     QString serverName() const { return m_server.serverName(); }
     QJsonObject information() const { return m_info; }
     QString descriptorPath() const { return m_descriptor; }
+    qsizetype clientCount() const { return m_clients.size(); }
 
    private:
     void acceptClients();
@@ -30,5 +38,7 @@ class IntegrationServer : public QObject {
     QString m_descriptor;
     QJsonObject m_info;
     Handler m_handler;
+    Options m_options;
+    QJsonObject m_capabilities;
 };
 }  // namespace Awake::Integration

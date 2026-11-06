@@ -35,6 +35,9 @@
  */
 
 #include "InstanceList.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceAuthority.h"
+#endif
 
 #include <QDebug>
 #include <QDirListing>
@@ -811,7 +814,8 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     auto instanceRoot = FS::PathCombine(rootDirOf(id), id);
 #ifdef Q_OS_WIN
     const QDir ownership(FS::PathCombine(instanceRoot, ".awake-integration"));
-    if (ownership.exists() && (!ownership.entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot).isEmpty())) {
+    if ((ownership.exists() && !ownership.entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot).isEmpty()) ||
+        Awake::Integration::InstanceAuthority::blocksNativeLoad(instanceRoot)) {
         qWarning() << "Instance requires external ownership/recovery coordination:" << instanceRoot;
         return nullptr;
     }

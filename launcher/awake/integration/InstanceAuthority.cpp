@@ -70,7 +70,7 @@ QJsonObject binding(const QString& id, QString* error)
 {
     const auto name = stem(id, error); if (name.isEmpty()) return {};
     const auto object = read(name + ".json", error);
-    if (object.size() != 9 || object["format"] != 1 || object["kernelMajor"] != 1 || object["published"] != true || object["physicalId"] != id ||
+    if (object.size() != 9 || object["format"] != 1 || object["kernelMajor"] != 2 || object["published"] != true || object["physicalId"] != id ||
         object["ownerProfile"].toString().isEmpty() || QUuid(object["registrationId"].toString()).isNull() ||
         !object["gameRecordRequired"].isBool() || object["registryIdentity"].toString().isEmpty() ||
         physicalIdentityV2(object["registry"].toString()) != object["registryIdentity"].toString()) {
@@ -98,7 +98,7 @@ bool enroll(const QString& root, const QString& id, const QString& registry, con
     const auto markerDirectory = root + "/.awake-integration";
     if (!createPrivateStorageDirectory(markerDirectory)) return false;
     const auto name = stem(id, error), marker = markerDirectory + "/ownership.json";
-    QJsonObject expected{{"format", 1}, {"kernelMajor", 1}, {"published", true}, {"physicalId", id}, {"ownerProfile", owner},
+    QJsonObject expected{{"format", 1}, {"kernelMajor", 2}, {"published", true}, {"physicalId", id}, {"ownerProfile", owner},
         {"registrationId", registration}, {"registry", QFileInfo(registry).canonicalFilePath()}, {"registryIdentity", physicalIdentityV2(registry)}};
     if (expected["registryIdentity"].toString().isEmpty()) return false;
     if (QFileInfo::exists(name + ".json")) {
@@ -121,5 +121,25 @@ bool requireGameRecord(const QString& id, QString* error)
     auto object = binding(id, error); if (object.isEmpty()) return false;
     object["gameRecordRequired"] = true;
     return write(stem(id, error) + ".json", object, error);
+}
+bool blocksNativeLoad(const QString& root)
+{
+    const auto parent = coordinationBasePath(); if (parent.isEmpty()) return true;
+    const auto directory = parent + "/authority-v1";
+    const auto attributes = [](const QString& path) {
+        const auto native = "\\\\?\\" + QDir::toNativeSeparators(path);
+        const auto flags = GetFileAttributesW(reinterpret_cast<LPCWSTR>(native.utf16()));
+        return std::pair{flags, flags == INVALID_FILE_ATTRIBUTES ? GetLastError() : DWORD(ERROR_SUCCESS)};
+    };
+    const auto [flags, error] = attributes(directory);
+    if (flags == INVALID_FILE_ATTRIBUTES) return error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND;
+    if (!(flags & FILE_ATTRIBUTE_DIRECTORY) || (flags & FILE_ATTRIBUTE_REPARSE_POINT) || !storageAccessIsPrivate(parent) || !storageAccessIsPrivate(directory)) return true;
+    const auto id = physicalIdentityV2(root); if (id.isEmpty()) return true;
+    const auto key = QString::fromLatin1(QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex());
+    for (const auto* suffix : {".json", ".lock"}) {
+        const auto [recordFlags, recordError] = attributes(directory + '/' + key + suffix);
+        if (recordFlags != INVALID_FILE_ATTRIBUTES || (recordError != ERROR_FILE_NOT_FOUND && recordError != ERROR_PATH_NOT_FOUND)) return true;
+    }
+    return false;
 }
 }

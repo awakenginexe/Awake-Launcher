@@ -7,6 +7,7 @@
 #ifdef Q_OS_WIN
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/InstanceOperationScope.h"
 #endif
 #include <QCloseEvent>
@@ -123,6 +124,7 @@ private slots:
         const auto root = temporary.path() + "/instance";
         QVERIFY(QDir().mkdir(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
+        QVERIFY(InstanceAuthority::enroll(root, id, temporary.path() + "/leases", "event-scope-fixture", QUuid::createUuid().toString(QUuid::WithoutBraces)));
         auto lease = PhysicalInstanceLease::acquire(root, id, temporary.path() + "/leases"); QVERIFY(lease);
         InstanceOperationScope scope(lease);
         IntegrationPlainEventProbe plain;
@@ -611,6 +613,18 @@ version="fixture-version"
         QVERIFY(!instances->getInstanceById(id));
         QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(), original); config.close();
         QVERIFY(QDir(root).removeRecursively());
+    }
+    void missingLocalOwnershipMarkerCannotRestoreNativeWriteAccess()
+    {
+        auto* instances = APPLICATION->instances();
+        QTemporaryDir fixture(instances->primaryDir() + "/lost-ownership-XXXXXX"); QVERIFY(fixture.isValid());
+        const auto root = fixture.path(), id = QFileInfo(root).fileName();
+        QFile config(root + "/instance.cfg"); QVERIFY(config.open(QIODevice::WriteOnly)); config.write("InstanceType=OneSix\nname=Owned fixture\n"); config.close();
+        QVERIFY(Awake::Integration::InstanceAuthority::enroll(root, Awake::Integration::physicalIdentityV2(root), root + "/registry", "native-guard-fixture", QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        QVERIFY(Awake::Integration::DurableIO::remove(root + "/.awake-integration/ownership.json"));
+        QVERIFY(QDir().rmdir(root + "/.awake-integration"));
+        instances->loadList();
+        QVERIFY(!instances->getInstanceById(id));
     }
     void deletingInstanceReturnsToTheEventLoopAndPublishesStatus()
     {

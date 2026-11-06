@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QMap>
 #include <QMutex>
 #include <QString>
@@ -13,7 +14,11 @@ class OperationStore {
     ~OperationStore();
     bool open(QString* error = nullptr);
     QJsonObject begin(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId = {});
+    QJsonObject replay(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId = {}) const;
     QJsonObject get(const QString& operationId) const;
+    QJsonArray all() const;
+    bool hasRequest(const QString& operationId, const QString& method) const;
+    QJsonObject note(const QString& operationId, const QJsonObject& progress, bool cancellationRequested = false);
     QJsonObject transition(const QString& operationId, const QString& state, const QJsonObject& result = {}, const QJsonObject& error = {});
     QString directory() const { return m_directory; }
     static bool terminal(const QString& state);
@@ -25,6 +30,7 @@ class OperationStore {
     mutable QMutex m_mutex;
     quint64 m_sequence = 0;
     QJsonObject status(const QJsonObject& record) const;
+    QJsonObject replayLocked(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId) const;
     bool save(QJsonObject& record, QString* error);
 };
 }  // namespace Awake::Integration

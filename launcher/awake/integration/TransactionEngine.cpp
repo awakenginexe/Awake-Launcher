@@ -46,12 +46,29 @@ bool safePath(const QString& root, const QString& relativePath, QString* error)
         const auto native = "\\\\?\\" + QDir::toNativeSeparators(path);
         const auto attributes = GetFileAttributesW(reinterpret_cast<LPCWSTR>(native.utf16()));
         if (attributes == INVALID_FILE_ATTRIBUTES) {
-            if (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND) continue;
+            if (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND) {
+                static const QRegularExpression shortAlias("^[^ .~]{1,6}~[0-9]+(?:\\.[^ .]{1,3})?$", QRegularExpression::CaseInsensitiveOption);
+                if (parts[index].section('.', 0, 0).size() <= 8 && shortAlias.match(parts[index]).hasMatch()) {
+                    if (error) *error = "New targets resembling Windows short aliases are unsupported.";
+                    return false;
+                }
+                continue;
+            }
             if (error) *error = "Target attributes cannot be read.";
             return false;
         }
         if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) || (index + 1 < parts.size() && !(attributes & FILE_ATTRIBUTE_DIRECTORY))) {
             if (error) *error = "Linked paths and non-directory ancestors are not writable targets.";
+            return false;
+        }
+        const auto needed = GetLongPathNameW(reinterpret_cast<LPCWSTR>(native.utf16()), nullptr, 0);
+        if (!needed || needed > 32768) { if (error) *error = "Cannot resolve the target's Windows filename."; return false; }
+        QString resolved; resolved.resize(int(needed));
+        const auto count = GetLongPathNameW(reinterpret_cast<LPCWSTR>(native.utf16()), reinterpret_cast<LPWSTR>(resolved.data()), needed);
+        if (!count || count >= needed) return false;
+        resolved.truncate(int(count));
+        if (QFileInfo(QDir::fromNativeSeparators(resolved)).fileName() != parts[index]) {
+            if (error) *error = "An aliased or differently cased Windows target must use its actual filename.";
             return false;
         }
     }
@@ -112,7 +129,7 @@ QJsonObject planAt(OperationStore& store, const QString& id, const QString& root
     if (directory.isEmpty()) { if (error) *error = "No such operation."; return {}; }
     auto plan = load(directory + "/plan.json", error);
     const auto claimed = plan.take("planDigest").toString();
-    if (plan["format"].toInt() != 1 || plan["operationId"] != id || plan["physicalId"].toString() != physicalIdentityV2(root) ||
+    if (plan["format"].toInt() != 2 || plan["operationId"] != id || plan["physicalId"].toString() != physicalIdentityV2(root) ||
         plan["modsRelative"] != mods || !relative(mods) || !mods.endsWith("/mods") ||
         claimed != digest(plan) || plan["instanceRevision"].toString().size() != 64 || plan["files"].toArray().isEmpty() ||
         plan["files"].toArray().size() > 10000) { if (error) *error = "Transaction plan identity or digest is invalid."; return {}; }
@@ -231,11 +248,12 @@ QJsonObject TransactionEngine::snapshot(QString* error) const
     for (auto it = nodes.begin(); it != nodes.end(); ++it) files[it.key()] = it.value();
     return {{"physicalId", identity}, {"modsRelative", m_mods}, {"files", files}};
 }
-QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange>& changes, const QString& expected)
+QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange>& changes, const QString& expected, const QJsonObject& review)
 {
     const auto directory = area(m_store, id);
     if (directory.isEmpty()) return failure("NOT_FOUND", "No such operation.");
-    if (m_store.get(id)["result"].toObject()["state"] != "downloading") return failure("INVALID_STATE", "Preparation requires a resolved operation.");
+    const auto state = m_store.get(id)["result"].toObject()["state"].toString();
+    if (state != "downloading" && state != "resolving") return failure("INVALID_STATE", "Preparation requires a resolved operation.");
     if (changes.isEmpty() || changes.size() > 10000) return failure("LIMIT_EXCEEDED", "A plan requires 1 to 10,000 file changes.");
     QString error;
     const auto baseline = revision(&error);
@@ -256,7 +274,8 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
             (!change.stagedName.isEmpty() && !leaf(change.stagedName))) return failure("IDENTITY_CONFLICT", "Invalid, linked or colliding target.");
         targets.insert(path.toCaseFolded());
         const auto destination = m_root + '/' + path;
-        const auto before = DurableIO::hash(destination, &error);
+        const auto beforeState = DurableIO::fingerprint(destination, &error);
+        const auto before = beforeState.hash;
         const auto after = change.stagedName.isEmpty() ? QString("missing") : DurableIO::hash(directory + "/staging/" + change.stagedName, &error);
         if (before.isEmpty() || after.isEmpty() || (!change.stagedName.isEmpty() && after == "missing")) return failure("INTEGRITY_FAILED", error);
         if (before == "missing" && after == "missing") return failure("INVALID_REQUEST", "A removal target is absent.");
@@ -265,7 +284,7 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
         if (sizeBefore < 0 || sizeAfter < 0 || quint64(sizeBefore) + quint64(sizeAfter) > (1ULL << 52) - bytes)
             return failure("LIMIT_EXCEEDED", "Transaction size cannot be represented safely.");
         bytes += quint64(sizeBefore) + quint64(sizeAfter);
-        files.append(QJsonObject{{"path", path}, {"stagedName", change.stagedName}, {"beforeHash", before}, {"afterHash", after},
+        files.append(QJsonObject{{"path", path}, {"stagedName", change.stagedName}, {"beforeHash", before}, {"beforeIdentity", beforeState.identity}, {"afterHash", after},
                                  {"sizeBefore", QString::number(sizeBefore)}, {"sizeAfter", QString::number(sizeAfter)}});
         if (after == "missing") expectedFiles.remove(path); else expectedFiles[path] = after;
     }
@@ -274,10 +293,11 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
         quint64(targetVolume.bytesAvailable()) < bytes || quint64(storeVolume.bytesAvailable()) < bytes)
         return failure("IO_ERROR", "Insufficient or unverifiable disk space for backup, replacement and recovery.");
     if (revision(&error) != baseline) return failure("STALE_INSTANCE", "Instance changed during preparation.");
-    QJsonObject plan{{"format", 1}, {"operationId", id}, {"physicalId", physicalIdentityV2(m_root)}, {"modsRelative", m_mods},
+    QJsonObject plan{{"format", 2}, {"operationId", id}, {"physicalId", physicalIdentityV2(m_root)}, {"modsRelative", m_mods},
                      {"instanceRevision", baseline}, {"requiredDiskBytes", QString::number(bytes)}, {"files", files}};
     expectedState["files"] = expectedFiles;
     plan["expectedInstanceRevision"] = digest(expectedState);
+    if (!review.isEmpty()) plan["review"] = review;
     const auto planDigest = digest(plan); plan["planDigest"] = planDigest;
     if (!save(directory + "/plan.json", plan, &error) || !writeJournal(directory, id, planDigest, "prepared", 0, &error)) return failure("IO_ERROR", error);
     const auto prepared = m_store.transition(id, "prepared", plan);
@@ -318,6 +338,9 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
     if (!privateDirectory(directory + "/backups") || !privateDirectory(m_root + "/.awake-integration"))
         return failure("IO_ERROR", "Backup or recovery marker storage is unavailable.");
     if (!lease->pinDirectory(".awake-integration", &error)) return failure("IO_ERROR", error);
+    const auto evidence = m_root + "/.awake-integration/transactions/" + id;
+    if (!privateDirectory(m_root + "/.awake-integration/transactions") || !privateDirectory(evidence) ||
+        !lease->pinDirectory(".awake-integration/transactions/" + id, &error)) return failure("IO_ERROR", "Cannot secure displaced-file storage.");
     if (!writeJournal(directory, id, claimed, "backing_up", 0, &error) ||
         !save(markerPath(m_root), {{"operationId", id}, {"physicalId", lease->physicalId()}, {"planDigest", claimed},
                                   {"storePath", m_store.directory()}, {"storePhysicalId", physicalIdentityV2(m_store.directory())}}, &error))
@@ -352,8 +375,21 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
             !writeJournal(directory, id, claimed, "applying", int(index), &error) || !inject("before_replace", int(index))) return interrupted();
         if (!QDir().mkpath(QFileInfo(destination).absolutePath())) { error = "Cannot create target directory."; return interrupted(); }
         if (!lease->pinDirectory(QFileInfo(path).path(), &error)) return interrupted();
-        const bool replaced = file["afterHash"] == "missing" ? DurableIO::remove(destination, &error)
-            : DurableIO::copy(directory + "/staging/" + file["stagedName"].toString(), destination, &error);
+        const auto prefix = evidence + '/' + QString::number(index);
+        const auto incoming = QFileInfo(destination).absolutePath() + "/.awake-" + id + '-' + QString::number(index) + ".incoming";
+        QJsonObject intent{{"format", 1}, {"planDigest", claimed}, {"path", path}};
+        if (!save(prefix + ".json", intent, &error)) return interrupted();
+        QString source;
+        DurableIO::FileState sourceState;
+        if (file["afterHash"] != "missing") {
+            if (!DurableIO::stage(directory + "/staging/" + file["stagedName"].toString(), incoming, file["afterHash"].toString(),
+                [&](const QString& identity) { intent["incomingIdentity"] = identity; return save(prefix + ".json", intent, &error); }, &error)) return interrupted();
+            source = incoming; sourceState = {file["afterHash"].toString(), intent["incomingIdentity"].toString()};
+        }
+        if (!inject("before_exchange", int(index))) return interrupted();
+        const bool replaced = DurableIO::exchange(source, sourceState, destination,
+            {file["beforeHash"].toString(), file["beforeIdentity"].toString()}, prefix + ".actual", &error,
+            [&] { return inject("after_displace", int(index)); });
         if (!replaced || DurableIO::hash(destination, &error) != file["afterHash"] || !inject("after_replace", int(index))) return interrupted();
     }
     if (!writeJournal(directory, id, claimed, "verifying", int(files.size()), &error) || !verifyFiles(m_root, files, "afterHash", &error)) return interrupted();
@@ -442,19 +478,36 @@ QJsonObject TransactionEngine::recover(const QString& id, const std::shared_ptr<
         const auto file = files[index].toObject();
         const auto path = file["path"].toString(), destination = m_root + '/' + path;
         if (!safePath(m_root, path, &error)) return blocked();
-        const auto current = DurableIO::hash(destination, &error);
-        if (current == file["beforeHash"]) continue;
-        if (current.isEmpty() || (current != "missing" && current != file["afterHash"])) { error = "Unrecognized bytes preserved during recovery: " + path; return blocked(); }
+        const auto prefix = m_root + "/.awake-integration/transactions/" + id + '/' + QString::number(index);
+        const auto incoming = QFileInfo(destination).absolutePath() + "/.awake-" + id + '-' + QString::number(index) + ".incoming";
+        QJsonObject intent;
+        if (QFileInfo::exists(prefix + ".json")) {
+            intent = load(prefix + ".json", &error);
+            if (intent["format"] != 1 || intent["planDigest"] != plan["planDigest"] || intent["path"] != path) return blocked();
+        }
+        if (!DurableIO::discardIncoming(incoming, intent["incomingIdentity"].toString(),
+                                       directory + "/staging/" + file["stagedName"].toString(), &error)) return blocked();
+        const auto original = DurableIO::fingerprint(prefix + ".actual", &error, destination);
+        const DurableIO::FileState baseline{file["beforeHash"].toString(), file["beforeIdentity"].toString()};
+        if (original.hash != "missing" && (original.hash != baseline.hash || original.identity != baseline.identity)) {
+            error = "Unrecognized displaced file preserved: " + path + "; " + error; return blocked();
+        }
+        const auto current = DurableIO::fingerprint(destination, &error, destination);
+        if (current.hash == baseline.hash && current.identity == baseline.identity) {
+            if (!DurableIO::restoreAccess(destination, baseline, &error)) return blocked();
+            continue;
+        }
+        const bool installed = current.hash == file["afterHash"] && current.identity == intent["incomingIdentity"].toString();
+        const bool removed = current.hash == "missing" && original.hash == baseline.hash && original.identity == baseline.identity;
+        if ((!installed && !removed) || current.hash.isEmpty() ||
+            (baseline.hash != "missing" && original.hash == "missing")) {
+            error = "Unrecognized bytes preserved during recovery: " + path; return blocked();
+        }
         if (!writeJournal(directory, id, plan["planDigest"].toString(), "rolling_back", int(index), &error) ||
             (fault && !fault("before_restore", int(index)))) return blocked();
-        if (file["beforeHash"] == "missing") {
-            if (!DurableIO::remove(destination, &error)) return blocked();
-        } else {
-            const auto backup = directory + "/backups/" + QString::number(index);
-            if (DurableIO::hash(backup, &error) != file["beforeHash"] || !QDir().mkpath(QFileInfo(destination).absolutePath()) ||
-                !lease->pinDirectory(QFileInfo(path).path(), &error) ||
-                !DurableIO::copy(backup, destination, &error)) return blocked();
-        }
+        if (!lease->pinDirectory(QFileInfo(path).path(), &error) ||
+            !DurableIO::exchange(baseline.hash == "missing" ? QString{} : prefix + ".actual", baseline,
+                                 destination, current, prefix + ".undo-actual", &error)) return blocked();
         if (DurableIO::hash(destination, &error) != file["beforeHash"] || (fault && !fault("after_restore", int(index)))) return blocked();
     }
     if (!verifyFiles(m_root, files, "beforeHash", &error) || revision(&error) != plan["instanceRevision"].toString() ||

@@ -10,7 +10,7 @@ struct Request {
 };
 QJsonObject version();
 QJsonObject failure(const QString& code, const QString& message, bool retryable = false);
-Request parseRequest(const QByteArray& bytes);
+Request parseRequest(const QByteArray& bytes, int major = 1, int minor = 0);
 QByteArray frame(const QJsonObject& body);
 QJsonObject capabilities();
 }  // namespace Awake::Integration

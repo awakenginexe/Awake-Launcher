@@ -34,6 +34,23 @@ class AwakeOperationsTest : public QObject {
                 DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr, newAcl, nullptr) == ERROR_SUCCESS;
     }
    private slots:
+    void creationProgressAndAuthorizationSurviveRestart()
+    {
+        QTemporaryDir temporary; QString id;
+        {
+            OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+            id = store.begin("workspaces.create", "create-one", {})["result"].toObject()["operationId"].toString();
+            QVERIFY(!store.transition(id, "resolving").contains("error"));
+            QVERIFY(!store.note(id, {{"phase", "initializing"}, {"completed", "0"}, {"total", "3"}, {"unit", "files"}}).contains("error"));
+            QVERIFY(!store.transition(id, "verifying").contains("error"));
+            QVERIFY(!store.transition(id, "completed").contains("error"));
+        }
+        OperationStore reopened(temporary.path() + "/operations"); QVERIFY(reopened.open());
+        QCOMPARE(reopened.all().size(), 1);
+        QVERIFY(reopened.hasRequest(id, "workspaces.create"));
+        QCOMPARE(reopened.get(id)["result"].toObject()["progress"].toObject()["phase"].toString(), QString("initializing"));
+        QCOMPARE(reopened.begin("workspaces.create", "create-one", {})["result"].toObject()["state"].toString(), QString("completed"));
+    }
     void replacementsMustNotDiscardAlternateStreams()
     {
         QTemporaryDir temporary;

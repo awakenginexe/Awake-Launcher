@@ -12,7 +12,7 @@ QJsonObject failure(const QString& code, const QString& message, bool retryable)
 {
     return { { "error", QJsonObject{ { "code", code }, { "message", message }, { "retryable", retryable } } } };
 }
-Request parseRequest(const QByteArray& bytes)
+Request parseRequest(const QByteArray& bytes, int major, int minor)
 {
     Request out;
     out.error = "INVALID_REQUEST";
@@ -35,7 +35,7 @@ Request parseRequest(const QByteArray& bytes)
         protocol["minor"].toInt(-1) < 0)
         return out;
     out.id = body["requestId"].toString();
-    if (protocol["major"].toInt() != 1 || protocol["minor"].toInt() != 0) {
+    if (protocol["major"].toInt() != major || protocol["minor"].toInt() != minor) {
         out.error = "UNSUPPORTED_PROTOCOL";
         return out;
     }

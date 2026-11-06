@@ -36,7 +36,7 @@ bool validState(const QString& state)
         "applying", "verifying", "completed", "cancelled", "failed", "recovery_required", "rolling_back", "rolled_back"};
     return states.contains(state);
 }
-bool allowed(const QString& before, const QString& after)
+bool allowed(const QString& before, const QString& after, const QString& method)
 {
     if (OperationStore::terminal(before) || !validState(after)) return false;
     if (after == "recovery_required") return true;
@@ -45,6 +45,7 @@ bool allowed(const QString& before, const QString& after)
     if (after == "rolling_back") return before == "applying" || before == "verifying" || before == "recovery_required";
     if (after == "rolled_back") return before == "rolling_back";
     if (after == "cancelled") return before == "queued" || before == "resolving" || before == "downloading" || before == "prepared";
+    if (before == "resolving" && (after == "prepared" || (after == "verifying" && method == "workspaces.create"))) return true;
     static const QStringList order{"queued", "resolving", "downloading", "prepared", "acquiring", "revalidating", "backing_up", "applying", "verifying", "completed"};
     const auto index = order.indexOf(before);
     return index >= 0 && index + 1 < order.size() && order[index + 1] == after;
@@ -113,14 +114,18 @@ bool OperationStore::save(QJsonObject& record, QString* error)
 QJsonObject OperationStore::status(const QJsonObject& record) const
 {
     QJsonObject result;
-    for (const auto* key : {"operationId", "method", "state", "result", "error", "createdAt", "updatedAt", "sequence"})
+    for (const auto* key : {"operationId", "method", "state", "result", "error", "createdAt", "updatedAt", "sequence", "progress", "cancellationRequested"})
         if (record.contains(key)) result[key] = record[key];
     result["terminal"] = terminal(record["state"].toString());
     return result;
 }
-QJsonObject OperationStore::begin(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId)
+QJsonObject OperationStore::replay(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId) const
 {
     QMutexLocker lock(&m_mutex);
+    return replayLocked(method, key, request, operationId);
+}
+QJsonObject OperationStore::replayLocked(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId) const
+{
     if (!m_owner) return failure("RECOVERY_REQUIRED", "Operation storage is unavailable.");
     if (!safeKey(key) || method.isEmpty() || method.size() > 64 || (!operationId.isEmpty() && !validId(operationId)))
         return failure("INVALID_REQUEST", "Invalid operation identity.");
@@ -135,11 +140,20 @@ QJsonObject OperationStore::begin(const QString& method, const QString& key, con
             return {{"result", result}};
         }
     }
+    return {};
+}
+QJsonObject OperationStore::begin(const QString& method, const QString& key, const QJsonObject& request, const QString& operationId)
+{
+    QMutexLocker lock(&m_mutex);
+    const auto previous = replayLocked(method, key, request, operationId);
+    if (!previous.isEmpty()) return previous;
+    const auto requestHash = digest(canonical({{"method", method}, {"request", request}}));
     QJsonObject record;
     if (!operationId.isEmpty()) {
         if (!m_records.contains(operationId)) return failure("NOT_FOUND", "No such operation.");
         record = m_records.value(operationId);
-        if (record["state"] != "prepared") return failure("INVALID_STATE", "Only a prepared operation accepts a new Apply request.");
+        if ((method == "recovery.run" && record["state"] != "recovery_required") ||
+            (method != "recovery.run" && record["state"] != "prepared")) return failure("INVALID_STATE", "Operation cannot accept this authorization.");
     } else {
         record = {{"format", 1}, {"operationId", QUuid::createUuid().toString(QUuid::WithoutBraces)}, {"method", method},
                   {"state", "queued"}, {"createdAt", QString::number(QDateTime::currentMSecsSinceEpoch())}, {"requests", QJsonArray{}}};
@@ -160,13 +174,36 @@ QJsonObject OperationStore::get(const QString& id) const
     if (!m_records.contains(id)) return failure("NOT_FOUND", "No such operation.");
     return {{"result", status(m_records.value(id))}};
 }
+QJsonArray OperationStore::all() const
+{
+    QMutexLocker lock(&m_mutex); QJsonArray result;
+    for (const auto& record : m_records) result.append(status(record));
+    return result;
+}
+bool OperationStore::hasRequest(const QString& id, const QString& method) const
+{
+    QMutexLocker lock(&m_mutex);
+    for (const auto& value : m_records.value(id)["requests"].toArray()) if (value.toObject()["method"] == method) return true;
+    return false;
+}
+QJsonObject OperationStore::note(const QString& id, const QJsonObject& progress, bool cancellation)
+{
+    QMutexLocker lock(&m_mutex);
+    if (!m_owner || !m_records.contains(id)) return failure("NOT_FOUND", "No such operation.");
+    auto record = m_records.value(id);
+    if (terminal(record["state"].toString())) return failure("INVALID_STATE", "Operation is terminal.");
+    if (!progress.isEmpty()) record["progress"] = progress;
+    if (cancellation) record["cancellationRequested"] = true;
+    QString error;
+    return save(record, &error) ? QJsonObject{{"result", status(record)}} : failure("IO_ERROR", error);
+}
 QJsonObject OperationStore::transition(const QString& id, const QString& state, const QJsonObject& result, const QJsonObject& operationError)
 {
     QMutexLocker lock(&m_mutex);
     if (!m_owner) return failure("RECOVERY_REQUIRED", "Operation storage is unavailable.");
     if (!m_records.contains(id)) return failure("NOT_FOUND", "No such operation.");
     auto record = m_records.value(id);
-    if (!allowed(record["state"].toString(), state)) return failure("INVALID_STATE", "Invalid operation state transition.");
+    if (!allowed(record["state"].toString(), state, record["method"].toString())) return failure("INVALID_STATE", "Invalid operation state transition.");
     record["state"] = state;
     if (state == "completed") record.remove("error");
     if (!result.isEmpty()) record["result"] = result;

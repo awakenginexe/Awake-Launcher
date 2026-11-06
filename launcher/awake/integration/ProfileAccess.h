@@ -6,4 +6,5 @@ bool profileAccessIsPrivate(const QString& directory);
 bool storageAccessIsPrivate(const QString& path);
 bool createPrivateStorageDirectory(const QString& directory);
 QString privateCoordinationBase();
+QString coordinationBasePath();
 }

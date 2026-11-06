@@ -16,7 +16,7 @@ class TransactionEngine {
     using FaultHook = std::function<bool(const QString& point, int fileIndex)>;
     TransactionEngine(OperationStore& store, QString instanceRoot, QString modsRelative);
     QString revision(QString* error = nullptr) const;
-    QJsonObject prepare(const QString& operationId, const QList<FileChange>& changes, const QString& expectedRevision);
+    QJsonObject prepare(const QString& operationId, const QList<FileChange>& changes, const QString& expectedRevision, const QJsonObject& review = {});
     QJsonObject apply(const QString& operationId, const QString& planDigest, const QString& expectedRevision,
                       const std::shared_ptr<PhysicalInstanceLease>& lease, FaultHook fault = {});
     QJsonObject complete(const QString& operationId, const std::shared_ptr<PhysicalInstanceLease>& lease, FaultHook fault = {});

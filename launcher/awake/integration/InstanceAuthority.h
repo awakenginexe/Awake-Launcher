@@ -10,4 +10,5 @@ void* lock(const QString& physicalId, QString* error = nullptr);
 QJsonObject binding(const QString& physicalId, QString* error = nullptr);
 bool validate(const QString& root, const QString& physicalId, const QString& registry, QString* error = nullptr);
 bool requireGameRecord(const QString& physicalId, QString* error = nullptr);
+bool blocksNativeLoad(const QString& instanceRoot);
 }

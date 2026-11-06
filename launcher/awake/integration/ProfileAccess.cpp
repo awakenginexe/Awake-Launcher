@@ -143,19 +143,23 @@ bool createPrivateStorageDirectory(const QString& directory)
 {
     return createPrivateStorageDirectoryImpl(directory, false);
 }
-QString privateCoordinationBase()
+QString coordinationBasePath()
 {
 #ifdef Q_OS_WIN
     PWSTR value = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &value))) return {};
     const auto parent = QFileInfo(QString::fromWCharArray(value)).canonicalFilePath(); CoTaskMemFree(value);
     if (parent.isEmpty()) return {};
-    // The OS-selected parent can have capability ACEs; the new child has a protected user-only DACL.
-    const auto directory = parent + "/AwakeSharedCore";
-    if (!createPrivateStorageDirectoryImpl(directory, true)) return {};
-    return QFileInfo(directory).canonicalFilePath();
+    return parent + "/AwakeSharedCore";
 #else
     return {};
 #endif
+}
+QString privateCoordinationBase()
+{
+    const auto directory = coordinationBasePath();
+    // The OS-selected parent can have capability ACEs; the new child has a protected user-only DACL.
+    if (directory.isEmpty() || !createPrivateStorageDirectoryImpl(directory, true)) return {};
+    return QFileInfo(directory).canonicalFilePath();
 }
 }  // namespace Awake::Integration

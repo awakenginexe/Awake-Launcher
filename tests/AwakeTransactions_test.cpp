@@ -28,9 +28,9 @@ std::shared_ptr<PhysicalInstanceLease> leaseFor(const QString& root)
 {
     return fixtureLease(root, physicalIdentityV2(root), QFileInfo(root).absolutePath() + "/leases");
 }
-QString operation(OperationStore& store)
+QString operation(OperationStore& store, const QString& key = "fixture")
 {
-    const auto id = store.begin("plans.prepare", "fixture", {})["result"].toObject()["operationId"].toString();
+    const auto id = store.begin("plans.prepare", key, {})["result"].toObject()["operationId"].toString();
     store.transition(id, "resolving"); store.transition(id, "downloading");
     QDir().mkpath(store.directory() + '/' + id + "/staging");
     return id;
@@ -54,6 +54,8 @@ int child(const QStringList& arguments)
     QProcess process;
     process.start(QCoreApplication::applicationFilePath(), arguments);
     if (!process.waitForFinished(15000)) { process.kill(); process.waitForFinished(5000); return -1; }
+    const auto diagnostic = process.readAllStandardError() + process.readAllStandardOutput();
+    if (!diagnostic.isEmpty()) qWarning().noquote() << diagnostic;
     return process.exitCode();
 }
 QByteArray bytes(const QString& path)
@@ -71,6 +73,66 @@ bool keeperFinished(const QString& registry)
 class AwakeTransactionsTest : public QObject {
     Q_OBJECT
    private slots:
+    void sameTargetEditsArePreservedDuringReplacementAndRemoval_data()
+    {
+        QTest::addColumn<bool>("removal"); QTest::addColumn<QString>("point");
+        QTest::newRow("replace") << false << QString("before_replace");
+        QTest::newRow("remove") << true << QString("before_replace");
+        QTest::newRow("after-copy") << false << QString("before_exchange");
+        QTest::newRow("occupied-gap") << false << QString("after_displace");
+    }
+    void sameTargetEditsArePreservedDuringReplacementAndRemoval()
+    {
+        QFETCH(bool, removal);
+        QFETCH(QString, point);
+        {
+            QTemporaryDir temporary; const auto root = temporary.path() + "/instance";
+            OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+            auto plan = threeFilePlan(store, root);
+            if (removal) {
+                const auto id = operation(store, "removal"); TransactionEngine engine(store, root, ".minecraft/mods");
+                plan = engine.prepare(id, {{".minecraft/mods/0.jar", {}}}, engine.revision())["result"].toObject();
+            }
+            auto lease = leaseFor(root); QVERIFY(lease); TransactionEngine engine(store, root, ".minecraft/mods");
+            const auto result = engine.apply(plan["operationId"].toString(), plan["planDigest"].toString(), plan["instanceRevision"].toString(), lease,
+                [&](const QString& phase, int index) { return phase != point || index != 0 || put(root + "/.minecraft/mods/0.jar", "user edit"); });
+            QVERIFY(result.contains("error"));
+            QCOMPARE(bytes(root + "/.minecraft/mods/0.jar"), QByteArray("user edit"));
+            QCOMPARE(store.get(plan["operationId"].toString())["result"].toObject()["state"].toString(), QString("recovery_required"));
+        }
+    }
+    void windowsEquivalentAndShortAliasTargetsAreNotDistinctFiles()
+    {
+        QTemporaryDir temporary; const auto root = temporary.path() + "/instance";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto filename = QString("Long existing manually installed artifact.jar");
+        const auto path = root + "/.minecraft/mods/" + filename;
+        QVERIFY(put(path, "preserve unknown bytes"));
+        const auto native = QDir::toNativeSeparators(path);
+        const auto needed = GetShortPathNameW(reinterpret_cast<LPCWSTR>(native.utf16()), nullptr, 0);
+        QVERIFY(needed);
+        QString shortPath; shortPath.resize(int(needed));
+        const auto count = GetShortPathNameW(reinterpret_cast<LPCWSTR>(native.utf16()), reinterpret_cast<LPWSTR>(shortPath.data()), needed);
+        QVERIFY(count && count < needed); shortPath.truncate(int(count));
+        const auto alias = QFileInfo(QDir::fromNativeSeparators(shortPath)).fileName();
+        if (alias == filename) QSKIP("8.3 aliases are disabled on this test volume.");
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open()); const auto id = operation(store);
+        QVERIFY(put(store.directory() + '/' + id + "/staging/artifact", "replacement"));
+        TransactionEngine engine(store, root, ".minecraft/mods");
+        QVERIFY(engine.prepare(id, {{".minecraft/mods/" + alias, "artifact"}}, engine.revision()).contains("error"));
+        QCOMPARE(bytes(path), QByteArray("preserve unknown bytes"));
+    }
+    void windowsOrdinalAliasesCannotEnterOnePlanTwice()
+    {
+        QTemporaryDir temporary; const auto root = temporary.path() + "/instance";
+        QVERIFY(put(root + "/instance.cfg", "fixture")); QVERIFY(put(root + "/.minecraft/mods/I.jar", "before"));
+        const auto other = QString::fromUtf8("\xc4\xb1.jar");
+        if (!QFileInfo::exists(root + "/.minecraft/mods/" + other)) QSKIP("This filesystem does not equate these Unicode names.");
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open()); const auto id = operation(store);
+        QVERIFY(put(store.directory() + '/' + id + "/staging/one", "one")); QVERIFY(put(store.directory() + '/' + id + "/staging/two", "two"));
+        TransactionEngine engine(store, root, ".minecraft/mods");
+        QVERIFY(engine.prepare(id, {{".minecraft/mods/I.jar", "one"}, {".minecraft/mods/" + other, "two"}}, engine.revision()).contains("error"));
+    }
     void lostCanonicalOwnershipCannotBeReenrolledAsANewInstance()
     {
         QTemporaryDir temporary;
@@ -501,7 +563,8 @@ class AwakeTransactionsTest : public QObject {
         QVERIFY(QFile::exists(store.directory() + '/' + id + "/backups/0"));
         QVERIFY(QFile::exists(root + "/.awake-integration/recovery.json"));
         QVERIFY(put(root + "/.minecraft/mods/0.jar", "new-0"));
-        QCOMPARE(engine.recover(id, lease)["result"].toObject()["state"].toString(), QString("rolled_back"));
+        QCOMPARE(engine.recover(id, lease)["error"].toObject()["code"].toString(), QString("RECOVERY_REQUIRED"));
+        QCOMPARE(bytes(root + "/.minecraft/mods/0.jar"), QByteArray("new-0"));
     }
     void corruptJournalBlocksRecoveryWithoutDeletingEvidence()
     {
@@ -625,11 +688,16 @@ int main(int argc, char** argv)
                 if (point == "after_commit_record") ExitProcess(89);
                 return true;
             });
-        } else
-            engine.recover(arguments[4], lease, [](const QString& point, int index) {
+        } else {
+            const auto recovered = engine.recover(arguments[4], lease, [](const QString& point, int index) {
                 if (point == "after_restore" && index == 1) ExitProcess(87);
                 return true;
             });
+            QFile diagnostic;
+            if (diagnostic.open(stderr, QIODevice::WriteOnly)) {
+                diagnostic.write(QJsonDocument(recovered).toJson(QJsonDocument::Compact)); diagnostic.flush();
+            }
+        }
         return 33;
     }
     AwakeTransactionsTest test;
