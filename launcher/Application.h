@@ -67,6 +67,7 @@ class QNetworkAccessManager;
 class JavaInstallList;
 class ExternalUpdater;
 namespace Awake { class UpdateChecker; }
+namespace Awake::Integration { class Coordinator; }
 class BaseProfilerFactory;
 class BaseDetachedToolFactory;
 class TranslationsModel;
@@ -259,6 +260,7 @@ class Application : public QApplication {
     std::unique_ptr<SettingsObject> m_settings;
     std::unique_ptr<SettingsObject> m_playtimeSettings;
     std::unique_ptr<InstanceList> m_instances;
+    std::unique_ptr<Awake::Integration::Coordinator> m_integration;
     std::unique_ptr<IconList> m_icons;
     std::unique_ptr<JavaInstallList> m_javalist;
     std::unique_ptr<TranslationsModel> m_translations;

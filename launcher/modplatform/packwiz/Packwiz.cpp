@@ -21,10 +21,12 @@
 
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QObject>
 #include <algorithm>
 #include <compare>
 #include <sstream>
+#include <string_view>
 #include <string>
 
 #include "FileSystem.h"
@@ -268,13 +270,26 @@ void V1::deleteModIndex(const QDir& indexDir, QString& modSlug)
 
 auto V1::getIndexForMod(const QDir& indexDir, const QString& slug) -> Mod
 {
-    Mod mod;
-
     auto normalizedFname = indexFileName(slug);
     auto realFname = getRealIndexName(indexDir, normalizedFname, true);
-    if (realFname.isEmpty()) {
+    if (realFname.isEmpty()) return {};
+    QFile file(indexDir.absoluteFilePath(realFname));
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Could not open mod metadata:" << realFname;
         return {};
     }
+    const auto contents = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        qWarning() << "Mod metadata read failed:" << file.errorString();
+        return {};
+    }
+    return parseModIndex(contents, slug);
+}
+
+auto V1::parseModIndex(const QByteArray& contents, const QString& slug) -> Mod
+{
+    Mod mod;
+    const auto source = std::string_view(contents.constData(), size_t(contents.size()));
 
     toml::table table;
 #if TOML_EXCEPTIONS
@@ -282,23 +297,21 @@ auto V1::getIndexForMod(const QDir& indexDir, const QString& slug) -> Mod
     // the latter not being caught here when compiled with libc++.
     // See https://github.com/PrismLauncher/PrismLauncher/issues/6047.
     try {
-        table = toml::parse_file(StringUtils::toStdString(indexDir.absoluteFilePath(realFname)));
+        table = toml::parse(source);
     } catch (const std::exception& err) {
-        qWarning() << QString("Could not open file %1!").arg(normalizedFname);
+        qWarning() << QString("Could not open file %1!").arg(slug);
         qWarning() << "Reason:" << QString(err.what());
         return {};
     }
 #else
-    toml::parse_result result = toml::parse_file(StringUtils::toStdString(indexDir.absoluteFilePath(realFname)));
+    toml::parse_result result = toml::parse(source);
     if (!result) {
-        qWarning() << QString("Could not open file %1!").arg(normalizedFname);
+        qWarning() << QString("Could not open file %1!").arg(slug);
         qWarning() << "Reason:" << result.error().description();
         return {};
     }
     table = result.table();
 #endif
-
-    // index_file.close();
 
     mod.slug = slug;
 

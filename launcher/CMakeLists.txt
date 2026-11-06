@@ -1263,6 +1263,11 @@ if(Launcher_ENABLE_AWAKE_WEB)
     include(${CMAKE_SOURCE_DIR}/cmake/AwakeWeb.cmake)
 endif()
 add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES} ${AWAKE_WEB_SOURCES}
+    awake/integration/Protocol.cpp awake/integration/Protocol.h
+    awake/integration/InstanceDiscovery.cpp awake/integration/InstanceDiscovery.h
+    awake/integration/IntegrationServer.cpp awake/integration/IntegrationServer.h
+    awake/integration/ProfileAccess.cpp awake/integration/ProfileAccess.h
+    awake/integration/Coordinator.cpp awake/integration/Coordinator.h
     awake/LocalePolicy.cpp awake/LocalePolicy.h
     awake/DesignTokens.cpp awake/DesignTokens.h awake/AwakeTheme.cpp awake/AwakeTheme.h
     awake/GpuSelection.cpp awake/GpuSelection.h
@@ -1271,6 +1276,10 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
     awake/InstanceArtwork.cpp awake/InstanceArtwork.h awake/VisualControls.cpp awake/VisualControls.h
     awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h
     ${AWAKE_QM_FILES} ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp)
+if(WIN32)
+    target_link_libraries(Launcher_logic advapi32)
+endif()
+
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(Launcher_logic PUBLIC LAUNCHER_APPLICATION)
 if(Launcher_ENABLE_AWAKE_WEB)
