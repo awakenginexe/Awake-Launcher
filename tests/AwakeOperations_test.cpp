@@ -4,13 +4,75 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QScopeGuard>
+#include <aclapi.h>
 #include <qt_windows.h>
 #include "awake/integration/OperationStore.h"
 #include "awake/integration/DurableIO.h"
+#include "awake/integration/ProfileAccess.h"
 using namespace Awake::Integration;
 class AwakeOperationsTest : public QObject {
     Q_OBJECT
+    static bool publicRead(const QString& directory)
+    {
+        BYTE everyone[SECURITY_MAX_SID_SIZE]; DWORD size = sizeof(everyone);
+        if (!CreateWellKnownSid(WinWorldSid, nullptr, everyone, &size)) return false;
+        const auto path = QDir::toNativeSeparators(directory);
+        PSECURITY_DESCRIPTOR descriptor = nullptr;
+        PACL oldAcl = nullptr, newAcl = nullptr;
+        if (GetNamedSecurityInfoW(const_cast<LPWSTR>(reinterpret_cast<LPCWSTR>(path.utf16())), SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION, nullptr, nullptr, &oldAcl, nullptr, &descriptor) != ERROR_SUCCESS) return false;
+        auto cleanup = qScopeGuard([&] { LocalFree(descriptor); if (newAcl) LocalFree(newAcl); });
+        EXPLICIT_ACCESSW access{};
+        access.grfAccessPermissions = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
+        access.grfAccessMode = GRANT_ACCESS;
+        access.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+        access.Trustee.TrusteeForm = TRUSTEE_IS_SID;
+        access.Trustee.ptstrName = reinterpret_cast<LPWSTR>(everyone);
+        return SetEntriesInAclW(1, &access, oldAcl, &newAcl) == ERROR_SUCCESS &&
+            SetNamedSecurityInfoW(const_cast<LPWSTR>(reinterpret_cast<LPCWSTR>(path.utf16())), SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr, newAcl, nullptr) == ERROR_SUCCESS;
+    }
    private slots:
+    void recoveryStorageMustRejectAnExistingPublicReadDirectory()
+    {
+        QTemporaryDir temporary;
+        const auto path = temporary.path() + "/operations";
+        QVERIFY(QDir().mkpath(path));
+        QVERIFY(publicRead(path));
+        QVERIFY(profileAccessIsPrivate(path));
+        OperationStore store(path);
+        QVERIFY(!store.open());
+        QVERIFY(store.begin("plans.prepare", "fixture", {}).contains("error"));
+    }
+    void newRecoveryStorageDoesNotInheritPublicReadAccess()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(publicRead(temporary.path()));
+        QVERIFY(profileAccessIsPrivate(temporary.path()));
+        QVERIFY(!storageAccessIsPrivate(temporary.path()));
+        OperationStore store(temporary.path() + "/operations");
+        QVERIFY(store.open());
+        QVERIFY(storageAccessIsPrivate(store.directory()));
+        const auto id = store.begin("plans.prepare", "fixture", {})["result"].toObject()["operationId"].toString();
+        QVERIFY(!id.isEmpty());
+        QVERIFY(storageAccessIsPrivate(store.directory() + '/' + id + ".json"));
+        QVERIFY(!storageAccessIsPrivate(temporary.path()));
+    }
+    void publiclyReadableRecoveryRecordFailsClosed()
+    {
+        QTemporaryDir temporary;
+        QString id;
+        {
+            OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+            id = store.begin("plans.prepare", "fixture", {})["result"].toObject()["operationId"].toString();
+        }
+        const auto record = temporary.path() + "/operations/" + id + ".json";
+        QVERIFY(publicRead(record));
+        OperationStore reopened(temporary.path() + "/operations");
+        QVERIFY(!reopened.open());
+        QVERIFY(QFile::exists(record));
+    }
     void acceptanceIsDurableAndIdempotent()
     {
         QTemporaryDir temporary;

@@ -135,5 +135,13 @@ if(WIN32)
     target_include_directories(AwakeOperations PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
     target_link_libraries(AwakeOperations advapi32)
     set_tests_properties(AwakeOperations PROPERTIES TIMEOUT 60)
+    ecm_add_test(AwakeTransactions_test.cpp ../launcher/awake/integration/TransactionEngine.cpp
+        ../launcher/awake/integration/PhysicalInstanceLease.cpp ../launcher/awake/integration/OperationStore.cpp
+        ../launcher/awake/integration/DurableIO.cpp ../launcher/awake/integration/InstanceDiscovery.cpp
+        ../launcher/awake/integration/Protocol.cpp ../launcher/awake/integration/ProfileAccess.cpp
+        LINK_LIBRARIES Qt6::Core Qt6::Test TEST_NAME AwakeTransactions)
+    target_include_directories(AwakeTransactions PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+    target_link_libraries(AwakeTransactions advapi32)
+    set_tests_properties(AwakeTransactions PROPERTIES TIMEOUT 120)
 endif()
 set_tests_properties(AwakeIntegration PROPERTIES TIMEOUT 60)

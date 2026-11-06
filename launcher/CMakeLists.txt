@@ -1277,6 +1277,10 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
     awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h
     ${AWAKE_QM_FILES} ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp)
 if(WIN32)
+    target_sources(Launcher_logic PRIVATE awake/integration/DurableIO.cpp awake/integration/DurableIO.h
+        awake/integration/OperationStore.cpp awake/integration/OperationStore.h
+        awake/integration/PhysicalInstanceLease.cpp awake/integration/PhysicalInstanceLease.h
+        awake/integration/TransactionEngine.cpp awake/integration/TransactionEngine.h)
     target_link_libraries(Launcher_logic advapi32)
 endif()
 

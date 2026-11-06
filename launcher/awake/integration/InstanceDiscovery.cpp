@@ -14,6 +14,37 @@
 #include <sys/stat.h>
 #endif
 namespace Awake::Integration {
+QString physicalIdentityV2(const QString& path)
+{
+#ifdef Q_OS_WIN
+    const auto canonical = QFileInfo(path).canonicalFilePath();
+    if (canonical.isEmpty()) return {};
+    const auto name = "\\\\?\\" + QDir::toNativeSeparators(canonical);
+    const auto handle = CreateFileW(reinterpret_cast<LPCWSTR>(name.utf16()), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return {};
+    const auto flags = FILE_NAME_NORMALIZED | VOLUME_NAME_GUID;
+    const auto needed = GetFinalPathNameByHandleW(handle, nullptr, 0, flags);
+    FILE_ID_INFO information{};
+    if (!needed || needed > 32768 || !GetFileInformationByHandleEx(handle, FileIdInfo, &information, sizeof(information))) {
+        CloseHandle(handle);
+        return {};
+    }
+    QString final;
+    final.resize(needed);
+    const auto count = GetFinalPathNameByHandleW(handle, reinterpret_cast<LPWSTR>(final.data()), needed, flags);
+    CloseHandle(handle);
+    if (!count || count >= needed) return {};
+    final.truncate(count);
+    const auto end = final.indexOf('}');
+    if (!final.startsWith("\\\\?\\Volume{") || end < 11) return {};
+    return "win2:" + final.mid(11, end - 11).toLower() + ':' +
+        QString::fromLatin1(QByteArray(reinterpret_cast<const char*>(information.FileId.Identifier), 16).toHex());
+#else
+    Q_UNUSED(path)
+    return {};
+#endif
+}
 QString physicalIdentity(const QString& path)
 {
     const auto canonical = QFileInfo(path).canonicalFilePath();

@@ -10,6 +10,7 @@ struct InstanceSeed {
     QString activity;
 };
 QString physicalIdentity(const QString& path);
+QString physicalIdentityV2(const QString& path);
 QJsonObject discover(const QStringList& roots, const QList<InstanceSeed>& loaded);
 QJsonObject inventory(const InstanceSeed& instance, int offset, int limit, const QString& expectedRevision = {});
 }  // namespace Awake::Integration

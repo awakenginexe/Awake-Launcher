@@ -40,6 +40,7 @@ bool allowed(const QString& before, const QString& after)
 {
     if (OperationStore::terminal(before) || !validState(after)) return false;
     if (after == "recovery_required") return true;
+    if (before == "recovery_required" && after == "verifying") return true;
     if (after == "failed") return before != "applying" && before != "verifying" && before != "rolling_back" && before != "recovery_required";
     if (after == "rolling_back") return before == "applying" || before == "verifying" || before == "recovery_required";
     if (after == "rolled_back") return before == "rolling_back";
@@ -57,8 +58,8 @@ bool OperationStore::open(QString* error)
     const auto reject = [error](const QString& message) { if (error) *error = message; return false; };
     if (m_owner) return reject("Operation store is already open.");
     const QFileInfo requested(m_directory);
-    if (requested.isSymLink() || requested.isJunction() || !profileAccessIsPrivate(requested.absolutePath()) ||
-        !QDir().mkpath(m_directory) || !profileAccessIsPrivate(m_directory)) return reject("Operation storage is not a private local directory.");
+    if (requested.isSymLink() || requested.isJunction() || !createPrivateStorageDirectory(m_directory))
+        return reject("Operation storage is not a private local directory.");
     m_directory = QFileInfo(m_directory).canonicalFilePath();
     auto owner = std::make_unique<QLockFile>(QDir(m_directory).filePath("store.lock"));
     owner->setStaleLockTime(0);
@@ -68,7 +69,8 @@ bool OperationStore::open(QString* error)
     quint64 sequence = 0;
     for (const auto& entry : QDir(m_directory).entryInfoList({"*.json"}, QDir::Files | QDir::Hidden | QDir::System)) {
         QString ioError;
-        if (!validId(entry.completeBaseName()) || DurableIO::hash(entry.absoluteFilePath(), &ioError).isEmpty() || entry.size() > 8 * 1024 * 1024)
+        if (!validId(entry.completeBaseName()) || !storageAccessIsPrivate(entry.absoluteFilePath()) ||
+            DurableIO::hash(entry.absoluteFilePath(), &ioError).isEmpty() || entry.size() > 8 * 1024 * 1024)
             return reject("Invalid operation record: " + entry.fileName());
         QFile file(entry.absoluteFilePath());
         if (!file.open(QIODevice::ReadOnly)) return reject("Cannot read operation record.");
@@ -166,6 +168,7 @@ QJsonObject OperationStore::transition(const QString& id, const QString& state, 
     auto record = m_records.value(id);
     if (!allowed(record["state"].toString(), state)) return failure("INVALID_STATE", "Invalid operation state transition.");
     record["state"] = state;
+    if (state == "completed") record.remove("error");
     if (!result.isEmpty()) record["result"] = result;
     if (!operationError.isEmpty()) record["error"] = operationError;
     QString error;
