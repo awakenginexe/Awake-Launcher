@@ -116,3 +116,14 @@ set_tests_properties(CurseForge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscree
 
 ecm_add_test(MicrosoftAuth_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME MicrosoftAuth)
 set_tests_properties(MicrosoftAuth PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 120)
+
+ecm_add_test(AwakeIntegration_test.cpp
+    ../launcher/awake/integration/Protocol.cpp ../launcher/awake/integration/InstanceDiscovery.cpp
+    ../launcher/awake/integration/IntegrationServer.cpp ../launcher/awake/integration/ProfileAccess.cpp
+    LINK_LIBRARIES Qt6::Core Qt6::Network Qt6::Test TEST_NAME AwakeIntegration)
+target_include_directories(AwakeIntegration PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+
+if(WIN32)
+    target_link_libraries(AwakeIntegration advapi32)
+endif()
+set_tests_properties(AwakeIntegration PROPERTIES TIMEOUT 60)
