@@ -41,6 +41,7 @@
  */
 
 #include "Application.h"
+#include <QElapsedTimer>
 #include "awake/integration/Coordinator.h"
 #include "BuildConfig.h"
 
@@ -1413,6 +1414,9 @@ bool Application::event(QEvent* event)
 
 void Application::performMainStartupAction()
 {
+    const bool traceStartup = qEnvironmentVariableIsSet("AWAKE_STARTUP_TIMING");
+    QElapsedTimer phaseTimer;
+    if (traceStartup) phaseTimer.start();
     m_status = Application::Initialized;
     m_integration = std::make_unique<Awake::Integration::Coordinator>(m_instances.get(), m_rootPath, QDir::currentPath(), m_portable,
         [this](MinecraftInstance* instance) {
@@ -1427,6 +1431,7 @@ void Application::performMainStartupAction()
     QString integrationError;
     if (!m_integration->start(&integrationError)) qInfo() << "Modpack Manager integration unavailable:" << integrationError;
     connect(this, &Application::aboutToQuit, m_integration.get(), &Awake::Integration::Coordinator::stop);
+    if (traceStartup) qInfo() << "Startup phase: integration" << phaseTimer.elapsed() << "ms";
     if (!m_instanceIdToLaunch.isEmpty()) {
         auto* inst = instances()->getInstanceById(m_instanceIdToLaunch);
         if (inst) {
@@ -1468,7 +1473,9 @@ void Application::performMainStartupAction()
     }
     if (!m_mainWindow) {
         // normal main window
+        if (traceStartup) phaseTimer.restart();
         showMainWindow(false);
+        if (traceStartup) qInfo() << "Startup phase: main window" << phaseTimer.elapsed() << "ms";
         qDebug() << "<> Main window shown.";
     }
 
