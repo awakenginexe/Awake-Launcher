@@ -69,6 +69,7 @@ set(CORE_SOURCES
     # JSON parsing helpers
     Json.h
     Json.cpp
+    JsonFile.cpp
 
     FileSystem.h
     FileSystem.cpp
@@ -550,6 +551,7 @@ set(FLAME_SOURCES
 
 set(MODRINTH_SOURCES
     modplatform/modrinth/ModrinthPackIndex.cpp
+    modplatform/modrinth/ModrinthMetadata.cpp
     modplatform/modrinth/ModrinthPackIndex.h
     modplatform/modrinth/ModrinthCheckUpdate.cpp
     modplatform/modrinth/ModrinthCheckUpdate.h
@@ -612,6 +614,7 @@ set(PRISMUPDATER_SOURCES
 
     Json.h
     Json.cpp
+    JsonFile.cpp
     FileSystem.h
     FileSystem.cpp
     StringUtils.h
@@ -1269,6 +1272,9 @@ set(INTEGRATION_BRIDGE_SOURCES
     awake/integration/ProfileAccess.cpp awake/integration/ProfileAccess.h)
 if(WIN32)
     set(INTEGRATION_BRIDGE_SOURCES)
+    list(REMOVE_ITEM LOGIC_SOURCES Json.cpp StringUtils.cpp Version.cpp settings/INIFile.cpp
+        modplatform/ModIndex.cpp modplatform/ResourceType.cpp modplatform/modrinth/ModrinthPackIndex.cpp
+        modplatform/modrinth/ModrinthMetadata.cpp modplatform/packwiz/Packwiz.cpp)
 endif()
 add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHER_RESOURCES} ${AWAKE_WEB_SOURCES} ${INTEGRATION_BRIDGE_SOURCES}
     awake/integration/Coordinator.cpp awake/integration/Coordinator.h
@@ -1281,7 +1287,7 @@ add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_SOURCES} ${LAUNCHE
     awake/LibraryWidget.cpp awake/LibraryWidget.h awake/LibraryDelegate.cpp awake/LibraryDelegate.h
     ${AWAKE_QM_FILES} ${CMAKE_CURRENT_BINARY_DIR}/qrc_awake_translations.cpp)
 if(WIN32)
-    target_link_libraries(Launcher_logic AwakeCore)
+    target_link_libraries(Launcher_logic AwakeCore AwakeResourceCore)
 endif()
 
 target_include_directories(Launcher_logic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

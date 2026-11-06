@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.25)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    project(AwakeNativeCore VERSION 0.1.0 LANGUAGES CXX)
+    project(AwakeNativeCore VERSION 0.1.1 LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 23)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Core Network)
@@ -21,6 +21,42 @@ add_library(AwakeCore STATIC
 target_compile_features(AwakeCore PUBLIC cxx_std_23)
 target_include_directories(AwakeCore PUBLIC "${AWAKE_SOURCE_ROOT}/launcher")
 target_link_libraries(AwakeCore PUBLIC Qt6::Core Qt6::Network advapi32 shell32 ole32 uuid)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    find_package(tomlplusplus 3.2 REQUIRED)
+endif()
+add_library(AwakeResourceCore STATIC
+    "${AWAKE_SOURCE_ROOT}/launcher/Json.cpp" "${AWAKE_SOURCE_ROOT}/launcher/StringUtils.cpp"
+    "${AWAKE_SOURCE_ROOT}/launcher/Version.cpp" "${AWAKE_SOURCE_ROOT}/launcher/settings/INIFile.cpp"
+    "${AWAKE_SOURCE_ROOT}/launcher/modplatform/ModIndex.cpp" "${AWAKE_SOURCE_ROOT}/launcher/modplatform/ResourceType.cpp"
+    "${AWAKE_SOURCE_ROOT}/launcher/modplatform/modrinth/ModrinthMetadata.cpp"
+    "${AWAKE_SOURCE_ROOT}/launcher/modplatform/modrinth/ModrinthPackIndex.cpp"
+    "${AWAKE_SOURCE_ROOT}/launcher/modplatform/packwiz/Packwiz.cpp")
+target_include_directories(AwakeResourceCore PUBLIC "${AWAKE_SOURCE_ROOT}/launcher")
+target_link_libraries(AwakeResourceCore PUBLIC Qt6::Core)
+if(TARGET PkgConfig::tomlplusplus)
+    target_link_libraries(AwakeResourceCore PRIVATE PkgConfig::tomlplusplus)
+else()
+    target_link_libraries(AwakeResourceCore PRIVATE tomlplusplus::tomlplusplus)
+endif()
+add_library(AwakeCoreServices STATIC Contract.cpp ModrinthService.cpp WorkspaceServices.cpp WorkspacePlans.cpp CoreBackend.cpp)
+target_include_directories(AwakeCoreServices PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(AwakeCoreServices PUBLIC AwakeCore AwakeResourceCore)
+qt_add_resources(AwakeCoreServices "core_contract" PREFIX "/awake" BASE "${AWAKE_SOURCE_ROOT}/docs/modpack-manager"
+    FILES "${AWAKE_SOURCE_ROOT}/docs/modpack-manager/core.schema.json")
+add_executable(awake-core-host main.cpp)
+target_link_libraries(awake-core-host PRIVATE AwakeCoreServices)
+install(TARGETS awake-core-host RUNTIME DESTINATION core-host/windows-x64 COMPONENT CoreHost)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_executable(AwakeCoreServicesTest CoreServices_test.cpp)
+    target_link_libraries(AwakeCoreServicesTest PRIVATE AwakeCoreServices Qt6::Test)
+    add_test(NAME AwakeCoreServicesTest COMMAND AwakeCoreServicesTest)
+    add_executable(AwakeWorkspacesTest WorkspaceServices_test.cpp)
+    target_link_libraries(AwakeWorkspacesTest PRIVATE AwakeCoreServices Qt6::Test)
+    add_test(NAME AwakeWorkspacesTest COMMAND AwakeWorkspacesTest)
+    # Durable install + 301-project update performs over 1,500 guarded file changes.
+    set_tests_properties(AwakeWorkspacesTest PROPERTIES ENVIRONMENT "QTEST_FUNCTION_TIMEOUT=900000" TIMEOUT 1200)
+endif()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     foreach(name AwakeIntegration AwakeOperations AwakeTransactions)

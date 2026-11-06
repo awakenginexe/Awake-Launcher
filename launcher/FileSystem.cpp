@@ -36,6 +36,7 @@
  */
 
 #include "FileSystem.h"
+#include "NativePaths.h"
 #include <qcontainerfwd.h>
 #include <QPair>
 
@@ -337,11 +338,7 @@ bool updateTimestamp(const QString& filename)
 
 bool ensureFilePathExists(const QString& filenamepath)
 {
-    QFileInfo a(filenamepath);
-    QDir dir;
-    QString ensuredPath = a.path();
-    bool success = dir.mkpath(ensuredPath);
-    return success;
+    return NativePaths::ensureFileParent(filenamepath);
 }
 
 namespace {
@@ -1006,21 +1003,9 @@ QString NormalizePath(const QString& path)
 }
 
 namespace {
-const QString g_badChars = "<>:\"|?*\r\n!";
 QString removeChars(QString source, QChar replace, const QString& extraChars = "")
 {
-    auto badChars = g_badChars;
-    if (!extraChars.isEmpty()) {
-        badChars += extraChars;
-    }
-
-    for (auto& c : source) {
-        if (c.unicode() < 0x20 || !c.isPrint() || badChars.contains(c)) {
-            c = replace;
-        }
-    }
-
-    return source;
+    return NativePaths::removeChars(std::move(source), replace, extraChars);
 }
 }  // namespace
 

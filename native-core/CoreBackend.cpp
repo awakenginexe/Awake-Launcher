@@ -1,0 +1,183 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "CoreBackend.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/ProfileAccess.h"
+#include <QCoreApplication>
+#include <QDir>
+#include <QJsonArray>
+#include <QRunnable>
+#include <QTimer>
+#include <algorithm>
+namespace Awake::Core {
+using namespace Awake::Integration;
+namespace {
+QJsonObject accepted(const QJsonObject& status)
+{
+    QJsonObject result;
+    for (const auto* key : {"operationId", "state", "terminal", "replayed"}) result[key] = status[key];
+    return {{"result", result}};
+}
+QJsonObject serviceFailure(const ServiceError& error) { return failure(error.code, error.message.left(2048), error.retryable); }
+QJsonObject page(const QJsonArray& all, const QJsonObject& params)
+{
+    QJsonArray values; const int offset = params["offset"].toInt(), limit = params["limit"].toInt(100);
+    for (int i = offset; i < all.size() && i < offset + limit; ++i) values.append(all[i]);
+    return {{"operations", values}, {"total", all.size()}, {"nextOffset", offset + values.size() < all.size() ? QJsonValue(offset + values.size()) : QJsonValue(QJsonValue::Null)}};
+}
+}
+CoreBackend::CoreBackend(QObject* parent) : QObject(parent) { m_pool.setMaxThreadCount(2); }
+CoreBackend::~CoreBackend() { m_pool.waitForDone(); }
+bool CoreBackend::start(const QString& requested, QString* error)
+{
+    try {
+        if (!m_contract.valid("core.info.params", QJsonObject{})) throw ServiceError{"INTERNAL_ERROR", "Embedded integration contract is unavailable."};
+        if (!QDir::isAbsolutePath(requested) || !createPrivateStorageDirectory(requested)) throw ServiceError{"IO_ERROR", "A private absolute local profile is required."};
+        m_profile = QFileInfo(requested).canonicalFilePath(); m_profileId = physicalIdentityV2(m_profile);
+        if (m_profileId.isEmpty()) throw ServiceError{"IO_ERROR", "Profile physical identity cannot be verified."};
+        for (const auto* child : {"workspaces", "catalog", "ownership"})
+            if (!createPrivateStorageDirectory(m_profile + '/' + child)) throw ServiceError{"IO_ERROR", "Private backend storage is unavailable."};
+        m_store = std::make_unique<OperationStore>(m_profile + "/operations"); QString reason;
+        if (!m_store->open(&reason)) throw ServiceError{"RECOVERY_REQUIRED", reason};
+        WorkspaceServices(m_profile, *m_store).startupRecovery();
+        IntegrationServer::Options options; options.major = 2; options.directory = "core-v2"; options.prefix = "awake-core-v2-";
+        options.capabilities = m_contract.capabilities(true);
+        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.1.1"}, {"storageVersion", 1}};
+        options.validate = [this](const QString& method, const QJsonObject& params) { return m_contract.valid(method + ".params", params); };
+        if (!m_server.start(m_profile, {{"role", "modpack-core"}, {"profileId", m_profileId}},
+            [this](const Request& request, IntegrationServer::Reply reply) { handle(request, std::move(reply)); }, options, &reason)) throw ServiceError{"IO_ERROR", reason};
+        m_idle.start(); auto* idle = new QTimer(this); idle->setInterval(1000);
+        connect(idle, &QTimer::timeout, this, [this] {
+            if (m_server.clientCount() || !m_jobs.isEmpty() || m_pool.activeThreadCount() || WorkspaceServices(m_profile, *m_store).unsafeToExit()) {
+                m_idle.restart(); return;
+            }
+            if (m_idle.elapsed() >= 60000) QCoreApplication::quit();
+        });
+        idle->start();
+        return true;
+    } catch (const ServiceError& e) { if (error) *error = e.code + ": " + e.message; return false; }
+}
+void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
+{
+    const auto checked = [this, method = request.method, reply](QJsonObject response) {
+        const auto key = response.contains("error") ? "error" : method + ".result";
+        const auto value = response.contains("error") ? response["error"] : response["result"];
+        reply(m_contract.valid(key, value) ? response : failure("INTERNAL_ERROR", "Native result did not match the committed contract."));
+    };
+    try {
+        WorkspaceServices services(m_profile, *m_store);
+        if (request.method == "workspaces.create" || request.method == "plans.prepare" || request.method == "transactions.apply" || request.method == "recovery.run") {
+            submit(request, checked); return;
+        }
+        if (request.method == "operations.cancel") {
+            const auto id = request.params["operationId"].toString(); const auto state = services.operation(id)["state"].toString();
+            const bool cancellable = !m_critical.contains(id) && QStringList{"queued", "resolving", "downloading", "prepared"}.contains(state);
+            if (cancellable) {
+                requireResult(m_store->note(id, {}, true));
+                if (m_jobs.contains(id)) m_jobs[id]->store(true); else requireResult(m_store->transition(id, "cancelled"));
+            }
+            checked({{"result", QJsonObject{{"cancellationRequested", cancellable}, {"cancellable", cancellable}}}}); return;
+        }
+        if (request.method == "core.shutdown") {
+            if (!m_jobs.isEmpty() || m_pool.activeThreadCount() || services.unsafeToExit()) { checked(failure("BUSY", "Active work, prepared plans or unresolved recovery must be resolved before shutdown.", true)); return; }
+            checked({{"result", QJsonObject{{"shuttingDown", true}}}});
+            QTimer::singleShot(100, qApp, &QCoreApplication::quit); return;
+        }
+        if (request.method.startsWith("operations.") || request.method == "events.poll" || request.method == "core.info" || request.method == "recovery.list") {
+            checked({{"result", read(request)}}); return;
+        }
+        m_pool.start(QRunnable::create([this, request, checked] {
+            try { checked({{"result", read(request)}}); }
+            catch (const ServiceError& error) { checked(serviceFailure(error)); }
+            catch (...) { checked(failure("INTERNAL_ERROR", "Native read failed.")); }
+        }));
+    } catch (const ServiceError& error) { checked(serviceFailure(error)); }
+}
+void CoreBackend::submit(const Request& request, IntegrationServer::Reply reply)
+{
+    WorkspaceServices services(m_profile, *m_store); const auto method = request.method; const auto params = request.params;
+    const auto existingId = params["operationId"].toString();
+    const auto replay = m_store->replay(method, params["idempotencyKey"].toString(), params, existingId);
+    if (!replay.isEmpty()) { requireResult(replay); reply(accepted(replay["result"].toObject())); return; }
+    auto physical = params["physicalId"].toString();
+    if (!existingId.isEmpty()) physical = services.context(existingId)["request"].toObject()["physicalId"].toString();
+    if (m_jobs.size() >= 16 || m_jobs.contains(existingId) || (!physical.isEmpty() && m_reserved.contains(physical)))
+        throw ServiceError{"BUSY", "The workspace or bounded operation queue is busy.", true};
+    if (method == "transactions.apply") {
+        const auto plan = services.plan({{"operationId", existingId}, {"limit", 1}});
+        if (plan["planDigest"] != params["planDigest"] || plan["instanceRevision"] != params["instanceRevision"]) throw ServiceError{"STALE_PLAN", "Apply does not identify the reviewed plan."};
+    }
+    if (method == "recovery.run" && services.context(existingId)["method"] == "workspaces.create")
+        throw ServiceError{"UNSUPPORTED_CAPABILITY", "Partial workspace initialization requires inspection; automatic deletion is unavailable."};
+    const auto begun = m_store->begin(method, params["idempotencyKey"].toString(), params, existingId); requireResult(begun);
+    const auto status = begun["result"].toObject(); const auto id = status["operationId"].toString();
+    if (status["replayed"].toBool()) { reply(accepted(status)); return; }
+    try {
+        if (existingId.isEmpty()) services.saveContext(id, method, params);
+        auto cancel = std::make_shared<std::atomic_bool>(false); m_jobs[id] = cancel;
+        if (!physical.isEmpty()) m_reserved.insert(physical);
+        if (method != "plans.prepare") m_critical.insert(id);
+        reply(accepted(status));
+        m_pool.start(QRunnable::create([this, id, physical, method, params, cancel] {
+            WorkspaceServices work(m_profile, *m_store, cancel);
+            try {
+                if (method == "workspaces.create") work.create(id, params);
+                else if (method == "plans.prepare") work.prepare(id, params);
+                else if (method == "transactions.apply") work.apply(id, params);
+                else work.recover(id);
+            } catch (const ServiceError& error) {
+                const auto status = m_store->get(id)["result"].toObject(); const auto state = status["state"].toString();
+                if (!status["terminal"].toBool()) {
+                    const bool live = QStringList{"acquiring", "revalidating", "backing_up", "applying", "verifying", "rolling_back", "recovery_required"}.contains(state) ||
+                        (method == "workspaces.create" && QFileInfo::exists(m_profile + "/workspaces/" + id));
+                    const auto target = live ? "recovery_required" : error.code == "CANCELLED" ? "cancelled" : "failed";
+                    m_store->transition(id, target, {}, serviceFailure(error)["error"].toObject());
+                    if (live && method != "workspaces.create") { try { work.recover(id); } catch (...) {} }
+                }
+            } catch (...) {
+                m_store->transition(id, "recovery_required", {}, {{"code", "INTERNAL_ERROR"}, {"message", "Unexpected native failure; recovery evidence retained."}, {"retryable", false}});
+            }
+            QMetaObject::invokeMethod(this, [this, id, physical, cancel] {
+                if (cancel->load() && m_store->get(id)["result"].toObject()["state"] == "prepared") m_store->transition(id, "cancelled");
+                m_jobs.remove(id); m_critical.remove(id); m_reserved.remove(physical);
+            }, Qt::QueuedConnection);
+        }));
+    } catch (const ServiceError& error) {
+        if (existingId.isEmpty()) m_store->transition(id, "failed", {}, serviceFailure(error)["error"].toObject());
+        throw;
+    }
+}
+QJsonObject CoreBackend::read(const Request& request)
+{
+    WorkspaceServices services(m_profile, *m_store); ModrinthService provider;
+    const auto method = request.method; const auto params = request.params;
+    if (method == "core.info") {
+        const auto recovery = services.recoveryStatus();
+        return {{"role", "modpack-core"}, {"coreVersion", "0.1.1"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
+            {"workspaceRoot", m_profile + "/workspaces"}, {"state", recovery["operations"].toArray().isEmpty() && recovery["blockedWorkspaces"].toArray().isEmpty() ? "ready" : "recovery_required"},
+            {"supportedLoaders", QJsonArray{"vanilla", "fabric"}}};
+    }
+    if (method == "catalog.versions") return provider.catalog(params);
+    if (method == "providers.search") return provider.search(params);
+    if (method == "providers.versions") return provider.versions(params);
+    if (method == "workspaces.list") return services.list(params);
+    if (method == "mods.list") return services.inventory(params);
+    if (method == "updates.check") return services.updates(params);
+    if (method == "plans.get") return services.plan(params);
+    if (method == "operations.get") return services.operation(params["operationId"].toString());
+    if (method == "recovery.list") return services.recoveryStatus();
+    if (method == "operations.list" || method == "events.poll") {
+        QList<QJsonObject> all;
+        for (const auto& value : m_store->all()) all.append(services.operation(value.toObject()["operationId"].toString()));
+        std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) { return a["sequence"].toString().toULongLong() < b["sequence"].toString().toULongLong(); });
+        QJsonArray rows; const auto after = params["afterSequence"].toString("0").toULongLong();
+        for (const auto& value : all) if (method != "events.poll" || value["sequence"].toString().toULongLong() > after) rows.append(value);
+        auto result = page(rows, params);
+        if (method == "events.poll") {
+            const auto values = result["operations"].toArray();
+            return {{"operations", values}, {"nextSequence", values.isEmpty() ? QString::number(after) : values.last().toObject()["sequence"].toString()}, {"sessionId", m_server.information()["sessionId"]}};
+        }
+        return result;
+    }
+    throw ServiceError{"UNSUPPORTED_CAPABILITY", "This capability is unavailable."};
+}
+}

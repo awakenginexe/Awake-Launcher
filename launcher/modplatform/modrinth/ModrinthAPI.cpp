@@ -154,36 +154,14 @@ QList<ResourceAPI::SortingMethod> ModrinthAPI::getSortingMethods() const
              { .index = 4, .name = "newest", .readableName = QObject::tr("Sort by Newest") },
              { .index = 5, .name = "updated", .readableName = QObject::tr("Sort by Last Updated") } };
 }
-namespace {
-const auto g_resourceTypeMap = std::array{
-    std::pair{ ModPlatform::ResourceType::Mod, "mod" },           std::pair{ ModPlatform::ResourceType::ResourcePack, "resourcepack" },
-    std::pair{ ModPlatform::ResourceType::ShaderPack, "shader" }, std::pair{ ModPlatform::ResourceType::DataPack, "datapack" },
-    std::pair{ ModPlatform::ResourceType::Modpack, "modpack" },
-};
-}
-
 ModPlatform::ResourceType ModrinthAPI::getResourceType(const QString& param)
 {
-    for (const auto& [key, value] : g_resourceTypeMap) {
-        if (value == param) {
-            return key;
-        }
-    }
-
-    qWarning() << "Invalid resource type for Modrinth API!" << param;
-    return ModPlatform::ResourceType::Unknown;
+    return Modrinth::resourceType(param);
 }
 
 QString ModrinthAPI::resourceTypeParameter(ModPlatform::ResourceType type)
 {
-    for (const auto& [key, value] : g_resourceTypeMap) {
-        if (key == type) {
-            return value;
-        }
-    }
-
-    qWarning() << "Invalid resource type for Modrinth API!" << static_cast<std::uint8_t>(type);
-    return "";
+    return Modrinth::resourceParameter(type);
 }
 
 std::pair<Task::Ptr, QByteArray*> ModrinthAPI::getModCategories() const

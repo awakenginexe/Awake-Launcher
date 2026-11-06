@@ -18,8 +18,8 @@
  */
 
 #include "ModrinthPackIndex.h"
-#include "FileSystem.h"
-#include "ModrinthAPI.h"
+#include "NativePaths.h"
+#include "ModrinthMetadata.h"
 
 #include "Json.h"
 #include "modplatform/ModIndex.h"
@@ -42,7 +42,7 @@ Result<> Modrinth::loadIndexedPack(ModPlatform::IndexedPack& pack, const QJsonOb
 
     pack.provider = ModPlatform::ResourceProvider::MODRINTH;
     TRY_INTO(pack.name, Json::requireString(obj, "title"))
-    pack.resourceType = ModrinthAPI::getResourceType(obj["project_type"].toString());
+    pack.resourceType = Modrinth::resourceType(obj["project_type"].toString());
     if ((obj.contains("loaders") && obj.value("loaders").toArray({}).contains("datapack")) ||
         (obj.contains("all_project_types") && obj.value("all_project_types").toArray({}).contains("datapack"))) {
         pack.resourceType = ModPlatform::ResourceType::DataPack;
@@ -63,7 +63,7 @@ Result<> Modrinth::loadIndexedPack(ModPlatform::IndexedPack& pack, const QJsonOb
     if (obj.contains("author")) {
         ModPlatform::ModpackAuthor modAuthor;
         modAuthor.name = obj["author"].toString();
-        modAuthor.url = ModrinthAPI::getAuthorURL(modAuthor.name);
+        modAuthor.url = Modrinth::authorUrl(modAuthor.name);
         pack.authors = { modAuthor };
     }
 
@@ -140,7 +140,7 @@ Result<ModPlatform::IndexedVersion> Modrinth::loadIndexedPackVersion(const QJson
         return {};
     }
     for (auto mcVer : versionArray) {
-        file.mcVersion.append({ ModrinthAPI::mapMCVersionFromModrinth(mcVer.toString()),
+        file.mcVersion.append({ Modrinth::minecraftVersion(mcVer.toString()),
                                 mcVer.toString() });  // double this so we can check both strings when filtering
     }
     TRY_INTO(const auto& loaders, Json::requireArray(obj, "loaders"))
@@ -226,7 +226,7 @@ Result<ModPlatform::IndexedVersion> Modrinth::loadIndexedPackVersion(const QJson
     if (parent.contains("url")) {
         TRY_INTO(file.downloadUrl, Json::requireString(parent, "url"))
         TRY_INTO(file.fileName, Json::requireString(parent, "filename"))
-        file.fileName = FS::RemoveInvalidPathChars(file.fileName);
+        file.fileName = NativePaths::removeChars(file.fileName, '-');
         TRY_INTO(const auto& primary, Json::requireBoolean(parent, "primary"))
         file.isPreferred = primary || (files.count() == 1);
         auto hashList = Json::requireObject(parent, "hashes");

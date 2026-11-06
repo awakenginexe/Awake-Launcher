@@ -29,7 +29,7 @@
 #include <string_view>
 #include <string>
 
-#include "FileSystem.h"
+#include "NativePaths.h"
 #include "StringUtils.h"
 
 #include "Version.h"
@@ -169,7 +169,7 @@ void V1::updateModIndex(const QDir& indexDir, Mod& mod)
     if (indexFile.exists()) {
         indexFile.remove();
     } else {
-        FS::ensureFilePathExists(indexFile.fileName());
+        NativePaths::ensureFileParent(indexFile.fileName());
     }
 
     toml::table update;
