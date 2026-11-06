@@ -338,6 +338,27 @@ class AwakeIntegrationTest : public QObject {
     }
 
 #ifdef Q_OS_WIN
+    void immediateSequentialReadsAcrossProcesses()
+    {
+        QTemporaryDir tmp;
+        IntegrationServer server;
+        QVERIFY(server.start(tmp.path(), {}, [](const Request&, IntegrationServer::Reply reply) {
+            reply({ { "result", QJsonObject{ { "payload", QString(65536, 'x') } } } });
+        }));
+        QProcess client;
+        client.start(QCoreApplication::applicationFilePath(), { "--sequential-client", server.serverName() });
+        auto stop = qScopeGuard([&] {
+            if (client.state() != QProcess::NotRunning) {
+                client.kill();
+                client.waitForFinished(5000);
+            }
+        });
+        QVERIFY(client.waitForStarted(5000));
+        QTRY_VERIFY_WITH_TIMEOUT(client.state() == QProcess::NotRunning, 30000);
+        QCOMPARE(client.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(client.exitCode() == 0, client.readAllStandardError().constData());
+    }
+
     void coordinatorOwnershipAcrossProcesses()
     {
         QTemporaryDir tmp;
@@ -397,6 +418,44 @@ int main(int argc, char** argv)
         IntegrationServer server;
         return server.start(args[2], {}, {}) ? 0 : 23;
     }
+#ifdef Q_OS_WIN
+    if (args.size() == 3 && args[1] == "--sequential-client") {
+        const auto name = QString("\\\\.\\pipe\\") + args[2];
+        const auto pipe = CreateFileW(reinterpret_cast<LPCWSTR>(name.utf16()), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                                      OPEN_EXISTING, 0, nullptr);
+        if (pipe == INVALID_HANDLE_VALUE) return 30;
+        auto close = qScopeGuard([&] { CloseHandle(pipe); });
+        const auto read = [pipe](quint32 size) {
+            QByteArray bytes(size, Qt::Uninitialized);
+            DWORD count = 0;
+            quint32 offset = 0;
+            while (offset < size) {
+                if (!ReadFile(pipe, bytes.data() + offset, size - offset, &count, nullptr) || !count) return QByteArray{};
+                offset += count;
+            }
+            return bytes;
+        };
+        for (int i = 0; i < 501; ++i) {
+            QJsonObject body{ { "protocol", version() }, { "requestId", "serial" },
+                              { "method", i ? "launcher.info" : "hello" }, { "params", QJsonObject{} } };
+            if (!i) body["params"] = QJsonObject{ { "versions", QJsonArray{ version() } },
+                { "client", QJsonObject{ { "name", "fixture" }, { "version", "1" } } } };
+            const auto bytes = frame(body);
+            DWORD count = 0;
+            if (!WriteFile(pipe, bytes.constData(), DWORD(bytes.size()), &count, nullptr) || count != DWORD(bytes.size())) return 31;
+            const auto header = read(4);
+            if (header.size() != 4) {
+                qWarning() << "Disconnected after completed response" << i << GetLastError();
+                return 32;
+            }
+            const auto size = qFromBigEndian<quint32>(header.constData());
+            if (!size || size > MaxFrameBytes) return 33;
+            const auto response = QJsonDocument::fromJson(read(size)).object();
+            if (!response.contains("result") || response["requestId"] != "serial") return 34;
+        }
+        return 0;
+    }
+#endif
     AwakeIntegrationTest test;
     return QTest::qExec(&test, argc, argv);
 }
