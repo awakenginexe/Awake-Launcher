@@ -1,5 +1,5 @@
 # Manager client handoff
-**Current external delivery: read-only status/discovery.** Full writable integration is now authorized and under implementation; the write/recovery acceptance criteria are not complete. No write capability is enabled yet.
+**Current external delivery: read-only status/discovery.** Mandatory standalone Manager support requires an approved architecture revision before further migration. Existing transaction/recovery foundations are retained; write acceptance criteria are incomplete and no write capability is enabled.
 Use [protocol.md](protocol.md), [wire.schema.json](wire.schema.json), and [requests.schema.json](requests.schema.json). Version 1.0 is experimental.
 
 ## Implemented
@@ -26,7 +26,7 @@ Parallel agents use distinct private profiles. A shared session requires agreeme
 5. On disconnect/unavailable Launcher, discard incomplete frames/pages, re-read the selected descriptor, reconnect and hello again. The endpoint/session changes on restart. There are no events; refresh reads explicitly. Connections idle for 30 seconds close; reconnect or use serialized status reads. Never delete a descriptor/lock merely because a connection failed.
 
 ## Manager compatibility snapshot
-Inspected Manager commit `bafd5d59966155afa64d618d9b1c9606242e5d67`; concurrent uncommitted native-shell work was left untouched and is not covered by this comparison. `src/backend/LauncherClient.ts` rejects every call; `src/main.ts` defaults to MockBackend. No end-to-end Manager session has been validated.
+Read-only inspection at Manager commit `84e4228ae6ff8a31f85b6e350b36d589db093433` found the native desktop client in `src/backend/launcher/LauncherClient.ts`, serialized transport, paging and capability-gated draft operations. The earlier `bafd5d5` stub comparison below is historical; it does not describe the current desktop client. Concurrent untracked Manager work was untouched. The user reports a successful real Tauri/pipe connection with 300+ entries; this Launcher session did not independently rerun Manager end-to-end tests.
 
 | Manager assumption | Required adaptation |
 |---|---|
@@ -42,13 +42,37 @@ Required client tests: actual native transport/framing and fragmented responses,
 ## Unavailable; do not enable in Manager
 Internal Windows foundations now include durable idempotent operation records, private recovery storage, strong volume/file identities, a cross-process physical lease and a recoverable multi-file executor. Apply requires exact hashes/revision/digest and stops at verifying until native refresh permits explicit completion. Restart rolls back before durable commit intent, or verifies and completes after it. Unknown bytes and corrupt records retain recovery evidence. These foundations are not advertised IPC capabilities; native writers, game ownership, startup recovery and supported filesystem metadata handling must be integrated before external writes.
 Enrollment, the instance operation gate, provider search/version IPC, instance creation, Evaluate/Prepare/Apply, durable idempotency/operation storage, operation cancellation/events, launch RPC, transaction journals and recovery. Every such request returns UNSUPPORTED_CAPABILITY with no operation created. No no-window QApplication backend has been implemented.
-The write policy is approved: explicit enrollment for exclusive use by gate-aware Launcher versions. Enrollment itself remains unavailable. Do not edit live files from Manager.
+The write policy is approved: explicit enrollment for exclusive use by gate-aware Launcher versions. Enrollment itself remains unavailable. Manager must not directly edit Launcher-managed live files. Standalone Manager must create, install, maintain, update and export real modpacks without Launcher; current IPC does not satisfy that requirement. Shared-core packaging and ownership transfer are proposals awaiting user approval, not a newly supported mode.
 
 ## Prerequisites for a future writable integration
 The gate, quiescence, native serializers, exact baselines, durable staging/backups and recovery-before-startup requirements remain defined in protocol.md. ResourceDownloadTask currently downloads into its supplied live model directory and cannot be used as Prepare storage unchanged. A no-window QApplication lifecycle needs separate proof and a dialog policy.
 
 Relevant source: InstanceList::discoverInstances; INISettingsObject::doSave (immediate); PackProfile::scheduleSave/save_internal (5-second timer); ResourceFolderModel::update/resolveResource (queued reruns and resolver tasks); ResourceFolderLoadTask (renames resources and removes orphan metadata); LocalResourceUpdateTask; LauncherPartLaunch (detachable Java).
 This status bridge does not implement the full writable task. Missing gate/quiescence/transaction work is not permission for Manager to bypass those safeguards.
+
+## Claude requests and remaining sequence
+Reviewed `docs/LAUNCHER-REQUESTS.md` read-only. No new RPC is enabled by this revision.
+
+| Request | Contract status / prerequisite |
+|---|---|
+| R0 | Reserved operation schema now includes nonterminal `rolling_back` and enforces terminal flags. Existing 1.0 read payloads are unchanged. Re-pin before exposing operations; internal store records need a wire adapter, not verbatim serialization. |
+| R1–R2 | Detailed Minecraft/loader fields, paged catalogs, exact loader create shape, configured root IDs and created physicalId remain undefined/unavailable. Negotiate a new minor for extra read fields. |
+| R3 | Search/version/dependency schemas need permission, distribution and download availability fields. Plain read RPCs are preferable to durable search operations; this revises the disabled draft and needs a client re-pin. Credentials stay native. |
+| R4 | Prepare/evaluate must define exact changes, required/optional dependencies, conflicts, affected-file pagination, hashes, disk budget, expiry and reviewed digest. Update representation is unresolved; no guessed shape. |
+| R5–R6 | JAR manifest inspection and batched update lookup are absent. Native index claims remain unverified. Manager-only pins/exclusions would conflict with canonical instance policies: Manager chooses intent, the owning backend must persist/reconcile it with native locks without erasing pins. Exact policy schema awaits design approval. |
+| R7–R8 | Durable list/get/cancel/progress, recovery wrappers/actions and timestamps need public result schemas. Internal states/storage do not imply public capabilities. |
+| R9–R10 | Bounded content categories, upstream baselines and three-way pack conflict handling remain unavailable. Never accept arbitrary caller paths or delete unknown files silently. |
+| R11 | Export requires a consistent snapshot, hashes, provider redistribution rules and explicit output selection; it must work in standalone Manager too. No export capability exists yet. |
+| R12 | `--dir <dataRoot>` is supported and fixture-tested. Endpoint-not-ready and unsupported-build states must stay distinct. No production no-window mode or minimized/tray startup contract is implemented. |
+
+After architecture approval, implement in this order:
+1. Define common service context and per-root authority/version compatibility; preserve 1.0 reads. Fix the executor's expected post-plan inventory revision before exposing Apply: sampling a fresh revision after writes could accept an unrelated concurrent edit.
+2. Wire the fixed cross-process registry/enrollment gate into native launch/auth preparation, mod downloads/updates/toggles, rename/delete, component edits, metadata writes and resource scans. Quiesce watchers, tasks, queued callbacks and retained save timers; flush before exclusive acquisition, reload with saves suspended, then verify. Whole-root replacement requires explicit identity transfer or a safe unsupported result.
+3. Run recovery before constructing native models that scan/save. Missing/corrupt game or ownership evidence blocks writes and launch; never infer safety from disconnect. Integrate keeper ownership into real launch before claiming detached-game protection.
+4. Implement catalogs, provider reads/dependencies, policy reconciliation and native instance creation with exact version/loader validation, controlled staging and failure cleanup. Use effective configured roots, not caller filesystem paths.
+5. Implement evaluate/prepare and Apply using native serializers, exact file baselines, verified staged artifacts and durable results. Test real provider files, unknown files, stale metadata, pending saves, 305-mod batches and interrupted rollback/recovery before enabling writes.
+6. Expose kind-specific operation get/cancel/list and reconnect first, then each tested write capability. Events cannot replace durable status. Wire launch through existing authentication/Java/GPU flow with explicit interaction-required handoff.
+7. Validate independently bundled standalone runtime create/install/update/export without Launcher present, then shared-instance ownership transfer and Manager interoperability against a committed contract. Use separate private profiles; agree on pin, profile and shutdown owner before a shared runtime session. Keep Manager files untouched.
 
 ## Review and validation
 Compare baseline 6d91edbe0f168c18a334811d7b08e1b6ce89ef16 with feat/modpack-manager-integration. Build AwakeLauncher, AwakeIntegration and AwakeWebBridge using the repository's Windows CMake configuration. Run CTest; GUI/hardware tests require separate execution.

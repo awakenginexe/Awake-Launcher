@@ -476,6 +476,7 @@
             "backing_up",
             "applying",
             "verifying",
+            "rolling_back",
             "completed",
             "cancelled",
             "failed",
@@ -504,6 +505,23 @@
         "operationId",
         "state",
         "terminal"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": ["completed", "cancelled", "failed", "rolled_back"]
+              }
+            }
+          },
+          "then": {
+            "properties": {"terminal": {"const": true}}
+          },
+          "else": {
+            "properties": {"terminal": {"const": false}}
+          }
+        }
       ],
       "additionalProperties": false,
       "x-status": "reserved-unsupported"
