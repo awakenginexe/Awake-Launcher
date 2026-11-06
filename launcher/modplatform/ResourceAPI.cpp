@@ -9,6 +9,13 @@
 #include "modplatform/ModIndex.h"
 
 #include "net/ApiRequest.h"
+namespace {
+int failedStatus(NetJob& job)
+{
+    const auto actions = job.getFailedActions();
+    return actions.isEmpty() || !actions.front() ? -1 : actions.front()->replyStatusCode();
+}
+}
 
 Task::Ptr ResourceAPI::searchProjects(const SearchArgs& args, const Callback<QList<ModPlatform::IndexedPack::Ptr>>& callbacks) const
 {
@@ -61,9 +68,7 @@ Task::Ptr ResourceAPI::searchProjects(const SearchArgs& args, const Callback<QLi
     QObject::connect(netJob.get(), &NetJob::failed, netJob.get(), [weak, callbacks](const QString& reason) {
         int networkErrorCode = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failedAction = netJob->getFailedActions().at(0); failedAction) {
-                networkErrorCode = failedAction->replyStatusCode();
-            }
+            networkErrorCode = failedStatus(*netJob);
         }
         callbacks.onFail(reason, networkErrorCode);
     });
@@ -81,6 +86,7 @@ Task::Ptr ResourceAPI::getProjectVersions(const VersionSearchArgs& args,
 {
     auto versionsUrlOptional = getVersionsURL(args);
     if (!versionsUrlOptional.has_value()) {
+        callbacks.onFail("Failed to create versions URL", -1);
         return nullptr;
     }
 
@@ -96,6 +102,7 @@ Task::Ptr ResourceAPI::getProjectVersions(const VersionSearchArgs& args,
         if (!doc) {
             qWarning() << "Error while parsing JSON response for getting versions:" << doc.error();
             qWarning() << *response;
+            callbacks.onFail(doc.error(), -1);
             return;
         }
 
@@ -136,9 +143,7 @@ Task::Ptr ResourceAPI::getProjectVersions(const VersionSearchArgs& args,
     QObject::connect(netJob.get(), &NetJob::failed, netJob.get(), [weak, callbacks](const QString& reason) {
         int networkErrorCode = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failedAction = netJob->getFailedActions().at(0); failedAction) {
-                networkErrorCode = failedAction->replyStatusCode();
-            }
+            networkErrorCode = failedStatus(*netJob);
         }
         callbacks.onFail(reason, networkErrorCode);
     });
@@ -156,6 +161,10 @@ Task::Ptr ResourceAPI::getProjectInfo(const ProjectInfoArgs& args,
                                       bool askRetry) const
 {
     auto [job, response] = getProject(args.pack->addonId.toString(), askRetry);
+    if (!job || !response) {
+        callbacks.onFail("Failed to create project request", -1);
+        return nullptr;
+    }
 
     QObject::connect(job.get(), &NetJob::succeeded, job.get(), [this, response, callbacks, args] {
         auto pack = args.pack;
@@ -184,9 +193,7 @@ Task::Ptr ResourceAPI::getProjectInfo(const ProjectInfoArgs& args,
         int networkErrorCode = -1;
         if (auto job = weak.lock()) {
             if (auto netJob = qSharedPointerDynamicCast<NetJob>(job)) {
-                if (auto* failedAction = netJob->getFailedActions().at(0); failedAction) {
-                    networkErrorCode = failedAction->replyStatusCode();
-                }
+                networkErrorCode = failedStatus(*netJob);
             }
         }
         callbacks.onFail(reason, networkErrorCode);
@@ -203,6 +210,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(const DependencySearchArgs& args, co
 {
     auto versionsUrlOptional = getDependencyURL(args);
     if (!versionsUrlOptional.has_value()) {
+        callbacks.onFail("Failed to create dependency URL", -1);
         return nullptr;
     }
 
@@ -217,6 +225,7 @@ Task::Ptr ResourceAPI::getDependencyVersion(const DependencySearchArgs& args, co
         if (!doc) {
             qWarning() << "Error while parsing JSON response for getting dependency version:" << doc.error();
             qWarning() << *response;
+            callbacks.onFail(doc.error(), -1);
             return;
         }
 
@@ -263,11 +272,12 @@ Task::Ptr ResourceAPI::getDependencyVersion(const DependencySearchArgs& args, co
     QObject::connect(netJob.get(), &NetJob::failed, netJob.get(), [weak, callbacks](const QString& reason) {
         int networkErrorCode = -1;
         if (auto netJob = weak.lock()) {
-            if (auto* failedAction = netJob->getFailedActions().at(0); failedAction) {
-                networkErrorCode = failedAction->replyStatusCode();
-            }
+            networkErrorCode = failedStatus(*netJob);
         }
         callbacks.onFail(reason, networkErrorCode);
+    });
+    QObject::connect(netJob.get(), &NetJob::aborted, netJob.get(), [callbacks] {
+        if (callbacks.onAbort) callbacks.onAbort();
     });
     return netJob;
 }

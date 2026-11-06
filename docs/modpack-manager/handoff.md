@@ -69,4 +69,6 @@ Game ownership foundations use creation-time Windows job assignment and a per-ga
 
 Windows native Tasks can retain an explicitly scoped instance lease through execution, queued callbacks and child tasks, release it after terminal callbacks, and reacquire on retry. QApplication event dispatch clears unrelated ownership during nested event loops; affiliated Task events restore their own scope. These propagation foundations do not acquire permits at native mutation entry points. Plain QObject callbacks, pending native serializers, startup recovery and launch coordination still require integration; do not enable writes from these foundations alone.
 
+Shared ResourceAPI callbacks now report unsupported requests and malformed version/dependency JSON, propagate dependency cancellation, and handle failures before any HTTP action starts. Loopback and child-process fixtures cover these paths; native provider IPC and live credentials/download permissions are still unavailable or unverified.
+
 Not executed: the visible AwakeWebShell suite, real Minecraft launches, live sign-in, hardware selection, cross-user/remote IPC attempts, or Manager writable workflows. Public gate, Apply and recovery capabilities remain unavailable. Test tools/logs stay outside the committed product; no validator dependency was added to Launcher.
