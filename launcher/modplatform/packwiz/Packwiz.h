@@ -21,6 +21,7 @@
 
 #include "modplatform/ModIndex.h"
 
+#include <QByteArray>
 #include <QString>
 #include <QUrl>
 #include <QVariant>
@@ -84,6 +85,7 @@ class V1 {
      * If the mod doesn't have a metadata, it simply returns an empty Mod object.
      * */
     static auto getIndexForMod(const QDir& indexDir, const QString& slug) -> Mod;
+    static auto parseModIndex(const QByteArray& contents, const QString& slug) -> Mod;
 
     /* Gets the metadata for a mod with a particular id.
      * If the mod doesn't have a metadata, it simply returns an empty Mod object.

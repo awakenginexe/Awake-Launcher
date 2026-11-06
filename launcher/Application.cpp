@@ -41,6 +41,7 @@
  */
 
 #include "Application.h"
+#include "awake/integration/Coordinator.h"
 #include "BuildConfig.h"
 
 #include "DataMigrationTask.h"
@@ -1401,6 +1402,19 @@ bool Application::event(QEvent* event)
 void Application::performMainStartupAction()
 {
     m_status = Application::Initialized;
+    m_integration = std::make_unique<Awake::Integration::Coordinator>(m_instances.get(), m_rootPath, QDir::currentPath(), m_portable,
+        [this](MinecraftInstance* instance) {
+            if (instance->isDeleting()) return QString("deleting");
+            if (instance->isRunning()) return QString("launch_active");
+            if (!m_instanceExtrasMutex.tryLock()) return QString("unknown");
+            const auto entry = m_instanceExtras.find(instance->id());
+            const bool preparing = entry != m_instanceExtras.end() && entry->second.controller;
+            m_instanceExtrasMutex.unlock();
+            return QString(preparing ? "launch_preparing" : "idle");
+        });
+    QString integrationError;
+    if (!m_integration->start(&integrationError)) qInfo() << "Modpack Manager integration unavailable:" << integrationError;
+    connect(this, &Application::aboutToQuit, m_integration.get(), &Awake::Integration::Coordinator::stop);
     if (!m_instanceIdToLaunch.isEmpty()) {
         auto* inst = instances()->getInstanceById(m_instanceIdToLaunch);
         if (inst) {

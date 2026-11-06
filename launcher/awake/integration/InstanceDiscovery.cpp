@@ -101,18 +101,22 @@ QJsonObject discover(const QStringList& roots, const QList<InstanceSeed>& loaded
             const bool isLoaded = native.contains(key);
             const auto seed = native.value(key);
             instances.insert(
-                key, QJsonObject{ { "physicalId", key },
-                                  { "canonicalPath", canonical },
-                                  { "instanceId", isLoaded ? seed.id : info.fileName() },
-                                  { "uuid", isLoaded ? QJsonValue(seed.uuid) : QJsonValue::Null },
-                                  { "name", isLoaded ? seed.name : info.fileName() },
-                                  { "loaded", isLoaded },
-                                  { "nativeRunning", isLoaded ? QJsonValue(seed.running) : QJsonValue::Null },
-                                  { "gameState", "unknown" },
-                                  { "gamePhysicalId", isLoaded ? QJsonValue(physicalIdentity(QFileInfo(seed.modsPath).dir().absolutePath()))
-                                                               : QJsonValue::Null },
-                                  { "modsPhysicalId", isLoaded ? QJsonValue(physicalIdentity(seed.modsPath)) : QJsonValue::Null },
-                                  { "identityStatus", "verified" } });
+                key,
+                QJsonObject{ { "physicalId", key },
+                             { "canonicalPath", canonical },
+                             { "instanceId", isLoaded ? seed.id : info.fileName() },
+                             { "uuid", isLoaded ? QJsonValue(seed.uuid) : QJsonValue::Null },
+                             { "name", isLoaded ? seed.name : info.fileName() },
+                             { "loaded", isLoaded },
+                             { "nativeRunning", isLoaded ? QJsonValue(seed.running) : QJsonValue::Null },
+                             { "nativeActivity",
+                               isLoaded ? QJsonValue(seed.activity.isEmpty() ? (seed.running ? "launch_active" : "idle") : seed.activity)
+                                        : QJsonValue::Null },
+                             { "gameState", "unknown" },
+                             { "gamePhysicalId",
+                               isLoaded ? QJsonValue(physicalIdentity(QFileInfo(seed.modsPath).dir().absolutePath())) : QJsonValue::Null },
+                             { "modsPhysicalId", isLoaded ? QJsonValue(physicalIdentity(seed.modsPath)) : QJsonValue::Null },
+                             { "identityStatus", "verified" } });
         }
     }
     QMap<QString, int> names, uuids, games, modRoots;

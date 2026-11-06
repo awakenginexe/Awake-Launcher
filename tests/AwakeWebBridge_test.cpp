@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QBuffer>
+#include <QLocalSocket>
+#include <QElapsedTimer>
+#include <QtEndian>
+#include "awake/integration/Protocol.h"
 #include <QCloseEvent>
 #include <QDir>
 #include <QFile>
@@ -89,6 +93,150 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void integrationReadOnlyDiscovery()
+    {
+#ifndef Q_OS_WIN
+        QSKIP("Experimental IPC is Windows-only.");
+#endif
+        using namespace Awake::Integration;
+        QFile file(QDir::current().filePath("integration/v1/endpoint.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto endpoint = QJsonDocument::fromJson(file.readAll()).object();
+        QLocalSocket socket;
+        socket.connectToServer(endpoint["serverName"].toString());
+        QVERIFY(socket.waitForConnected());
+        const auto call = [&socket](const QString& method, const QJsonObject& params = QJsonObject{}) {
+            socket.write(frame({{"protocol", version()}, {"requestId", "native"}, {"method", method}, {"params", params}}));
+            QByteArray bytes;
+            QElapsedTimer deadline; deadline.start();
+            while (deadline.elapsed() < 5000) {
+                QCoreApplication::processEvents(); bytes += socket.readAll();
+                if (bytes.size() >= 4 && quint32(bytes.size() - 4) >= qFromBigEndian<quint32>(bytes.constData()))
+                    return QJsonDocument::fromJson(bytes.mid(4)).object();
+                QTest::qWait(1);
+            }
+            return QJsonObject{};
+        };
+        const auto greeting = call("hello", {{"versions", QJsonArray{version()}},
+                              {"client", QJsonObject{{"name", "fixture"}, {"version", "dev"}}}});
+        QVERIFY(greeting.contains("result"));
+        const auto infoResponse = call("launcher.info");
+        auto info = infoResponse["result"].toObject();
+        QCOMPARE(info["dataRoot"].toString(), QFileInfo(QDir::currentPath()).canonicalFilePath());
+        QVERIFY(!info["backgroundStartup"].toBool());
+        QCOMPARE(info["launcherState"].toString(), QString("ready"));
+
+        auto* fixture = APPLICATION->instances()->at(0);
+        const auto modsRoot = fixture->modsRoot();
+        QVERIFY(QDir().mkpath(modsRoot + "/.index"));
+        const auto jarPath = modsRoot + "/integration-fixture.jar";
+        const auto metadataPath = modsRoot + "/.index/integration-fixture.pw.toml";
+        auto cleanup = qScopeGuard([&] { QFile::remove(jarPath); QFile::remove(metadataPath); });
+        QFile jar(jarPath);
+        QVERIFY(jar.open(QIODevice::WriteOnly)); jar.write("fixture"); jar.close();
+        QFile metadata(metadataPath);
+        QVERIFY(metadata.open(QIODevice::WriteOnly));
+        metadata.write(R"(name="Indexed fixture"
+filename="integration-fixture.jar"
+side="both"
+x-prismlauncher-version-number="1.0"
+[download]
+mode="url"
+url="https://user:never-export-this@example.invalid/mod.jar"
+hash-format="sha512"
+hash="fixture-hash"
+[update.modrinth]
+mod-id="fixture-project"
+version="fixture-version"
+)");
+        metadata.close();
+
+        const auto listResponse = call("instances.list");
+        const auto list = listResponse["result"].toObject();
+        QCOMPARE(list["total"].toInt(), APPLICATION->instances()->count());
+        QVERIFY(!list["instanceRevision"].toString().isEmpty());
+        QVERIFY(!list["instances"].toArray().isEmpty());
+
+        QString id;
+        for (const auto& entry : list["instances"].toArray())
+            if (entry.toObject()["instanceId"].toString() == fixture->id()) id = entry.toObject()["physicalId"].toString();
+        QVERIFY(!id.isEmpty());
+        const auto inventoryResponse = call("mods.list", {{"physicalId", id}});
+        QVERIFY(inventoryResponse.contains("result"));
+        bool indexed = false;
+        for (const auto& item : inventoryResponse["result"].toObject()["items"].toArray()) {
+            const auto row = item.toObject();
+            if (row["fileName"].toString() != "integration-fixture.jar") continue;
+            indexed = true;
+            QCOMPARE(row["metadataState"].toString(), QString("indexed"));
+            QCOMPARE(row["metadata"].toObject()["projectId"].toString(), QString("fixture-project"));
+            QCOMPARE(row["metadata"].toObject()["versionId"].toString(), QString("fixture-version"));
+        }
+        QVERIFY(indexed);
+        QVERIFY(!QJsonDocument(inventoryResponse).toJson().contains("never-export-this"));
+        QFile schemaFile(QFINDTESTDATA("../docs/modpack-manager/requests.schema.json"));
+        QVERIFY(schemaFile.open(QIODevice::ReadOnly));
+        const auto definitions = QJsonDocument::fromJson(schemaFile.readAll()).object()["$defs"].toObject();
+        const auto declaresFields = [&definitions](const QString& name, const QJsonObject& payload) {
+            const auto definition = definitions[name].toObject();
+            const auto properties = definition["properties"].toObject();
+            for (auto it = payload.begin(); it != payload.end(); ++it)
+                if (!properties.contains(it.key())) return false;
+            for (const auto& required : definition["required"].toArray())
+                if (!payload.contains(required.toString())) return false;
+            return true;
+        };
+        QVERIFY(declaresFields("helloResult", greeting["result"].toObject()));
+        QVERIFY(declaresFields("launcherInfoResult", info));
+        QVERIFY(declaresFields("instanceListResult", list));
+        QVERIFY(declaresFields("inventoryResult", inventoryResponse["result"].toObject()));
+        for (const auto& entry : list["instances"].toArray())
+            QVERIFY(declaresFields("instance", entry.toObject()));
+        for (const auto& item : inventoryResponse["result"].toObject()["items"].toArray()) {
+            QVERIFY(declaresFields("inventoryItem", item.toObject()));
+            if (item.toObject()["metadataState"].toString() == "indexed")
+                QVERIFY(declaresFields("indexedMetadata", item.toObject()["metadata"].toObject()));
+        }
+        const auto contractOutput = qEnvironmentVariable("AWAKE_INTEGRATION_CONTRACT_OUTPUT");
+        if (!contractOutput.isEmpty()) {
+            QFile capture(contractOutput);
+            QVERIFY(capture.open(QIODevice::WriteOnly));
+            const auto bytes = QJsonDocument(QJsonObject{{"hello", greeting}, {"info", infoResponse},
+                {"instances", listResponse}, {"inventory", inventoryResponse}}).toJson();
+            QCOMPARE(capture.write(bytes), bytes.size());
+        }
+
+        auto restoreRunning = qScopeGuard([fixture] { fixture->setRunning(false); });
+        fixture->setRunning(true);
+        const auto active = call("instances.list")["result"].toObject()["instances"].toArray();
+        for (const auto& entry : active) {
+            const auto row = entry.toObject();
+            if (row["physicalId"].toString() != id) continue;
+            QCOMPARE(row["nativeActivity"].toString(), QString("launch_active"));
+            QCOMPARE(row["gameState"].toString(), QString("unknown"));
+        }
+        fixture->setRunning(false);
+        QVERIFY(metadata.open(QIODevice::ReadOnly));
+        auto invalidIndex = metadata.readAll();
+        metadata.close();
+        invalidIndex.replace("fixture-project", "");
+        QVERIFY(metadata.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(metadata.write(invalidIndex), invalidIndex.size());
+        metadata.close();
+        const auto invalidInventory = call("mods.list", {{"physicalId", id}})["result"].toObject()["items"].toArray();
+        for (const auto& item : invalidInventory) {
+            const auto row = item.toObject();
+            if (row["fileName"].toString() != "integration-fixture.jar") continue;
+            QCOMPARE(row["metadataState"].toString(), QString("unindexed"));
+            QVERIFY(row["metadata"].isNull());
+        }
+
+        QCOMPARE(call("mods.list", {{"physicalId", id}, {"path", "arbitrary"}})["error"].toObject()["code"].toString(),
+                 QString("INVALID_REQUEST"));
+        QCOMPARE(call("instances.list", {{"offset", 1}})["error"].toObject()["code"].toString(), QString("INVALID_REQUEST"));
+        QCOMPARE(call("transactions.apply")["error"].toObject()["code"].toString(), QString("UNSUPPORTED_CAPABILITY"));
+    }
+
     void editorConsoleTailIsBounded()
     {
         LogModel log;
@@ -1796,7 +1944,8 @@ int main(int argc, char** argv)
         }
     }
     qputenv("AWAKE_FRONTEND", "widgets");
-    auto directory = data.path().toUtf8();
+    auto directory = (qEnvironmentVariableIsSet("AWAKE_TEST_RELATIVE_DATA_DIR") ?
+        QDir(original).relativeFilePath(data.path()) : data.path()).toUtf8();
     char dataOption[] = "-d";
     char* appArgs[] = {argv[0], dataOption, directory.data(), nullptr};
     int appArgc = 3;
