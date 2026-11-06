@@ -145,6 +145,10 @@ static void sendLoopbackCallback(const QUrl& redirect, const QUrlQuery& query, c
 class MicrosoftAuthTest : public QObject {
     Q_OBJECT
 private slots:
+    void init()
+    {
+        APPLICATION->settings()->set("MSAClientIDOverride", "00000000-0000-4000-8000-000000000001");
+    }
     void initTestCase()
     {
         while (APPLICATION->accounts()->count()) APPLICATION->accounts()->removeAccount(APPLICATION->accounts()->index(0,0));
