@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QTest>
 #include <QTimer>
 #include <QTcpServer>
@@ -43,6 +44,7 @@
 #include "net/Request.h"
 #ifdef Q_OS_WIN
 #include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/InstanceDiscovery.h"
 #include "awake/integration/InstanceOperationScope.h"
 #endif
@@ -175,6 +177,7 @@ private slots:
         const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
         QVERIFY(QDir().mkdir(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
         const auto id = physicalIdentityV2(root);
+        QVERIFY(InstanceAuthority::enroll(root, id, registry, "http-failure-fixture", QUuid::createUuid().toString(QUuid::WithoutBraces)));
         auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
         QTcpServer server; QVERIFY(server.listen(QHostAddress::LocalHost, 0));
         connect(&server, &QTcpServer::newConnection, this, [&] {
