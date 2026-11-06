@@ -155,7 +155,7 @@ void Task::emitAborted()
     Awake::Integration::InstanceOperationScope scope(instanceLease());
 #endif
     // Don't abort twice.
-    if (ASSERT_NEVER(!isRunning())) {
+    if (ASSERT_NEVER(!isRunning() && m_state != State::Inactive)) {
         qCCritical(taskLogC) << "Task" << describe() << "aborted while not running!!!!";
         return;
     }
@@ -261,6 +261,12 @@ bool Task::isFinished() const
 bool Task::wasSuccessful() const
 {
     return m_state == State::Succeeded;
+}
+bool Task::cancelBeforeStart()
+{
+    if (m_state != State::Inactive) return false;
+    Task::emitAborted();
+    return true;
 }
 
 QString Task::failReason() const

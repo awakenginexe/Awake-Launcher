@@ -73,12 +73,12 @@ void ConcurrentTask::executeTask()
 bool ConcurrentTask::abort()
 {
     m_queuedStartsCanceled->store(true);
+    const auto queued = m_queue;
     m_queue.clear();
+    for (const auto& task : queued) task->cancelBeforeStart();
 
     if (m_doing.isEmpty()) {
-        // Don't call emitAborted() here, we want to bypass the 'is the task running' check
-        emit aborted();
-        emit finished();
+        if (!isFinished()) emitAborted();
 
         return true;
     }
@@ -92,6 +92,8 @@ bool ConcurrentTask::abort()
         suceedeed &= (task.value())->abort();
     }
 
+    if (suceedeed) m_doing.clear();
+    if (isFinished()) return suceedeed;
     if (suceedeed)
         emitAborted();
     else

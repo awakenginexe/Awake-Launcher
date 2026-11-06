@@ -103,6 +103,7 @@ class Task : public QObject, public QRunnable {
     bool isRunning() const;
     bool isFinished() const;
     bool wasSuccessful() const;
+    bool cancelBeforeStart();
 
     /*!
      * MultiStep tasks are combinations of multiple tasks into a single logical task.
@@ -138,6 +139,7 @@ class Task : public QObject, public QRunnable {
     void logWarning(const QString& line);
 #ifdef Q_OS_WIN
     bool event(QEvent* event) override;
+    std::shared_ptr<Awake::Integration::PhysicalInstanceLease> instanceLease() const;
 #endif
 
    private:
@@ -226,7 +228,6 @@ class Task : public QObject, public QRunnable {
     bool m_can_abort = false;
     QUuid m_uid;
 #ifdef Q_OS_WIN
-    std::shared_ptr<Awake::Integration::PhysicalInstanceLease> instanceLease() const;
     QString acquireInstanceLease();
     void releaseInstanceLease();
     mutable QMutex m_instanceLeaseMutex;

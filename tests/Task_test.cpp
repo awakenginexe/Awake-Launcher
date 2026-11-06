@@ -136,7 +136,57 @@ class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void canceledConcurrentParentCanRunNewWork()
+    {
+        auto oldChild = makeShared<ConcurrentTask>(); oldChild->addTask(makeShared<BasicTask>());
+        QueuedChildTask parent; parent.addTask(oldChild); parent.start();
+        QVERIFY(parent.abort());
+        auto fresh = makeShared<BasicTask>(); parent.addTask(fresh); parent.start();
+        QTRY_VERIFY_WITH_TIMEOUT(parent.isFinished(), 1000);
+        QVERIFY(parent.wasSuccessful()); QVERIFY(fresh->wasSuccessful());
+    }
 #ifdef Q_OS_WIN
+    void cancelingQueuedConcurrentChildrenReleasesTheirOwnership()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        std::unique_ptr<ConcurrentTask> parent;
+        Task::Ptr child;
+        {
+            auto lease = acquire(); QVERIFY(lease);
+            InstanceOperationScope scope(lease);
+            parent = std::make_unique<ConcurrentTask>(); child = makeShared<BasicTask>(); parent->addTask(child);
+        }
+        parent->start(); QVERIFY(parent->abort());
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QCOMPARE(parent->getState(), Task::State::AbortedByUser);
+        QCOMPARE(child->getState(), Task::State::AbortedByUser);
+        QVERIFY(acquire());
+    }
+    void cancelingQueuedNetworkChildrenReleasesTheirOwnership()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        QNetworkAccessManager network;
+        std::unique_ptr<NetJob> parent;
+        Task::Ptr child;
+        {
+            auto lease = acquire(); QVERIFY(lease);
+            InstanceOperationScope scope(lease);
+            parent = std::make_unique<NetJob>("Queued ownership fixture", &network, 1);
+            child = makeShared<BasicTask>(); parent->addTask(child);
+        }
+        parent->start(); QVERIFY(parent->abort());
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QCOMPARE(child->getState(), Task::State::AbortedByUser);
+        QVERIFY(acquire());
+    }
     void reentrantRestartRetainsTheNewTaskOwnership()
     {
         QTemporaryDir temporary;

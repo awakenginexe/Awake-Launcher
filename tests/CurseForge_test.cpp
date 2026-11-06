@@ -39,6 +39,13 @@
 #include "modplatform/modrinth/ModrinthAPI.h"
 #include "net/ApiHeaderProxy.h"
 #include "net/NetJob.h"
+#include "net/FileSink.h"
+#include "net/Request.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/InstanceOperationScope.h"
+#endif
 #include "settings/SettingsObject.h"
 #include "ui/dialogs/NewInstanceDialog.h"
 #include "ui/dialogs/ResourceDownloadDialog.h"
@@ -98,10 +105,102 @@ class FixtureResourceAPI : public ResourceAPI {
         return {job, &response};
     }
 };
+class CacheHitFileSink : public Net::FileSink {
+   public:
+    using FileSink::FileSink;
+    bool cacheHit = false;
+    InitResult initCache(QNetworkRequest&) override { return cacheHit ? InitType::CacheHit : InitType::Ok; }
+};
 
 class CurseForgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void cacheHitClosesAPreviousPartialDownload()
+    {
+        QTemporaryDir temporary;
+        const auto path = temporary.path() + "/artifact.jar";
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("original"); }
+        const auto entries = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System);
+        CacheHitFileSink sink(path);
+        QNetworkRequest request(QUrl("http://127.0.0.1/fixture"));
+        QVERIFY(sink.init(request)); QVERIFY(sink.write("partial replacement"));
+        sink.cacheHit = true;
+        const auto cached = sink.init(request); QVERIFY(cached); QCOMPARE(*cached, Net::Sink::InitType::CacheHit);
+        QCOMPARE(QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System), entries);
+        QFile original(path); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), QByteArray("original"));
+    }
+    void requestBodyFailureClosesTheSinkBeforeNotification()
+    {
+        QTemporaryDir temporary;
+        const auto entries = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System);
+        Net::Request::Spec spec;
+        spec.method = Net::HttpMethod::Post; spec.url = QUrl("http://127.0.0.1/fixture");
+        spec.data = Net::Request::ByteArrayFactory([]() -> std::expected<QByteArray, QString> { return std::unexpected(QString("Fixture body failure")); });
+        auto request = Net::Request::makeCustomRequest(spec);
+        request->setSink(std::make_unique<Net::FileSink>(temporary.path() + "/artifact.jar"));
+        bool closedBeforeFailure = false;
+        connect(request.get(), &Task::failed, this, [&](const QString&) {
+            closedBeforeFailure = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System) == entries;
+        });
+        request->start(); QVERIFY(request->isFinished()); QVERIFY(!request->wasSuccessful());
+        QVERIFY(closedBeforeFailure);
+    }
+    void canceledDownloadsCloseTemporaryFiles_data()
+    {
+        QTest::addColumn<bool>("existing");
+        QTest::newRow("new-file") << false;
+        QTest::newRow("replacement") << true;
+    }
+    void canceledDownloadsCloseTemporaryFiles()
+    {
+        QFETCH(bool, existing);
+        QTemporaryDir temporary;
+        const auto target = temporary.path() + "/artifact.jar";
+        if (existing) { QFile original(target); QVERIFY(original.open(QIODevice::WriteOnly)); original.write("original"); }
+        const auto entries = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System);
+        Net::FileSink sink(target);
+        QNetworkRequest request(QUrl("http://127.0.0.1/fixture"));
+        QVERIFY(sink.init(request)); QVERIFY(sink.write("partial replacement"));
+        sink.abort();
+        QVERIFY(!sink.write("late bytes"));
+        QCOMPARE(QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System), entries);
+        if (existing) { QFile original(target); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), QByteArray("original")); }
+        else QVERIFY(!QFile::exists(target));
+    }
+#ifdef Q_OS_WIN
+    void failedHttpRequestsReleaseOwnershipWhileHistoryIsRetained()
+    {
+        using namespace Awake::Integration;
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(QDir().mkdir(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        QTcpServer server; QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        connect(&server, &QTcpServer::newConnection, this, [&] {
+            auto* socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+                socket->readAll(); socket->write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        const auto proxy = APPLICATION->network()->proxy();
+        auto restore = qScopeGuard([&] { APPLICATION->network()->setProxy(proxy); });
+        APPLICATION->network()->setProxy(QNetworkProxy::NoProxy);
+        FixtureResourceAPI api; api.url = QString("http://127.0.0.1:%1/fixture").arg(server.serverPort());
+        auto pack = std::make_shared<ModPlatform::IndexedPack>(); pack->addonId = "fixture";
+        int failed = 0;
+        Task::Ptr task;
+        {
+            auto lease = acquire(); QVERIFY(lease); InstanceOperationScope scope(lease);
+            task = api.getProjectInfo({pack}, {[](auto&) { QFAIL("Unexpected HTTP success"); },
+                [&](const QString&, int code) { ++failed; QCOMPARE(code, 404); }, {}}, false);
+        }
+        QVERIFY(task); QVERIFY(!runTask(task.get(), 5000)); QCOMPARE(failed, 1);
+        QVERIFY(acquire());
+    }
+#endif
     void unsupportedProviderRequestsReportFailure_data()
     {
         QTest::addColumn<int>("method");

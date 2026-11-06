@@ -71,4 +71,6 @@ Windows native Tasks can retain an explicitly scoped instance lease through exec
 
 Shared ResourceAPI callbacks now report unsupported requests and malformed version/dependency JSON, propagate dependency cancellation, and handle failures before any HTTP action starts. Loopback and child-process fixtures cover these paths; native provider IPC and live credentials/download permissions are still unavailable or unverified.
 
+Native network completion now uses Task lifecycle notifications after sink cleanup. Cancellation closes partial files immediately, cancels queued children and releases their leases; retained failed download history no longer retains an active lease. Retry, cache-hit and request-body failure fixtures cover cleanup ordering. Full Windows build and 40/40 non-visible CTest suites passed; focused Task results: 22 passed, provider: 23 passed/5 skipped, authentication: 20 passed/1 skipped. Skipped live-service tests remain unverified.
+
 Not executed: the visible AwakeWebShell suite, real Minecraft launches, live sign-in, hardware selection, cross-user/remote IPC attempts, or Manager writable workflows. Public gate, Apply and recovery capabilities remain unavailable. Test tools/logs stay outside the committed product; no validator dependency was added to Launcher.
