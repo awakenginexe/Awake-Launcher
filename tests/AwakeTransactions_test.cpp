@@ -8,9 +8,11 @@
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 #include <qt_windows.h>
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/GameProcessGroup.h"
 #include "awake/integration/OperationStore.h"
 #include "awake/integration/TransactionEngine.h"
 using namespace Awake::Integration;
@@ -56,10 +58,92 @@ QByteArray bytes(const QString& path)
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
+bool keeperFinished(const QString& registry)
+{
+    const auto files = QDir(registry + "/games").entryList({"*.done"}, QDir::Files);
+    return files.size() == 1 && QFileInfo(registry + "/games/" + files[0]).size() == 36 &&
+        !DurableIO::hash(registry + "/games/" + files[0]).isEmpty();
+}
 }
 class AwakeTransactionsTest : public QObject {
     Q_OBJECT
    private slots:
+    void keeperRejectsMalformedInvocationAndRequiresVerifiedCompletion()
+    {
+        QCOMPARE(child({"--integration-game-keeper"}), 61);
+        QCOMPARE(child({"--integration-game-keeper", "0", "0", "0", "0", "0", "invalid"}), 62);
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto lease = PhysicalInstanceLease::acquire(root, id, registry); QVERIFY(lease);
+        auto group = GameProcessGroup::create(lease); QVERIFY(group);
+        const auto pending = QDir(registry + "/games").entryList({"*.pending"}, QDir::Files);
+        QCOMPARE(pending.size(), 1);
+        const auto path = registry + "/games/" + pending[0];
+        QVERIFY(QDir().mkdir(path.chopped(8)));
+        group.reset(); lease.reset();
+        QTRY_COMPARE_WITH_TIMEOUT(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Unknown, 5000);
+        QCOMPARE(bytes(path).size(), 36);
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        QVERIFY(QFileInfo(path.chopped(8)).isDir());
+    }
+    void gameOwnershipIsDurableAndGuardsOtherProcesses()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Untracked);
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+        const auto plan = threeFilePlan(store, root); QVERIFY(!plan.isEmpty());
+        TransactionEngine engine(store, root, ".minecraft/mods");
+        auto lease = PhysicalInstanceLease::acquire(root, id, registry); QVERIFY(lease);
+        QString error;
+        auto group = GameProcessGroup::create(lease, &error); QVERIFY2(group, qPrintable(error));
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Inactive);
+        QProcess process;
+        QVERIFY(group->attach(process, &error));
+        process.start(QCoreApplication::applicationFilePath(), {"--echo-game"});
+        QVERIFY(process.waitForStarted());
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Running);
+        QVERIFY(engine.apply(plan["operationId"].toString(), plan["planDigest"].toString(), plan["instanceRevision"].toString(), lease).contains("error"));
+        QVERIFY(!group->attach(process));
+        process.write("fixture input\n");
+        QVERIFY(process.waitForFinished(5000)); QCOMPARE(process.exitCode(), 0);
+        QCOMPARE(process.readAllStandardOutput().replace("\r\n", "\n"), QByteArray("fixture input\n"));
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Inactive);
+        process.setCreateProcessArgumentsModifier({});
+        group.reset(); lease.reset();
+        QTRY_VERIFY_WITH_TIMEOUT(keeperFinished(registry), 5000);
+        QVERIFY(PhysicalInstanceLease::acquire(root, id, registry));
+        const auto records = QDir(registry + "/games").entryList({"*.json"}, QDir::Files);
+        QCOMPARE(records.size(), 1);
+        QVERIFY(put(registry + "/games/" + records[0], "corrupt ownership"));
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Unknown);
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+    }
+    void launcherCrashDoesNotReleaseRunningDescendants()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        const auto nonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const auto stopName = "Local\\AwakeFixtureStop-" + nonce, readyName = "Local\\AwakeFixtureReady-" + nonce;
+        const auto stop = CreateEventW(nullptr, TRUE, FALSE, reinterpret_cast<LPCWSTR>(stopName.utf16())); QVERIFY(stop);
+        const auto ready = CreateEventW(nullptr, TRUE, FALSE, reinterpret_cast<LPCWSTR>(readyName.utf16())); QVERIFY(ready);
+        auto cleanup = qScopeGuard([&] { SetEvent(stop); CloseHandle(ready); CloseHandle(stop); });
+        QCOMPARE(child({"--crash-game", root, registry, stopName, readyName}), 90);
+        QCOMPARE(WaitForSingleObject(ready, 5000), DWORD(WAIT_OBJECT_0));
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Running);
+        QVERIFY(!PhysicalInstanceLease::acquire(root, id, registry));
+        QCOMPARE(child({"--probe-lease", root, id, registry}), 23);
+        QVERIFY(SetEvent(stop));
+        QTRY_COMPARE_WITH_TIMEOUT(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Inactive, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(keeperFinished(registry), 5000);
+        QVERIFY(PhysicalInstanceLease::acquire(root, id, registry));
+    }
     void physicalIdentityV2IncludesVolumeAndFileIdentifiersWithoutChangingV1()
     {
         QTemporaryDir temporary;
@@ -383,8 +467,43 @@ class AwakeTransactionsTest : public QObject {
 };
 int main(int argc, char** argv)
 {
+    const auto keeper = GameProcessGroup::runKeeper(argc, argv);
+    if (keeper >= 0) return keeper;
     QCoreApplication app(argc, argv);
     const auto arguments = app.arguments();
+    if (arguments.size() == 2 && arguments[1] == "--echo-game") {
+        QFile input, output;
+        if (!input.open(stdin, QIODevice::ReadOnly) || !output.open(stdout, QIODevice::WriteOnly)) return 45;
+        output.write(input.readLine()); output.flush(); return 0;
+    }
+    if (arguments.size() == 4 && arguments[1] == "--wait-game") {
+        const auto stop = OpenEventW(SYNCHRONIZE, FALSE, reinterpret_cast<LPCWSTR>(arguments[2].utf16()));
+        const auto ready = OpenEventW(EVENT_MODIFY_STATE, FALSE, reinterpret_cast<LPCWSTR>(arguments[3].utf16()));
+        if (!stop || !ready || !SetEvent(ready)) return 46;
+        const auto result = WaitForSingleObject(stop, 12000);
+        CloseHandle(ready); CloseHandle(stop); return result == WAIT_OBJECT_0 ? 0 : 47;
+    }
+    if (arguments.size() == 4 && arguments[1] == "--spawn-game") {
+        QProcess process;
+        process.setProcessChannelMode(QProcess::ForwardedChannels);
+        process.start(app.applicationFilePath(), {"--wait-game", arguments[2], arguments[3]});
+        if (!process.waitForStarted()) return 48;
+        ExitProcess(91);
+    }
+    if (arguments.size() == 6 && arguments[1] == "--crash-game") {
+        auto lease = PhysicalInstanceLease::acquire(arguments[2], physicalIdentityV2(arguments[2]), arguments[3]);
+        auto group = GameProcessGroup::create(lease);
+        QProcess process;
+        process.setProcessChannelMode(QProcess::ForwardedChannels);
+        if (!group || !group->attach(process)) return 49;
+        process.start(app.applicationFilePath(), {"--spawn-game", arguments[4], arguments[5]});
+        if (!process.waitForFinished(5000) || process.exitCode() != 91) return 50;
+        const auto ready = OpenEventW(SYNCHRONIZE, FALSE, reinterpret_cast<LPCWSTR>(arguments[5].utf16()));
+        if (!ready || WaitForSingleObject(ready, 5000) != WAIT_OBJECT_0) return 51;
+        CloseHandle(ready);
+        if (GameProcessGroup::probe(lease->physicalId(), lease->registryDirectory()) != GameProcessGroup::State::Running) return 52;
+        ExitProcess(90);
+    }
     if (arguments.size() == 5 && arguments[1] == "--probe-lease")
         return PhysicalInstanceLease::acquire(arguments[2], arguments[3], arguments[4]) ? 0 : 23;
     if ((arguments.size() == 7 && (arguments[1] == "--crash-apply" || arguments[1] == "--crash-verified" || arguments[1] == "--crash-complete")) ||

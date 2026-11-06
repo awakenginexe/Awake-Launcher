@@ -2,13 +2,14 @@
 #include "PhysicalInstanceLease.h"
 #include "InstanceDiscovery.h"
 #include "ProfileAccess.h"
+#include "GameProcessGroup.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <qt_windows.h>
 namespace Awake::Integration {
-PhysicalInstanceLease::PhysicalInstanceLease(QString root, QString id, void* handle)
-    : m_root(std::move(root)), m_physicalId(std::move(id)), m_handle(handle) {}
+PhysicalInstanceLease::PhysicalInstanceLease(QString root, QString id, QString registry, void* handle)
+    : m_root(std::move(root)), m_physicalId(std::move(id)), m_registry(std::move(registry)), m_handle(handle) {}
 std::shared_ptr<PhysicalInstanceLease> PhysicalInstanceLease::acquire(const QString& root, const QString& id,
                                                                    const QString& directory, QString* error)
 {
@@ -17,8 +18,7 @@ std::shared_ptr<PhysicalInstanceLease> PhysicalInstanceLease::acquire(const QStr
     if (id.isEmpty() || physicalIdentityV2(canonical) != id || !profileAccessIsPrivate(canonical))
         return reject("The physical instance or its access control cannot be verified.");
     const QFileInfo before(directory);
-    if (before.isSymLink() || before.isJunction() || !profileAccessIsPrivate(before.absolutePath()) ||
-        !QDir().mkpath(directory) || !profileAccessIsPrivate(directory))
+    if (before.isSymLink() || before.isJunction() || !createPrivateStorageDirectory(directory))
         return reject("Private instance coordination storage is unavailable.");
     const auto key = QString::fromLatin1(QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex());
     const auto path = "\\\\?\\" + QDir::toNativeSeparators(QDir(QFileInfo(directory).canonicalFilePath()).filePath(key + ".lock"));
@@ -31,7 +31,12 @@ std::shared_ptr<PhysicalInstanceLease> PhysicalInstanceLease::acquire(const QStr
         CloseHandle(handle);
         return reject("The physical instance lock identity changed.");
     }
-    return std::shared_ptr<PhysicalInstanceLease>(new PhysicalInstanceLease(canonical, id, handle));
+    const auto game = GameProcessGroup::probe(id, directory, error);
+    if (game == GameProcessGroup::State::Running || game == GameProcessGroup::State::Unknown) {
+        CloseHandle(handle);
+        return reject("A recorded game process is running or its state cannot be verified.");
+    }
+    return std::shared_ptr<PhysicalInstanceLease>(new PhysicalInstanceLease(canonical, id, QFileInfo(directory).canonicalFilePath(), handle));
 }
 bool PhysicalInstanceLease::pinRoot(QString* error)
 {

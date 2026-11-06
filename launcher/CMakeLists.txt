@@ -1280,6 +1280,7 @@ if(WIN32)
     target_sources(Launcher_logic PRIVATE awake/integration/DurableIO.cpp awake/integration/DurableIO.h
         awake/integration/OperationStore.cpp awake/integration/OperationStore.h
         awake/integration/PhysicalInstanceLease.cpp awake/integration/PhysicalInstanceLease.h
+        awake/integration/GameProcessGroup.cpp awake/integration/GameProcessGroup.h
         awake/integration/TransactionEngine.cpp awake/integration/TransactionEngine.h)
     target_link_libraries(Launcher_logic advapi32)
 endif()

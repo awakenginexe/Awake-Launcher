@@ -4,6 +4,7 @@
 #include "InstanceDiscovery.h"
 #include "OperationStore.h"
 #include "ProfileAccess.h"
+#include "GameProcessGroup.h"
 #include "Protocol.h"
 #include <QCryptographicHash>
 #include <QDir>
@@ -127,7 +128,9 @@ QJsonObject planAt(OperationStore& store, const QString& id, const QString& root
 }
 bool owns(const QString& root, const std::shared_ptr<PhysicalInstanceLease>& lease)
 {
-    return lease && lease->root() == root && lease->physicalId() == physicalIdentityV2(root);
+    if (!lease || lease->root() != root || lease->physicalId() != physicalIdentityV2(root)) return false;
+    const auto game = GameProcessGroup::probe(lease->physicalId(), lease->registryDirectory());
+    return game != GameProcessGroup::State::Running && game != GameProcessGroup::State::Unknown;
 }
 QString markerPath(const QString& root) { return root + "/.awake-integration/recovery.json"; }
 bool clearMarker(const QString& root, const QString& id, QString* error)

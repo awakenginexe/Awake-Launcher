@@ -136,6 +136,7 @@ if(WIN32)
     target_link_libraries(AwakeOperations advapi32)
     set_tests_properties(AwakeOperations PROPERTIES TIMEOUT 60)
     ecm_add_test(AwakeTransactions_test.cpp ../launcher/awake/integration/TransactionEngine.cpp
+        ../launcher/awake/integration/GameProcessGroup.cpp
         ../launcher/awake/integration/PhysicalInstanceLease.cpp ../launcher/awake/integration/OperationStore.cpp
         ../launcher/awake/integration/DurableIO.cpp ../launcher/awake/integration/InstanceDiscovery.cpp
         ../launcher/awake/integration/Protocol.cpp ../launcher/awake/integration/ProfileAccess.cpp

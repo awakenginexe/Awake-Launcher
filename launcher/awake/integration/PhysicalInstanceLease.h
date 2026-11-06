@@ -13,9 +13,10 @@ class PhysicalInstanceLease final {
     bool pinRoot(QString* error = nullptr);
     QString root() const { return m_root; }
     QString physicalId() const { return m_physicalId; }
+    QString registryDirectory() const { return m_registry; }
    private:
-    PhysicalInstanceLease(QString root, QString id, void* handle);
-    QString m_root, m_physicalId;
+    PhysicalInstanceLease(QString root, QString id, QString registry, void* handle);
+    QString m_root, m_physicalId, m_registry;
     void* m_handle;
     void* m_rootPin = nullptr;
 };
