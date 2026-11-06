@@ -65,6 +65,10 @@ bool allowedPath(const QString& path, const QString& mods)
     if (rest.startsWith(".index/")) return leaf(rest.mid(7)) && rest.endsWith(".pw.toml");
     return leaf(rest) && rest != ".index";
 }
+bool protectedMetadata(const QString& path)
+{
+    return path == "instance.cfg" || path == "mmc-pack.json" || path == ".awake-integration/policies.json";
+}
 bool save(const QString& path, const QJsonObject& body, QString* error)
 {
     const auto bytes = encode({{"body", body}, {"sha256", digest(body)}});
@@ -117,7 +121,8 @@ QJsonObject planAt(OperationStore& store, const QString& id, const QString& root
         const auto path = file["path"].toString(), stage = file["stagedName"].toString();
         if (!allowedPath(path, mods) || !safePath(root, path, error) || paths.contains(path.toCaseFolded()) ||
             !validHash(file["beforeHash"].toString()) || !validHash(file["afterHash"].toString()) ||
-            (!stage.isEmpty() && !leaf(stage)) || (stage.isEmpty() != (file["afterHash"] == "missing"))) {
+            (!stage.isEmpty() && !leaf(stage)) || (stage.isEmpty() != (file["afterHash"] == "missing")) ||
+            (stage.isEmpty() && protectedMetadata(path))) {
             if (error) *error = "Transaction file table is invalid.";
             return {};
         }
@@ -131,6 +136,19 @@ bool owns(const QString& root, const std::shared_ptr<PhysicalInstanceLease>& lea
     if (!lease || lease->root() != root || lease->physicalId() != physicalIdentityV2(root)) return false;
     const auto game = GameProcessGroup::probe(lease->physicalId(), lease->registryDirectory());
     return game != GameProcessGroup::State::Running && game != GameProcessGroup::State::Unknown;
+}
+bool pinInventory(const QString& root, const QString& mods, const std::shared_ptr<PhysicalInstanceLease>& lease, QString* error)
+{
+    if (!lease->pinRoot(error)) return false;
+    int count = 0;
+    std::function<bool(const QString&)> walk = [&](const QString& path) {
+        if (!QFileInfo::exists(root + '/' + path)) return true;
+        if (++count > 100000 || !lease->pinDirectory(path, error)) return false;
+        for (const auto& entry : QDir(root + '/' + path).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System))
+            if (!walk(path + '/' + entry.fileName())) return false;
+        return true;
+    };
+    return walk(mods) && walk(".awake-integration");
 }
 QString markerPath(const QString& root) { return root + "/.awake-integration/recovery.json"; }
 bool clearMarker(const QString& root, const QString& id, QString* error)
@@ -223,6 +241,7 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
     quint64 bytes = 16 * 1024 * 1024;
     for (const auto& change : changes) {
         const auto path = change.relativePath;
+        if (change.stagedName.isEmpty() && protectedMetadata(path)) return failure("INVALID_REQUEST", "Native instance and policy metadata must be serialized, not deleted.");
         if (!allowedPath(path, m_mods) || !safePath(m_root, path, &error) || targets.contains(path.toCaseFolded()) ||
             (!change.stagedName.isEmpty() && !leaf(change.stagedName))) return failure("IDENTITY_CONFLICT", "Invalid, linked or colliding target.");
         targets.insert(path.toCaseFolded());
@@ -256,7 +275,7 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
 {
     if (!owns(m_root, lease)) return failure("BUSY", "An exclusive physical-instance lease is required.", true);
     QString error;
-    if (!lease->pinRoot(&error)) return failure("IDENTITY_UNVERIFIABLE", error);
+    if (!pinInventory(m_root, m_mods, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return failure("RECOVERY_REQUIRED", error);
     if (claimed != plan["planDigest"] || expected != plan["instanceRevision"]) return failure("STALE_PLAN", "Apply does not identify the reviewed plan.");
@@ -284,6 +303,7 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
     }
     if (!privateDirectory(directory + "/backups") || !privateDirectory(m_root + "/.awake-integration"))
         return failure("IO_ERROR", "Backup or recovery marker storage is unavailable.");
+    if (!lease->pinDirectory(".awake-integration", &error)) return failure("IO_ERROR", error);
     if (!writeJournal(directory, id, claimed, "backing_up", 0, &error) ||
         !save(markerPath(m_root), {{"operationId", id}, {"physicalId", lease->physicalId()}, {"planDigest", claimed},
                                   {"storePath", m_store.directory()}, {"storePhysicalId", physicalIdentityV2(m_store.directory())}}, &error))
@@ -317,6 +337,7 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
         if (!safePath(m_root, path, &error) || DurableIO::hash(destination, &error) != file["beforeHash"] ||
             !writeJournal(directory, id, claimed, "applying", int(index), &error) || !inject("before_replace", int(index))) return interrupted();
         if (!QDir().mkpath(QFileInfo(destination).absolutePath())) { error = "Cannot create target directory."; return interrupted(); }
+        if (!lease->pinDirectory(QFileInfo(path).path(), &error)) return interrupted();
         const bool replaced = file["afterHash"] == "missing" ? DurableIO::remove(destination, &error)
             : DurableIO::copy(directory + "/staging/" + file["stagedName"].toString(), destination, &error);
         if (!replaced || DurableIO::hash(destination, &error) != file["afterHash"] || !inject("after_replace", int(index))) return interrupted();
@@ -332,7 +353,7 @@ QJsonObject TransactionEngine::complete(const QString& id, const std::shared_ptr
 {
     if (!owns(m_root, lease)) return failure("BUSY", "An exclusive physical-instance lease is required.", true);
     QString error;
-    if (!lease->pinRoot(&error)) return failure("IDENTITY_UNVERIFIABLE", error);
+    if (!pinInventory(m_root, m_mods, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return failure("RECOVERY_REQUIRED", error);
     const auto status = m_store.get(id)["result"].toObject();
@@ -351,12 +372,18 @@ QJsonObject TransactionEngine::recover(const QString& id, const std::shared_ptr<
 {
     if (!owns(m_root, lease)) return failure("BUSY", "An exclusive physical-instance lease is required.", true);
     QString error;
-    if (!lease->pinRoot(&error)) return failure("IDENTITY_UNVERIFIABLE", error);
+    if (!pinInventory(m_root, m_mods, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     const auto directory = area(m_store, id);
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return recoveryRequired(m_store, id, error);
     auto status = m_store.get(id)["result"].toObject();
     if (OperationStore::terminal(status["state"].toString())) {
+        if (QFileInfo::exists(markerPath(m_root))) {
+            const auto which = status["state"] == "completed" ? "afterHash" : "beforeHash";
+            const auto expected = status["state"] == "completed" ? status["result"].toObject()["instanceRevision"].toString() : plan["instanceRevision"].toString();
+            if (!verifyFiles(m_root, plan["files"].toArray(), which, &error) || revision(&error) != expected)
+                return failure("RECOVERY_REQUIRED", "Retained recovery evidence cannot be cleared because instance bytes changed.");
+        }
         if (!clearMarker(m_root, id, &error)) return failure("RECOVERY_REQUIRED", error);
         return m_store.get(id);
     }
@@ -407,6 +434,7 @@ QJsonObject TransactionEngine::recover(const QString& id, const std::shared_ptr<
         } else {
             const auto backup = directory + "/backups/" + QString::number(index);
             if (DurableIO::hash(backup, &error) != file["beforeHash"] || !QDir().mkpath(QFileInfo(destination).absolutePath()) ||
+                !lease->pinDirectory(QFileInfo(path).path(), &error) ||
                 !DurableIO::copy(backup, destination, &error)) return blocked();
         }
         if (DurableIO::hash(destination, &error) != file["beforeHash"] || (fault && !fault("after_restore", int(index)))) return blocked();

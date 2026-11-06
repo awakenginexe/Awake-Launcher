@@ -209,6 +209,48 @@ class AwakeTransactionsTest : public QObject {
         QCOMPARE(engine.revision(), baseline);
         QVERIFY(!QFile::exists(temporary.path() + "/escape"));
     }
+    void nativeConfigurationCanBeReplacedButNotRemoved()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        QVERIFY(put(root + "/instance.cfg", "original config"));
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+        const auto id = operation(store);
+        QVERIFY(put(store.directory() + '/' + id + "/staging/config", "new config"));
+        TransactionEngine engine(store, root, ".minecraft/mods");
+        const auto revision = engine.revision();
+        QVERIFY(engine.prepare(id, {{"instance.cfg", {}}}, revision).contains("error"));
+        const auto plan = engine.prepare(id, {{"instance.cfg", "config"}}, revision)["result"].toObject(); QVERIFY(!plan.isEmpty());
+        auto lease = leaseFor(root); QVERIFY(lease);
+        QCOMPARE(engine.apply(id, plan["planDigest"].toString(), revision, lease)["result"].toObject()["state"].toString(), QString("verifying"));
+        QCOMPARE(engine.complete(id, lease)["result"].toObject()["state"].toString(), QString("completed"));
+        QCOMPARE(bytes(root + "/instance.cfg"), QByteArray("new config"));
+    }
+    void terminalRecoveryMustVerifyBytesBeforeClearingARetainedMarker()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open());
+        const auto plan = threeFilePlan(store, root); QVERIFY(!plan.isEmpty());
+        const auto id = plan["operationId"].toString();
+        TransactionEngine engine(store, root, ".minecraft/mods");
+        auto lease = leaseFor(root); QVERIFY(lease);
+        QCOMPARE(engine.apply(id, plan["planDigest"].toString(), plan["instanceRevision"].toString(), lease)["result"].toObject()["state"].toString(), QString("verifying"));
+        const auto marker = QDir::toNativeSeparators(root + "/.awake-integration/recovery.json");
+        const auto locked = CreateFileW(reinterpret_cast<LPCWSTR>(marker.utf16()), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr, OPEN_EXISTING, 0, nullptr); QVERIFY(locked != INVALID_HANDLE_VALUE);
+        const auto completed = engine.complete(id, lease);
+        CloseHandle(locked);
+        QVERIFY(completed.contains("error"));
+        QCOMPARE(store.get(id)["result"].toObject()["state"].toString(), QString("completed"));
+        QVERIFY(put(root + "/.minecraft/mods/0.jar", "manual edit"));
+        QCOMPARE(engine.recover(id, lease)["error"].toObject()["code"].toString(), QString("RECOVERY_REQUIRED"));
+        QVERIFY(QFile::exists(marker));
+        QCOMPARE(bytes(root + "/.minecraft/mods/0.jar"), QByteArray("manual edit"));
+        QVERIFY(put(root + "/.minecraft/mods/0.jar", "new-0"));
+        QCOMPARE(engine.recover(id, lease)["result"].toObject()["state"].toString(), QString("completed"));
+        QVERIFY(!QFile::exists(marker));
+    }
     void applyPinsTheInstanceDirectoryUntilVerificationCompletes()
     {
         QTemporaryDir temporary;
@@ -220,6 +262,7 @@ class AwakeTransactionsTest : public QObject {
         const auto id = plan["operationId"].toString();
         QCOMPARE(engine.apply(id, plan["planDigest"].toString(), plan["instanceRevision"].toString(), lease)["result"].toObject()["state"].toString(), QString("verifying"));
         QVERIFY(!QDir().rename(root, moved));
+        QVERIFY(!QDir().rename(root + "/.minecraft/mods", root + "/.minecraft/moved-mods"));
         QCOMPARE(engine.complete(id, lease)["result"].toObject()["state"].toString(), QString("completed"));
         lease.reset();
         QVERIFY(QDir().rename(root, moved));

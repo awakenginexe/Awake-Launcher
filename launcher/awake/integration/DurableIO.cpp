@@ -7,6 +7,7 @@
 #include <QUuid>
 #include <functional>
 #include <qt_windows.h>
+#include <aclapi.h>
 namespace Awake::Integration::DurableIO {
 namespace {
 QString native(const QString& path)
@@ -20,6 +21,53 @@ bool fail(QString* error, const QString& reason, DWORD code = GetLastError())
     if (error) *error = reason + " (Windows error " + QString::number(code) + ")";
     return false;
 }
+bool defaultAccess(HANDLE file, const QString& path)
+{
+    PSECURITY_DESCRIPTOR actual = nullptr, parent = nullptr, expected = nullptr;
+    HANDLE token = nullptr;
+    auto cleanup = qScopeGuard([&] {
+        if (actual) LocalFree(actual);
+        if (parent) LocalFree(parent);
+        if (expected) DestroyPrivateObjectSecurity(&expected);
+        if (token) CloseHandle(token);
+    });
+    const auto information = OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
+    auto parentPath = native(QFileInfo(path).absolutePath());
+    if (GetSecurityInfo(file, SE_FILE_OBJECT, information, nullptr, nullptr, nullptr, nullptr, &actual) != ERROR_SUCCESS ||
+        GetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(parentPath.data()), SE_FILE_OBJECT, information,
+            nullptr, nullptr, nullptr, nullptr, &parent) != ERROR_SUCCESS ||
+        !OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    GENERIC_MAPPING mapping{FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS};
+    if (!CreatePrivateObjectSecurityEx(parent, nullptr, &expected, nullptr, FALSE, SEF_DACL_AUTO_INHERIT, token, &mapping)) return false;
+    PSID actualOwner = nullptr, expectedOwner = nullptr, actualGroup = nullptr, expectedGroup = nullptr;
+    BOOL ignored = FALSE, actualPresent = FALSE, expectedPresent = FALSE;
+    PACL actualAcl = nullptr, expectedAcl = nullptr;
+    SECURITY_DESCRIPTOR_CONTROL control{}; DWORD revision = 0;
+    if (!GetSecurityDescriptorOwner(actual, &actualOwner, &ignored) || !GetSecurityDescriptorOwner(expected, &expectedOwner, &ignored) ||
+        !GetSecurityDescriptorGroup(actual, &actualGroup, &ignored) || !GetSecurityDescriptorGroup(expected, &expectedGroup, &ignored) ||
+        !actualOwner || !expectedOwner || !actualGroup || !expectedGroup ||
+        !EqualSid(actualOwner, expectedOwner) || !EqualSid(actualGroup, expectedGroup) ||
+        !GetSecurityDescriptorControl(actual, &control, &revision) || (control & SE_DACL_PROTECTED) ||
+        !GetSecurityDescriptorDacl(actual, &actualPresent, &actualAcl, &ignored) ||
+        !GetSecurityDescriptorDacl(expected, &expectedPresent, &expectedAcl, &ignored) ||
+        !actualPresent || !expectedPresent || !actualAcl || !expectedAcl || actualAcl->AceCount != expectedAcl->AceCount) return false;
+    for (DWORD index = 0; index < actualAcl->AceCount; ++index) {
+        void* left = nullptr; void* right = nullptr;
+        if (!GetAce(actualAcl, index, &left) || !GetAce(expectedAcl, index, &right)) return false;
+        const auto size = static_cast<ACE_HEADER*>(left)->AceSize;
+        if (size != static_cast<ACE_HEADER*>(right)->AceSize || memcmp(left, right, size)) return false;
+    }
+    return true;
+}
+bool singleStream(const QString& path)
+{
+    WIN32_FIND_STREAM_DATA stream{};
+    const auto name = native(path);
+    const auto search = FindFirstStreamW(wide(name), FindStreamInfoStandard, &stream, 0);
+    if (search == INVALID_HANDLE_VALUE) return false;
+    auto close = qScopeGuard([&] { FindClose(search); });
+    return QString::fromWCharArray(stream.cStreamName) == "::$DATA" && !FindNextStreamW(search, &stream) && GetLastError() == ERROR_HANDLE_EOF;
+}
 HANDLE read(const QString& path, QString* error)
 {
     const auto name = native(path);
@@ -31,9 +79,9 @@ HANDLE read(const QString& path, QString* error)
     }
     BY_HANDLE_FILE_INFORMATION info{};
     if (!GetFileInformationByHandle(handle, &info) || info.nNumberOfLinks != 1 ||
-        (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
+        (info.dwFileAttributes & ~(FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) || !defaultAccess(handle, path) || !singleStream(path)) {
         CloseHandle(handle);
-        fail(error, "Linked or nonregular files are not writable integration targets", ERROR_INVALID_DATA);
+        fail(error, "Linked files, alternate streams, custom permissions or special attributes are unsupported integration targets", ERROR_NOT_SUPPORTED);
         return INVALID_HANDLE_VALUE;
     }
     return handle;

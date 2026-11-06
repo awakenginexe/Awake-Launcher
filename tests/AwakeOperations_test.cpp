@@ -34,6 +34,38 @@ class AwakeOperationsTest : public QObject {
                 DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr, newAcl, nullptr) == ERROR_SUCCESS;
     }
    private slots:
+    void replacementsMustNotDiscardAlternateStreams()
+    {
+        QTemporaryDir temporary;
+        const auto path = temporary.path() + "/mod.jar";
+        QVERIFY(DurableIO::write(path, "original"));
+        QFile alternate(path + ":user-data"); QVERIFY(alternate.open(QIODevice::WriteOnly));
+        QCOMPARE(alternate.write("preserve stream"), qint64(15)); alternate.close();
+        QVERIFY(!DurableIO::write(path, "replacement"));
+        QVERIFY(!DurableIO::remove(path));
+        QFile original(path); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), QByteArray("original"));
+        QVERIFY(alternate.open(QIODevice::ReadOnly)); QCOMPARE(alternate.readAll(), QByteArray("preserve stream"));
+    }
+    void replacementsMustNotDiscardCustomAccessControl()
+    {
+        QTemporaryDir temporary;
+        const auto path = temporary.path() + "/mod.jar";
+        QVERIFY(DurableIO::write(path, "original")); QVERIFY(publicRead(path));
+        QVERIFY(!DurableIO::write(path, "replacement"));
+        QVERIFY(!DurableIO::remove(path));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), QByteArray("original"));
+    }
+    void movedFilesWithDifferentInheritedAccessMustBePreserved()
+    {
+        QTemporaryDir temporary;
+        const auto source = temporary.path() + "/public", destination = temporary.path() + "/private";
+        QVERIFY(QDir().mkdir(source)); QVERIFY(QDir().mkdir(destination)); QVERIFY(publicRead(source));
+        QVERIFY(DurableIO::write(source + "/mod.jar", "original"));
+        QVERIFY(QFile::rename(source + "/mod.jar", destination + "/mod.jar"));
+        QVERIFY(!DurableIO::write(destination + "/mod.jar", "replacement"));
+        QVERIFY(!DurableIO::remove(destination + "/mod.jar"));
+        QFile file(destination + "/mod.jar"); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), QByteArray("original"));
+    }
     void recoveryStorageMustRejectAnExistingPublicReadDirectory()
     {
         QTemporaryDir temporary;

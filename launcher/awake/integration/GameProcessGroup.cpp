@@ -106,7 +106,8 @@ GameProcessGroup::State GameProcessGroup::probe(const QString& id, const QString
 std::shared_ptr<GameProcessGroup> GameProcessGroup::create(const std::shared_ptr<PhysicalInstanceLease>& lease, QString* error)
 {
     const auto reject = [error](const QString& message) -> std::shared_ptr<GameProcessGroup> { if (error) *error = message; return {}; };
-    if (!lease || !lease->pinRoot(error)) return reject("An exclusive physical-instance lease is required for launch.");
+    if (!lease) return reject("An exclusive physical-instance lease is required for launch.");
+    if (!lease->pinRoot(error)) return {};
     const auto state = probe(lease->physicalId(), lease->registryDirectory(), error);
     if (state == State::Running || state == State::Unknown) return reject("Existing game ownership is busy or unverifiable.");
     const auto sid = userSid();

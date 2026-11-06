@@ -40,26 +40,46 @@ std::shared_ptr<PhysicalInstanceLease> PhysicalInstanceLease::acquire(const QStr
 }
 bool PhysicalInstanceLease::pinRoot(QString* error)
 {
-    const auto reject = [error] { if (error) *error = "The physical instance directory cannot be pinned for replacement."; return false; };
-    if (m_rootPin) return physicalIdentityV2(m_root) == m_physicalId || reject();
-    const auto path = "\\\\?\\" + QDir::toNativeSeparators(m_root);
-    // Attribute-only handles do not enforce Windows delete-sharing restrictions.
-    const auto handle = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                    nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) return reject();
-    BY_HANDLE_FILE_INFORMATION info{};
-    if (!GetFileInformationByHandle(handle, &info) || !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
-        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
-        physicalIdentityV2(m_root) != m_physicalId) {
-        CloseHandle(handle);
-        return reject();
+    if (!pinAbsoluteDirectory(m_root, error) || physicalIdentityV2(m_root) != m_physicalId) {
+        if (error && error->isEmpty()) *error = "The physical instance identity changed during pinning.";
+        return false;
     }
-    m_rootPin = handle;
+    return true;
+}
+bool PhysicalInstanceLease::pinDirectory(const QString& path, QString* error)
+{
+    if (path == ".") return pinRoot(error);
+    if (path.isEmpty() || QDir::isAbsolutePath(path) || path.contains('\\') || QDir::cleanPath(path) != path ||
+        path == ".." || path.startsWith("../") || !pinRoot(error)) return false;
+    return pinAbsoluteDirectory(m_root + '/' + path, error);
+}
+bool PhysicalInstanceLease::pinAbsoluteDirectory(const QString& directory, QString* error)
+{
+    auto position = QDir(directory).rootPath();
+    const auto parts = directory.mid(position.size()).split('/', Qt::SkipEmptyParts);
+    QStringList paths{position};
+    for (const auto& part : parts) { position = QDir(position).filePath(part); paths.append(position); }
+    for (const auto& name : paths) {
+        if (m_pins.contains(name)) continue;
+        const auto native = "\\\\?\\" + QDir::toNativeSeparators(name);
+        // Attribute-only handles do not enforce Windows delete-sharing restrictions.
+        const auto handle = CreateFileW(reinterpret_cast<LPCWSTR>(native.utf16()), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (handle == INVALID_HANDLE_VALUE || !GetFileInformationByHandle(handle, &info) ||
+            !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            const auto code = GetLastError();
+            if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+            if (error) *error = "Cannot pin directory " + name + " (Windows error " + QString::number(code) + ").";
+            return false;
+        }
+        m_pins.insert(name, handle);
+    }
     return true;
 }
 PhysicalInstanceLease::~PhysicalInstanceLease()
 {
-    if (m_rootPin) CloseHandle(m_rootPin);
+    for (const auto handle : m_pins) CloseHandle(handle);
     CloseHandle(m_handle);
 }
 }  // namespace Awake::Integration
