@@ -1,5 +1,5 @@
 # Manager client handoff
-**Current delivery: read-only status/discovery**, following the clarified status-checking goal. The original writable integration remains unimplemented and deferred; the four-phase write/recovery plan is not complete.
+**Current external delivery: read-only status/discovery.** Full writable integration is now authorized and under implementation; the write/recovery acceptance criteria are not complete. No write capability is enabled yet.
 Use [protocol.md](protocol.md), [wire.schema.json](wire.schema.json), and [requests.schema.json](requests.schema.json). Version 1.0 is experimental.
 
 ## Implemented
@@ -40,6 +40,7 @@ Inspected Manager commit `bafd5d59966155afa64d618d9b1c9606242e5d67`; concurrent 
 Required client tests: actual native transport/framing and fragmented responses, hello mismatch, selected-profile/session mismatch, empty/305-mod inventories, stale-page restart, collision/unloaded rows, unknown status/metadata, BUSY and unsupported UI gating, unavailable Launcher and reconnect after idle/restart. Keep all planning, provider, export, launch and operation/recovery calls disabled; mock success is not IPC evidence.
 
 ## Unavailable; do not enable in Manager
+The Windows OperationStore/DurableIO foundation persists idempotent operation records, validates state transitions and flushes replacements. It is internal, not an advertised IPC capability; native gate, transaction and recovery integration must precede external writes.
 Enrollment, the instance operation gate, provider search/version IPC, instance creation, Evaluate/Prepare/Apply, durable idempotency/operation storage, operation cancellation/events, launch RPC, transaction journals and recovery. Every such request returns UNSUPPORTED_CAPABILITY with no operation created. No no-window QApplication backend has been implemented.
 The write policy is approved: explicit enrollment for exclusive use by gate-aware Launcher versions. Enrollment itself remains unavailable. Do not edit live files from Manager.
 
