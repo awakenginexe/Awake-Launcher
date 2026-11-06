@@ -117,6 +117,9 @@ class Application : public QApplication {
     ~Application() override;
 
     bool event(QEvent* event) override;
+#ifdef Q_OS_WIN
+    bool notify(QObject* receiver, QEvent* event) override;
+#endif
 
     SettingsObject* settings() const { return m_settings.get(); }
     SettingsObject* playtimeSettings() const { return m_playtimeSettings.get(); }

@@ -84,6 +84,9 @@
 #include "awake/AwakeTheme.h"
 
 #include "ApplicationMessage.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceOperationScope.h"
+#endif
 
 #include <algorithm>
 #include <iostream>
@@ -1375,6 +1378,15 @@ QString Application::updaterBinaryName()
     return exeName;
 }
 
+#ifdef Q_OS_WIN
+bool Application::notify(QObject* receiver, QEvent* event)
+{
+    if (!Awake::Integration::InstanceOperationScope::current()) return QApplication::notify(receiver, event);
+    // A modal event loop must not lend its task's ownership to unrelated UI or IPC callbacks.
+    Awake::Integration::InstanceOperationScope isolated(nullptr);
+    return QApplication::notify(receiver, event);
+}
+#endif
 bool Application::event(QEvent* event)
 {
 #ifdef Q_OS_MACOS

@@ -4,6 +4,11 @@
 #include <QElapsedTimer>
 #include <QtEndian>
 #include "awake/integration/Protocol.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/InstanceOperationScope.h"
+#endif
 #include <QCloseEvent>
 #include <QDir>
 #include <QFile>
@@ -90,9 +95,45 @@
 #endif
 
 using namespace Awake::Web;
+#ifdef Q_OS_WIN
+class IntegrationPlainEventProbe : public QObject {
+   public:
+    bool isolated = false;
+    void customEvent(QEvent*) override { isolated = !Awake::Integration::InstanceOperationScope::current(); }
+};
+class IntegrationTaskEventProbe : public Task {
+   public:
+    QString identity;
+    void executeTask() override { emitSucceeded(); }
+    void customEvent(QEvent*) override
+    {
+        const auto lease = Awake::Integration::InstanceOperationScope::current();
+        identity = lease ? lease->physicalId() : QString{};
+    }
+};
+#endif
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+#ifdef Q_OS_WIN
+    void integrationNestedEventsDoNotBorrowUnrelatedOwnership()
+    {
+        using namespace Awake::Integration;
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        QVERIFY(QDir().mkdir(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto lease = PhysicalInstanceLease::acquire(root, id, temporary.path() + "/leases"); QVERIFY(lease);
+        InstanceOperationScope scope(lease);
+        IntegrationPlainEventProbe plain;
+        IntegrationTaskEventProbe task;
+        QEvent event(QEvent::User);
+        QCoreApplication::sendEvent(&plain, &event); QVERIFY(plain.isolated);
+        QCOMPARE(InstanceOperationScope::current()->physicalId(), id);
+        QCoreApplication::sendEvent(&task, &event); QCOMPARE(task.identity, id);
+        QCOMPARE(InstanceOperationScope::current()->physicalId(), id);
+    }
+#endif
     void integrationReadOnlyDiscovery()
     {
 #ifndef Q_OS_WIN

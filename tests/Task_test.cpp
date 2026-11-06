@@ -11,6 +11,15 @@
 #include <QSignalSpy>
 
 #include <array>
+#include <atomic>
+#ifdef Q_OS_WIN
+#include <QTemporaryDir>
+#include <QDir>
+#include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/InstanceOperationScope.h"
+using namespace Awake::Integration;
+#endif
 
 /* Does nothing. Only used for testing. */
 class BasicTask : public Task {
@@ -42,6 +51,32 @@ public:
     int attempts = 0;
     void executeTask() override { ++attempts; emitFailed("Account refresh failed"); }
 };
+#ifdef Q_OS_WIN
+class QueuedLeaseTask : public Task {
+   public:
+    bool synchronous = false, queued = false;
+    QString expected;
+    std::shared_ptr<BasicTask> child;
+    void executeTask() override
+    {
+        synchronous = InstanceOperationScope::current() && InstanceOperationScope::current()->physicalId() == expected;
+        QMetaObject::invokeMethod(this, [this] {
+            queued = InstanceOperationScope::current() && InstanceOperationScope::current()->physicalId() == expected;
+            child = std::make_shared<BasicTask>();
+            emitSucceeded();
+        }, Qt::QueuedConnection);
+    }
+};
+class ReentrantLeaseTask : public Task {
+   public:
+    int attempts = 0;
+    void executeTask() override
+    {
+        if (++attempts == 1) emitSucceeded();
+        else QMetaObject::invokeMethod(this, [this] { emitSucceeded(); }, Qt::QueuedConnection);
+    }
+};
+#endif
 
 class QueuedChildTask : public ConcurrentTask {
     void executeTask() override { ConcurrentTask::executeTask(); executeNextSubTask(); }
@@ -101,6 +136,96 @@ class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+#ifdef Q_OS_WIN
+    void reentrantRestartRetainsTheNewTaskOwnership()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        std::unique_ptr<ReentrantLeaseTask> task;
+        {
+            auto lease = acquire(); QVERIFY(lease);
+            InstanceOperationScope scope(lease); task = std::make_unique<ReentrantLeaseTask>();
+        }
+        connect(task.get(), &Task::finished, task.get(), [&] { if (task->attempts == 1) task->start(); });
+        task->start(); QVERIFY(task->isRunning()); QCOMPARE(task->attempts, 2);
+        QVERIFY(!acquire());
+        QCoreApplication::sendPostedEvents(task.get(), QEvent::MetaCall);
+        QVERIFY(task->wasSuccessful()); QVERIFY(acquire());
+    }
+    void taskOwnershipIsScopedToTheExecutingThread()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto lease = PhysicalInstanceLease::acquire(root, id, temporary.path() + "/leases"); QVERIFY(lease);
+        InstanceOperationScope scope(lease);
+        BasicTask task;
+        std::atomic_bool observed{false}, restored{false};
+        connect(&task, &Task::finished, &task, [&] {
+            observed = InstanceOperationScope::current() && InstanceOperationScope::current()->physicalId() == id;
+        }, Qt::DirectConnection);
+        auto thread = std::unique_ptr<QThread>(QThread::create([&] {
+            if (InstanceOperationScope::current()) return;
+            task.start();
+            restored = !InstanceOperationScope::current();
+        }));
+        thread->start(); QVERIFY(thread->wait(5000));
+        QVERIFY(observed); QVERIFY(restored);
+        QCOMPARE(InstanceOperationScope::current()->physicalId(), id);
+    }
+    void instanceLeaseSurvivesQueuedTaskAndChildLifetimes()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        std::unique_ptr<QueuedLeaseTask> task;
+        {
+            auto lease = acquire(); QVERIFY(lease);
+            InstanceOperationScope scope(lease);
+            task = std::make_unique<QueuedLeaseTask>(); task->expected = id;
+        }
+        QVERIFY(!InstanceOperationScope::current());
+        QVERIFY(!acquire());
+        task->start();
+        QVERIFY(task->synchronous); QVERIFY(task->isRunning());
+        QVERIFY(!InstanceOperationScope::current());
+        QCoreApplication::sendPostedEvents(task.get(), QEvent::MetaCall);
+        QVERIFY(task->queued); QVERIFY(task->wasSuccessful()); QVERIFY(task->child);
+        QVERIFY(!acquire());
+        bool childScope = false;
+        connect(task->child.get(), &Task::finished, this, [&] {
+            childScope = InstanceOperationScope::current() && InstanceOperationScope::current()->physicalId() == id;
+        });
+        task->child->start(); QVERIFY(task->child->wasSuccessful()); QVERIFY(childScope);
+        QVERIFY(!InstanceOperationScope::current());
+        QVERIFY(acquire());
+    }
+    void restartingTaskReacquiresOwnershipAndFailsWhenBusy()
+    {
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance", registry = temporary.path() + "/leases";
+        QVERIFY(QDir().mkpath(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        auto acquire = [&] { return PhysicalInstanceLease::acquire(root, id, registry); };
+        std::unique_ptr<BasicTask> task;
+        {
+            auto lease = acquire(); QVERIFY(lease);
+            InstanceOperationScope scope(lease); task = std::make_unique<BasicTask>();
+        }
+        task->start(); QVERIFY(task->wasSuccessful());
+        auto other = acquire(); QVERIFY(other);
+        task->start(); QCOMPARE(task->getState(), Task::State::Failed);
+        QVERIFY(!task->failReason().isEmpty());
+        other.reset(); task->start(); QVERIFY(task->wasSuccessful());
+        QVERIFY(acquire());
+    }
+#endif
     void canceledParentDoesNotStartQueuedChild_data()
     {
         QTest::addColumn<bool>("restart");
