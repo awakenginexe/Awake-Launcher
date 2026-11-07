@@ -64,7 +64,7 @@ void writeRecord(const QString& path, const QJsonObject& value)
 void requireResult(const QJsonObject& response)
 { if (response.contains("error")) { const auto error = response["error"].toObject(); throw ServiceError{error["code"].toString(), error["message"].toString(), error["retryable"].toBool()}; } }
 WorkspaceServices::WorkspaceServices(QString profile, OperationStore& store, std::shared_ptr<std::atomic_bool> cancel, ModrinthService::Fetch fixture)
-    : m_profile(std::move(profile)), m_store(store), m_provider(std::move(cancel), std::move(fixture)) {}
+    : m_profile(std::move(profile)), m_store(store), m_provider(cancel, fixture), m_curseforge(std::move(cancel), std::move(fixture)) {}
 QString WorkspaceServices::operationDirectory(const QString& id) const
 { if (!uuid(id)) throw ServiceError{"INVALID_REQUEST", "Invalid operation identity."}; return m_store.directory() + '/' + id; }
 void WorkspaceServices::saveContext(const QString& id, const QString& method, const QJsonObject& request)
@@ -127,7 +127,7 @@ QJsonArray WorkspaceServices::scan(const QJsonObject& record) const
         const auto entry = it.value().toObject(); const auto filename = entry["fileName"].toString(), index = entry["indexFile"].toString();
         const auto version = entry["version"].toObject();
         if (!leaf(filename) || !leaf(index) || !filename.endsWith(".jar", Qt::CaseInsensitive) || !index.endsWith(".pw.toml") ||
-            entry["projectId"] != it.key() || !Contract().valid("version", version) || version["projectId"] != entry["projectId"] ||
+            (entry["provider"].toString("modrinth") == "curseforge" ? "curseforge:" + entry["projectId"].toString() : entry["projectId"].toString()) != it.key() || !Contract().valid("version", version) || version["projectId"] != entry["projectId"] ||
             version["versionId"] != entry["versionId"] || version["versionNumber"] != entry["versionNumber"] || version["files"].toArray().size() != 1 ||
             version["files"].toArray().first().toObject()["fileName"] != filename)
             throw ServiceError{"POLICY_CONFLICT", "An installed policy entry is invalid."};
@@ -150,14 +150,16 @@ QJsonArray WorkspaceServices::scan(const QJsonObject& record) const
             const auto artifact = entry["version"].toObject()["files"].toArray().first().toObject();
             state = digest == entry["sha256"] && indexHash == entry["indexSha256"] && native.isValid() &&
                 native.projectId.toString() == entry["projectId"].toString() && native.fileId.toString() == entry["versionId"].toString() &&
-                native.filename == entry["fileName"] && native.hashFormat == "sha512" && native.hash == artifact["sha512"] &&
-                DurableIO::hash(file.absoluteFilePath(), nullptr, QCryptographicHash::Sha512) == artifact["sha512"] ? "verified" : "modified";
+                native.filename == entry["fileName"] && native.provider == (entry["provider"] == "curseforge" ? ModPlatform::ResourceProvider::FLAME : ModPlatform::ResourceProvider::MODRINTH) &&
+                native.hashFormat == (entry["provider"] == "curseforge" ? "sha1" : "sha512") && native.hash == artifact[native.hashFormat] &&
+                DurableIO::hash(file.absoluteFilePath(), nullptr, entry["provider"] == "curseforge" ? QCryptographicHash::Sha1 : QCryptographicHash::Sha512) == artifact[native.hashFormat] ? "verified" : "modified";
             locked = native.lockUpdate || entry["updateLocked"].toBool() || entry["excluded"].toBool() || !entry["pinnedVersion"].toString().isEmpty();
         }
         const auto nullable = [&](const char* field) { return entry.isEmpty() ? QJsonValue(QJsonValue::Null) : entry[field]; };
         result.append(QJsonObject{{"inventoryId", sha(file.fileName().toUtf8())}, {"fileName", file.fileName()}, {"enabled", enabled},
             {"size", QString::number(file.size())}, {"sha256", digest}, {"projectId", nullable("projectId")}, {"versionId", nullable("versionId")},
             {"versionNumber", nullable("versionNumber")}, {"metadataState", state}, {"updateLocked", locked}});
+        if (entry["provider"] == "curseforge") { auto row = result.last().toObject(); row["provider"] = "curseforge"; result.replace(result.size() - 1, row); }
     }
     if (result.size() > 100000) throw ServiceError{"LIMIT_EXCEEDED", "Inventory exceeds 100,000 mod files."};
     return result;
@@ -186,8 +188,11 @@ void WorkspaceServices::create(const QString& id, const QJsonObject& request)
     requireResult(m_store.transition(id, "resolving")); m_provider.checkCancelled();
     const auto loader = request["loader"].toObject();
     const auto catalog = m_provider.catalog({{"minecraftVersion", request["minecraftVersion"]}, {"loader", loader["id"]}});
-    if ((loader["id"] == "fabric" && !catalog["loaderVersions"].toArray().contains(loader["version"])) ||
-        (loader["id"] == "vanilla" && !loader["version"].toString().isEmpty())) throw ServiceError{"INVALID_REQUEST", "Unsupported Minecraft/loader combination."};
+    const auto loaderId = loader["id"].toString();
+    if ((loaderId == "vanilla" && !loader["version"].toString().isEmpty()) ||
+        (loaderId != "vanilla" && (!QStringList{"fabric", "forge", "neoforge", "quilt"}.contains(loaderId) ||
+         !catalog["loaderVersions"].toArray().contains(loader["version"]))))
+        throw ServiceError{"INVALID_REQUEST", "Unsupported Minecraft/loader combination."};
     m_provider.checkCancelled();
     const auto workspaceRoot = m_profile + "/workspaces/" + id;
     if (QFileInfo::exists(workspaceRoot)) throw ServiceError{"RECOVERY_REQUIRED", "Creation destination already exists."};
@@ -202,10 +207,12 @@ void WorkspaceServices::create(const QString& id, const QJsonObject& request)
     const auto staged = operationDirectory(id) + "/staging/instance.cfg";
     if (!config.saveFile(staged) || !DurableIO::copy(staged, workspaceRoot + "/instance.cfg", &error)) throw ServiceError{"RECOVERY_REQUIRED", "Native configuration initialization failed: " + error};
     QJsonArray components{QJsonObject{{"uid", "net.minecraft"}, {"version", request["minecraftVersion"]}, {"important", true}}};
-    if (loader["id"] == "fabric") {
+    if (loaderId == "fabric" || loaderId == "quilt")
         components.append(QJsonObject{{"uid", "net.fabricmc.intermediary"}, {"version", request["minecraftVersion"]}});
-        components.append(QJsonObject{{"uid", "net.fabricmc.fabric-loader"}, {"version", loader["version"]}});
-    }
+    const QMap<QString, QString> componentIds{{"fabric", "net.fabricmc.fabric-loader"}, {"forge", "net.minecraftforge"},
+        {"neoforge", "net.neoforged"}, {"quilt", "org.quiltmc.quilt-loader"}};
+    if (componentIds.contains(loaderId))
+        components.append(QJsonObject{{"uid", componentIds.value(loaderId)}, {"version", loader["version"]}});
     put(workspaceRoot + "/mmc-pack.json", encode({{"formatVersion", 1}, {"components", components}}));
     put(workspaceRoot + "/.awake-integration/policies.json", encode({{"format", 1}, {"projects", QJsonObject{}}}));
     writeRecord(operationDirectory(id) + "/created.json", {{"workspace", record}, {"instance.cfg", hash(workspaceRoot + "/instance.cfg")},
@@ -245,6 +252,14 @@ QJsonObject WorkspaceServices::operation(const QString& id) const
         if (request.contains("physicalId")) result["physicalId"] = request["physicalId"]; else if (internal.contains("workspace")) result["physicalId"] = internal["workspace"].toObject()["physicalId"];
     } catch (const ServiceError&) { /* A failed request can precede context publication. */ }
     return result;
+}
+bool WorkspaceServices::legacyCompatible(const QString& physicalId) const
+{
+    const auto record = workspaceRecord(physicalId);
+    if (!QStringList{"vanilla", "fabric"}.contains(record["loader"].toObject()["id"].toString())) return false;
+    const auto projects = policies(record)["projects"].toObject();
+    for (auto it = projects.begin(); it != projects.end(); ++it) if (it.value().toObject()["provider"] == "curseforge") return false;
+    return true;
 }
 bool WorkspaceServices::unsafeToExit() const
 {

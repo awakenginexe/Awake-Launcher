@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Executable,
     [Parameter(Mandatory=$true)][string]$QtBin,
-    [Parameter(Mandatory=$true)][string]$Destination
+    [Parameter(Mandatory=$true)][string]$Destination,
+    [string]$DependencyPrefix
 )
 $ErrorActionPreference = 'Stop'
 $binary = (Resolve-Path -LiteralPath $Executable).Path
@@ -29,4 +30,16 @@ if ($dlls.Name -notcontains 'vcruntime140.dll' -or $dlls.Name -notcontains 'msvc
 foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $package.FullName }
 Set-Content -LiteralPath (Join-Path $package.FullName 'qt.conf') -Encoding utf8NoBOM -Value "[Paths]`nPrefix=.`nPlugins=."
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../COPYING.md') -Destination (Join-Path $package.FullName 'COPYING.md')
+if ($DependencyPrefix) {
+    $dependencies = (Resolve-Path -LiteralPath $DependencyPrefix).Path
+    foreach ($name in @('archive.dll','zlib1.dll','bz2.dll','lzma.dll','zstd.dll','lz4.dll','libcrypto-3-x64.dll','libssl-3-x64.dll','libiconv-2.dll','libcharset-1.dll')) {
+        $source = Join-Path $dependencies "bin/$name"
+        if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $package.FullName }
+    }
+    $licenses = New-Item -ItemType Directory -Path (Join-Path $package.FullName 'licenses')
+    foreach ($name in @('libarchive','zlib','bzip2','liblzma','zstd')) {
+        $source = Join-Path $dependencies "share/$name/copyright"
+        if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $licenses.FullName "$name.txt") }
+    }
+}
 Write-Output $target

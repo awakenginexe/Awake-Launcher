@@ -78,10 +78,51 @@ bool allowedPath(const QString& path, const QString& mods)
 {
     if (!relative(path)) return false;
     if (path == "instance.cfg" || path == "mmc-pack.json" || path == ".awake-integration/policies.json") return true;
+    if (path.startsWith(".minecraft/") && !path.startsWith(mods + '/', Qt::CaseInsensitive)) return true;
     if (!path.startsWith(mods + '/')) return false;
     const auto rest = path.mid(mods.size() + 1);
     if (rest.startsWith(".index/")) return leaf(rest.mid(7)) && rest.endsWith(".pw.toml");
     return leaf(rest) && rest != ".index";
+}
+bool overridePaths(const QString& root, const QString& policy, const QString& mods, QSet<QString>& paths, QString* error)
+{
+    QFile file(policy);
+    if (!QFileInfo::exists(policy)) return true;
+    if (!file.open(QIODevice::ReadOnly) || file.size() > 8 * 1024 * 1024) { if (error) *error = "Cannot read bounded policies."; return false; }
+    const auto bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError) { if (error) *error = "Cannot read policies."; return false; }
+    QJsonParseError parse; const auto doc = QJsonDocument::fromJson(bytes, &parse);
+    if (parse.error != QJsonParseError::NoError || !doc.isObject()) return true;
+    const auto value = doc.object().value("overrides");
+    if (value.isUndefined()) return true;
+    if (!value.isObject() || value.toObject().size() > 10000) { if (error) *error = "Invalid managed override list."; return false; }
+    QSet<QString> folded;
+    static const QRegularExpression hash("^[0-9a-f]{64}$");
+    const auto overrides = value.toObject();
+    for (auto it = overrides.begin(); it != overrides.end(); ++it) {
+        const auto path = it.key(), key = path.toCaseFolded();
+        if (!path.startsWith(".minecraft/") || !allowedPath(path, mods) || path.startsWith(mods + "/.index/", Qt::CaseInsensitive) ||
+            !it.value().isString() || !hash.match(it.value().toString()).hasMatch() || folded.contains(key) || !safePath(root, path, error)) {
+            if (error && error->isEmpty()) *error = "Invalid managed override."; return false;
+        }
+        folded.insert(key); paths.insert(path);
+    }
+    return true;
+}
+bool pinParents(const QString& root, const QSet<QString>& paths, const std::shared_ptr<PhysicalInstanceLease>& lease, QString* error)
+{
+    for (const auto& path : paths) {
+        QString parent = QFileInfo(path).path();
+        while (parent != "." && !QFileInfo::exists(root + '/' + parent)) parent = QFileInfo(parent).path();
+        if (!lease->pinDirectory(parent, error)) return false;
+    }
+    return true;
+}
+bool pinPlan(const QString& root, const QJsonObject& plan, const std::shared_ptr<PhysicalInstanceLease>& lease, QString* error)
+{
+    QSet<QString> paths;
+    for (const auto& value : plan["files"].toArray()) paths.insert(value.toObject()["path"].toString());
+    return pinParents(root, paths, lease, error);
 }
 bool protectedMetadata(const QString& path)
 {
@@ -167,7 +208,9 @@ bool pinInventory(const QString& root, const QString& mods, const std::shared_pt
             if (!walk(path + '/' + entry.fileName())) return false;
         return true;
     };
-    return walk(mods) && walk(".awake-integration");
+    QSet<QString> overrides;
+    return walk(mods) && walk(".awake-integration") &&
+        overridePaths(root, root + "/.awake-integration/policies.json", mods, overrides, error) && pinParents(root, overrides, lease, error);
 }
 QString markerPath(const QString& root) { return root + "/.awake-integration/recovery.json"; }
 bool clearMarker(const QString& root, const QString& id, QString* error)
@@ -243,7 +286,16 @@ QJsonObject TransactionEngine::snapshot(QString* error) const
         return true;
     };
     const auto identity = physicalIdentityV2(m_root);
-    if (identity.isEmpty() || !walk(m_mods) || identity != physicalIdentityV2(m_root)) return {};
+    if (identity.isEmpty() || !walk(m_mods)) return {};
+    QSet<QString> overrides;
+    if (!overridePaths(m_root, m_root + "/.awake-integration/policies.json", m_mods, overrides, error)) return {};
+    for (const auto& path : overrides) {
+        if (nodes.size() >= 100000 && !nodes.contains(path)) { if (error) *error = "Inventory exceeds 100,000 paths."; return {}; }
+        const auto hash = DurableIO::hash(m_root + '/' + path, error);
+        if (hash.isEmpty()) return {};
+        nodes[path] = hash;
+    }
+    if (identity != physicalIdentityV2(m_root)) return {};
     QJsonObject files;
     for (auto it = nodes.begin(); it != nodes.end(); ++it) files[it.key()] = it.value();
     return {{"physicalId", identity}, {"modsRelative", m_mods}, {"files", files}};
@@ -266,9 +318,19 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
     auto expectedState = snapshot(&error);
     if (expectedState.isEmpty() || digest(expectedState) != baseline) return failure("STALE_INSTANCE", "Instance changed before planning.");
     auto expectedFiles = expectedState["files"].toObject();
+    QSet<QString> oldOverrides, nextOverrides;
+    if (!overridePaths(m_root, m_root + "/.awake-integration/policies.json", m_mods, oldOverrides, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
+    nextOverrides = oldOverrides;
+    for (const auto& change : changes) if (change.relativePath == ".awake-integration/policies.json") {
+        if (!leaf(change.stagedName) || !safePath(directory, "staging/" + change.stagedName, &error)) return failure("INVALID_REQUEST", "Invalid staged policies.");
+        nextOverrides.clear();
+        if (!overridePaths(m_root, directory + "/staging/" + change.stagedName, m_mods, nextOverrides, &error)) return failure("INVALID_REQUEST", error);
+    }
     quint64 bytes = 16 * 1024 * 1024;
     for (const auto& change : changes) {
         const auto path = change.relativePath;
+        if (path.startsWith(".minecraft/") && !path.startsWith(m_mods + '/', Qt::CaseInsensitive) && !nextOverrides.contains(path))
+            return failure("INVALID_REQUEST", "Game file targets must be declared as managed overrides.");
         if (change.stagedName.isEmpty() && protectedMetadata(path)) return failure("INVALID_REQUEST", "Native instance and policy metadata must be serialized, not deleted.");
         if (!allowedPath(path, m_mods) || !safePath(m_root, path, &error) || targets.contains(path.toCaseFolded()) ||
             (!change.stagedName.isEmpty() && !leaf(change.stagedName))) return failure("IDENTITY_CONFLICT", "Invalid, linked or colliding target.");
@@ -287,6 +349,16 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
         files.append(QJsonObject{{"path", path}, {"stagedName", change.stagedName}, {"beforeHash", before}, {"beforeIdentity", beforeState.identity}, {"afterHash", after},
                                  {"sizeBefore", QString::number(sizeBefore)}, {"sizeAfter", QString::number(sizeAfter)}});
         if (after == "missing") expectedFiles.remove(path); else expectedFiles[path] = after;
+    }
+    for (const auto& path : oldOverrides) if (!nextOverrides.contains(path) && (!path.startsWith(m_mods + '/') || expectedFiles.value(path) == "missing")) expectedFiles.remove(path);
+    for (const auto& path : nextOverrides) {
+        bool changed = false;
+        for (const auto& value : files) if (value.toObject()["path"] == path) { expectedFiles[path] = value.toObject()["afterHash"]; changed = true; break; }
+        if (!changed) {
+            const auto hash = DurableIO::hash(m_root + '/' + path, &error);
+            if (hash.isEmpty()) return failure("INTEGRITY_FAILED", error);
+            expectedFiles[path] = hash;
+        }
     }
     const QStorageInfo targetVolume(m_root), storeVolume(directory);
     if (!targetVolume.isValid() || !storeVolume.isValid() || targetVolume.bytesAvailable() < 0 || storeVolume.bytesAvailable() < 0 ||
@@ -311,6 +383,7 @@ QJsonObject TransactionEngine::apply(const QString& id, const QString& claimed, 
     if (!pinInventory(m_root, m_mods, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return failure("RECOVERY_REQUIRED", error);
+    if (!pinPlan(m_root, plan, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     if (claimed != plan["planDigest"] || expected != plan["instanceRevision"]) return failure("STALE_PLAN", "Apply does not identify the reviewed plan.");
     if (plan["expectedInstanceRevision"].toString().size() != 64) return failure("STALE_PLAN", "This older plan requires fresh preparation and review.");
     const auto current = m_store.get(id)["result"].toObject();
@@ -410,6 +483,7 @@ QJsonObject TransactionEngine::complete(const QString& id, const std::shared_ptr
     if (!pinInventory(m_root, m_mods, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return failure("RECOVERY_REQUIRED", error);
+    if (!pinPlan(m_root, plan, lease, &error)) return failure("IDENTITY_UNVERIFIABLE", error);
     const auto status = m_store.get(id)["result"].toObject();
     if (status["state"] != "verifying") return failure("INVALID_STATE", "File and native-model verification must precede completion.");
     if (!verifyFiles(m_root, plan["files"].toArray(), "afterHash", &error) ||
@@ -430,6 +504,7 @@ QJsonObject TransactionEngine::recover(const QString& id, const std::shared_ptr<
     const auto directory = area(m_store, id);
     const auto plan = planAt(m_store, id, m_root, m_mods, &error);
     if (plan.isEmpty()) return recoveryRequired(m_store, id, error);
+    if (!pinPlan(m_root, plan, lease, &error)) return recoveryRequired(m_store, id, error);
     auto status = m_store.get(id)["result"].toObject();
     if (OperationStore::terminal(status["state"].toString())) {
         if (QFileInfo::exists(markerPath(m_root))) {

@@ -6,7 +6,7 @@ class Contract {
 public:
     Contract();
     bool valid(const QString& definition, const QJsonValue& value) const;
-    QJsonObject capabilities(bool writes) const;
+    QJsonObject capabilities(bool writes, bool extensions = true) const;
 private:
     QJsonObject m_definitions;
     bool check(const QJsonObject& schema, const QJsonValue& value, int depth = 0) const;

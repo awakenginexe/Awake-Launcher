@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "Contract.h"
+#include "CurseForgeService.h"
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -67,14 +68,18 @@ bool Contract::check(const QJsonObject& schema, const QJsonValue& value, int dep
         (schema.contains("maximum") && value.toDouble() > schema["maximum"].toDouble()))) return false;
     return true;
 }
-QJsonObject Contract::capabilities(bool writes) const
+QJsonObject Contract::capabilities(bool writes, bool extensions) const
 {
     QJsonObject result;
     for (const auto& name : m_definitions["capabilities"].toObject()["required"].toArray()) {
         const auto method = name.toString();
-        result[method] = !method.startsWith("inbox.") && !method.startsWith("outbox.") &&
+        result[method] = !method.startsWith("outbox.") && (extensions || !method.startsWith("inbox.")) &&
             (writes || (method != "workspaces.create" && method != "plans.prepare" && method != "transactions.apply" && method != "recovery.run"));
     }
+    if (!extensions) return result;
+    for (const auto* capability : {"loaders.forge.v1", "loaders.neoforge.v1", "loaders.quilt.v1", "policies.v1", "imports.inspect", "imports.prepare"}) result[capability] = writes || QString(capability) != "imports.prepare";
+    result["providers.curseforge.v1"] = CurseForgeService().available();
+    result["inbox.discard.v1"] = writes; result["inbox.discard"] = writes;
     return result;
 }
 }

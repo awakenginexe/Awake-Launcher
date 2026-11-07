@@ -19,6 +19,8 @@ class IntegrationServer : public QObject {
         QString directory = "v1", prefix = "awake-manager-v1-";
         QJsonObject capabilities, hello;
         std::function<bool(const QString&, const QJsonObject&)> validate;
+        QString extension;
+        QJsonObject legacyCapabilities;
     };
     explicit IntegrationServer(QObject* parent = nullptr);
     ~IntegrationServer() override;

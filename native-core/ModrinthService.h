@@ -22,8 +22,9 @@ public:
     QJsonObject search(const QJsonObject& params);
     QJsonObject versions(const QJsonObject& params);
     QList<ResolvedVersion> compatibleVersions(const QJsonObject& params);
-    ResolvedVersion version(const QString& id, const QString& minecraft, const QString& loader);
+    ResolvedVersion version(const QString& id, const QString& minecraft, const QString& loader, const QString& artifactSha512 = {});
     ModPlatform::IndexedPack project(const QString& id);
+    ResolvedVersion versionByHash(const QString& sha512, const QString& minecraft, const QString& loader);
     void download(const QJsonObject& artifact, const QString& destination);
     void checkCancelled() const;
 private:
@@ -31,6 +32,6 @@ private:
     Fetch m_fixture;
     QByteArray transfer(const QUrl& url, qint64 limit, const QString& file = {});
     QJsonDocument json(const QUrl& url);
-    ResolvedVersion parseVersion(const QJsonObject& object, const QString& minecraft, const QString& loader);
+    ResolvedVersion parseVersion(const QJsonObject& object, const QString& minecraft, const QString& loader, const QString& artifactSha512 = {});
 };
 }

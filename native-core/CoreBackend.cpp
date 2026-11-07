@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "CoreBackend.h"
+#include "InboxService.h"
+#include "CurseForgeService.h"
 #include "awake/integration/InstanceDiscovery.h"
 #include "awake/integration/ProfileAccess.h"
 #include <QCoreApplication>
@@ -16,6 +18,17 @@ QJsonObject accepted(const QJsonObject& status)
     QJsonObject result;
     for (const auto* key : {"operationId", "state", "terminal", "replayed"}) result[key] = status[key];
     return {{"result", result}};
+}
+bool legacyResponse(const QJsonValue& value)
+{
+    if (value.isArray()) { for (const auto& child : value.toArray()) if (!legacyResponse(child)) return false; }
+    if (value.isObject()) {
+        const auto object = value.toObject();
+        if (object["provider"] == "curseforge") return false;
+        if (object["loader"].isObject() && !QStringList{"vanilla", "fabric"}.contains(object["loader"].toObject()["id"].toString())) return false;
+        for (auto it = object.begin(); it != object.end(); ++it) if (!legacyResponse(it.value())) return false;
+    }
+    return true;
 }
 QJsonObject serviceFailure(const ServiceError& error) { return failure(error.code, error.message.left(2048), error.retryable); }
 QJsonObject page(const QJsonArray& all, const QJsonObject& params)
@@ -41,7 +54,8 @@ bool CoreBackend::start(const QString& requested, QString* error)
         WorkspaceServices(m_profile, *m_store).startupRecovery();
         IntegrationServer::Options options; options.major = 2; options.directory = "core-v2"; options.prefix = "awake-core-v2-";
         options.capabilities = m_contract.capabilities(true);
-        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.1.1"}, {"storageVersion", 1}};
+        options.extension = "manager.v0.2"; options.legacyCapabilities = m_contract.capabilities(true, false);
+        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.2.0"}, {"storageVersion", 1}};
         options.validate = [this](const QString& method, const QJsonObject& params) { return m_contract.valid(method + ".params", params); };
         if (!m_server.start(m_profile, {{"role", "modpack-core"}, {"profileId", m_profileId}},
             [this](const Request& request, IntegrationServer::Reply reply) { handle(request, std::move(reply)); }, options, &reason)) throw ServiceError{"IO_ERROR", reason};
@@ -58,14 +72,30 @@ bool CoreBackend::start(const QString& requested, QString* error)
 }
 void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
 {
-    const auto checked = [this, method = request.method, reply](QJsonObject response) {
+    const auto checked = [this, method = request.method, extensions = request.managerExtensions, reply](QJsonObject response) {
+        if (!extensions && response.contains("result") && !legacyResponse(response["result"])) { reply(failure("UNSUPPORTED_CAPABILITY", "This data requires the manager.v0.2 extension; upgrade the client.")); return; }
         const auto key = response.contains("error") ? "error" : method + ".result";
         const auto value = response.contains("error") ? response["error"] : response["result"];
         reply(m_contract.valid(key, value) ? response : failure("INTERNAL_ERROR", "Native result did not match the committed contract."));
     };
     try {
         WorkspaceServices services(m_profile, *m_store);
-        if (request.method == "workspaces.create" || request.method == "plans.prepare" || request.method == "transactions.apply" || request.method == "recovery.run") {
+        if (!request.managerExtensions) {
+            bool extended = request.params["provider"] == "curseforge" ||
+                (request.params["loader"].isObject() && !QStringList{"vanilla", "fabric"}.contains(request.params["loader"].toObject()["id"].toString())) ||
+                (request.params["loader"].isString() && !QStringList{"vanilla", "fabric"}.contains(request.params["loader"].toString()));
+            for (const auto& value : request.params["changes"].toArray()) {
+                const auto change = value.toObject();
+                extended = extended || change["action"] == "policy" || change["provider"] == "curseforge" || change.contains("artifactSha512");
+            }
+            auto physical = request.params["physicalId"].toString();
+            if (physical.isEmpty() && request.params.contains("operationId") && QStringList{"transactions.apply", "recovery.run", "plans.get"}.contains(request.method)) {
+                const auto context = services.context(request.params["operationId"].toString())["request"].toObject();
+                physical = context["physicalId"].toString();
+            }
+            if (extended || (!physical.isEmpty() && !services.legacyCompatible(physical))) throw ServiceError{"UNSUPPORTED_CAPABILITY", "This workspace or request requires the manager.v0.2 extension; upgrade the client."};
+        }
+        if (request.method == "imports.prepare" || request.method == "workspaces.create" || request.method == "plans.prepare" || request.method == "transactions.apply" || request.method == "recovery.run") {
             submit(request, checked); return;
         }
         if (request.method == "operations.cancel") {
@@ -115,13 +145,14 @@ void CoreBackend::submit(const Request& request, IntegrationServer::Reply reply)
         if (existingId.isEmpty()) services.saveContext(id, method, params);
         auto cancel = std::make_shared<std::atomic_bool>(false); m_jobs[id] = cancel;
         if (!physical.isEmpty()) m_reserved.insert(physical);
-        if (method != "plans.prepare") m_critical.insert(id);
+        if (method != "plans.prepare" && method != "imports.prepare") m_critical.insert(id);
         reply(accepted(status));
         m_pool.start(QRunnable::create([this, id, physical, method, params, cancel] {
             WorkspaceServices work(m_profile, *m_store, cancel);
             try {
                 if (method == "workspaces.create") work.create(id, params);
                 else if (method == "plans.prepare") work.prepare(id, params);
+                else if (method == "imports.prepare") work.prepareImport(id, params);
                 else if (method == "transactions.apply") work.apply(id, params);
                 else work.recover(id);
             } catch (const ServiceError& error) {
@@ -148,17 +179,23 @@ void CoreBackend::submit(const Request& request, IntegrationServer::Reply reply)
 }
 QJsonObject CoreBackend::read(const Request& request)
 {
-    WorkspaceServices services(m_profile, *m_store); ModrinthService provider;
+    WorkspaceServices services(m_profile, *m_store); ModrinthService provider; CurseForgeService curseforge; InboxService inbox(m_profile);
     const auto method = request.method; const auto params = request.params;
     if (method == "core.info") {
         const auto recovery = services.recoveryStatus();
-        return {{"role", "modpack-core"}, {"coreVersion", "0.1.1"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
+        return {{"role", "modpack-core"}, {"coreVersion", "0.2.0"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
             {"workspaceRoot", m_profile + "/workspaces"}, {"state", recovery["operations"].toArray().isEmpty() && recovery["blockedWorkspaces"].toArray().isEmpty() ? "ready" : "recovery_required"},
-            {"supportedLoaders", QJsonArray{"vanilla", "fabric"}}};
+            {"supportedLoaders", request.managerExtensions ? QJsonArray{"vanilla", "fabric", "forge", "neoforge", "quilt"} : QJsonArray{"vanilla", "fabric"}}};
     }
     if (method == "catalog.versions") return provider.catalog(params);
-    if (method == "providers.search") return provider.search(params);
-    if (method == "providers.versions") return provider.versions(params);
+    if (method == "providers.search") return params["provider"] == "curseforge" ? curseforge.search(params) : provider.search(params);
+    if (method == "providers.versions") return params["provider"] == "curseforge" ? curseforge.versions(params) : provider.versions(params);
+    if (method == "imports.inspect") return services.inspectImport(params);
+    if (method == "inbox.begin") return inbox.begin(params);
+    if (method == "inbox.write") return inbox.write(params);
+    if (method == "inbox.commit") return inbox.commit(params);
+    if (method == "inbox.status") return inbox.status(params);
+    if (method == "inbox.discard") return inbox.discard(params);
     if (method == "workspaces.list") return services.list(params);
     if (method == "mods.list") return services.inventory(params);
     if (method == "updates.check") return services.updates(params);

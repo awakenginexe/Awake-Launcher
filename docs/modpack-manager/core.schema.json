@@ -59,7 +59,10 @@
         "id": {
           "enum": [
             "vanilla",
-            "fabric"
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
           ]
         },
         "version": {
@@ -152,7 +155,15 @@
             "optional",
             "incompatible",
             "embedded",
-            "unknown"
+            "unknown",
+            "tool",
+            "include"
+          ]
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
           ]
         }
       },
@@ -193,7 +204,6 @@
       "required": [
         "fileName",
         "size",
-        "sha512",
         "sha1",
         "url"
       ],
@@ -250,7 +260,8 @@
           "items": {
             "$ref": "#/$defs/artifact"
           },
-          "maxItems": 32
+          "maxItems": 32,
+          "minItems": 1
         },
         "dependencies": {
           "type": "array",
@@ -258,6 +269,12 @@
             "$ref": "#/$defs/dependency"
           },
           "maxItems": 512
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
         }
       },
       "required": [
@@ -271,7 +288,33 @@
         "files",
         "dependencies"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "curseforge"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          },
+          "then": {},
+          "else": {
+            "properties": {
+              "files": {
+                "items": {
+                  "required": [
+                    "sha512"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "project": {
       "type": "object",
@@ -323,6 +366,12 @@
             "minLength": 1
           },
           "maxItems": 32
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
         }
       },
       "required": [
@@ -354,6 +403,16 @@
             "versionId": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "provider": {
+              "enum": [
+                "modrinth",
+                "curseforge"
+              ]
+            },
+            "artifactSha512": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{128}$"
             }
           },
           "required": [
@@ -381,6 +440,39 @@
           "required": [
             "action",
             "inventoryId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "const": "policy"
+            },
+            "inventoryId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "pinnedVersion": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "excluded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "action",
+            "inventoryId",
+            "pinnedVersion",
+            "excluded"
           ],
           "additionalProperties": false
         }
@@ -491,6 +583,12 @@
         },
         "updateLocked": {
           "type": "boolean"
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
         }
       },
       "required": [
@@ -867,6 +965,33 @@
         },
         "outbox.read": {
           "type": "boolean"
+        },
+        "loaders.forge.v1": {
+          "type": "boolean"
+        },
+        "loaders.neoforge.v1": {
+          "type": "boolean"
+        },
+        "loaders.quilt.v1": {
+          "type": "boolean"
+        },
+        "providers.curseforge.v1": {
+          "type": "boolean"
+        },
+        "policies.v1": {
+          "type": "boolean"
+        },
+        "imports.inspect": {
+          "type": "boolean"
+        },
+        "imports.prepare": {
+          "type": "boolean"
+        },
+        "inbox.discard.v1": {
+          "type": "boolean"
+        },
+        "inbox.discard": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -970,7 +1095,10 @@
             "inbox.write",
             "inbox.commit",
             "inbox.status",
-            "outbox.read"
+            "outbox.read",
+            "imports.inspect",
+            "imports.prepare",
+            "inbox.discard"
           ]
         },
         "params": {
@@ -1368,6 +1496,54 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "imports.inspect"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/imports.inspect.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "imports.prepare"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/imports.prepare.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "inbox.discard"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/inbox.discard.params"
+              }
+            }
+          }
         }
       ]
     },
@@ -1418,6 +1594,14 @@
             "version"
           ],
           "additionalProperties": false
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "const": "manager.v0.2"
+          },
+          "minItems": 1,
+          "maxItems": 1
         }
       },
       "required": [
@@ -1531,10 +1715,13 @@
           "items": {
             "enum": [
               "vanilla",
-              "fabric"
+              "fabric",
+              "forge",
+              "neoforge",
+              "quilt"
             ]
           },
-          "maxItems": 2
+          "maxItems": 5
         }
       },
       "required": [
@@ -1577,7 +1764,10 @@
         "loader": {
           "enum": [
             "vanilla",
-            "fabric"
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
           ]
         }
       },
@@ -1594,7 +1784,7 @@
             "maxLength": 96,
             "minLength": 1
           },
-          "maxItems": 10000
+          "maxItems": 20000
         },
         "loaderVersions": {
           "type": "array",
@@ -1603,7 +1793,7 @@
             "maxLength": 96,
             "minLength": 1
           },
-          "maxItems": 2000
+          "maxItems": 20000
         }
       },
       "required": [
@@ -1700,7 +1890,10 @@
       "type": "object",
       "properties": {
         "provider": {
-          "const": "modrinth"
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
         },
         "minecraftVersion": {
           "type": "string",
@@ -1710,7 +1903,10 @@
         "loader": {
           "enum": [
             "vanilla",
-            "fabric"
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
           ]
         },
         "query": {
@@ -1775,7 +1971,10 @@
       "type": "object",
       "properties": {
         "provider": {
-          "const": "modrinth"
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
         },
         "minecraftVersion": {
           "type": "string",
@@ -1785,7 +1984,10 @@
         "loader": {
           "enum": [
             "vanilla",
-            "fabric"
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
           ]
         },
         "projectId": {
@@ -2129,6 +2331,12 @@
               },
               "excluded": {
                 "type": "boolean"
+              },
+              "provider": {
+                "enum": [
+                  "modrinth",
+                  "curseforge"
+                ]
               }
             },
             "required": [
@@ -2588,6 +2796,224 @@
           "additionalProperties": false
         }
       ]
+    },
+    "imports.inspect.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "format": {
+          "enum": [
+            "mrpack",
+            "curseforge"
+          ]
+        }
+      },
+      "required": [
+        "token",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "importFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "importProject": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "versionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider",
+        "projectId",
+        "versionId",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "imports.inspect.result": {
+      "type": "object",
+      "properties": {
+        "minecraftVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96
+        },
+        "loader": {
+          "$ref": "#/$defs/loader"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/importFile"
+          },
+          "maxItems": 10000
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/importProject"
+          },
+          "maxItems": 1024
+        },
+        "downloadCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "minecraftVersion",
+        "loader",
+        "files",
+        "projects",
+        "downloadCount",
+        "warnings"
+      ],
+      "additionalProperties": false
+    },
+    "imports.prepare.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "format": {
+          "enum": [
+            "mrpack",
+            "curseforge"
+          ]
+        },
+        "includeOptional": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "physicalId",
+        "instanceRevision",
+        "token",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "imports.prepare.result": {
+      "$ref": "#/$defs/plans.prepare.result"
+    },
+    "imports.inspect": {
+      "params": {
+        "$ref": "#/$defs/imports.inspect.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.inspect.result"
+      }
+    },
+    "imports.prepare": {
+      "params": {
+        "$ref": "#/$defs/imports.prepare.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.prepare.result"
+      }
+    },
+    "inbox.discard.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.discard.result": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "discarded": {
+          "const": true
+        }
+      },
+      "required": [
+        "token",
+        "discarded"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.discard": {
+      "params": {
+        "$ref": "#/$defs/inbox.discard.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.discard.result"
+      }
     }
   },
   "x-methods": {

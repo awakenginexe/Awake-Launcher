@@ -2,6 +2,9 @@
 #include "WorkspaceServices.h"
 #include "CoreBackend.h"
 #include "Contract.h"
+#include "InboxService.h"
+#include <archive.h>
+#include <archive_entry.h>
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/ProfileAccess.h"
 #include "awake/integration/TransactionEngine.h"
@@ -45,6 +48,7 @@ ModrinthService::Fetch network(int dependencies = 1, bool collision = false, boo
         if (url.host() == "piston-meta.mojang.com") return response({{"versions", QJsonArray{QJsonObject{{"id", "1.21.1"}}}}});
         if (url.host() == "meta.fabricmc.net") return QJsonDocument(QJsonArray{QJsonObject{{"loader", QJsonObject{{"version", "0.16.9"}}}}}).toJson();
         if (url.host() == "cdn.modrinth.com") return jar(QFileInfo(path).completeBaseName());
+        if (path.contains("/version_file/")) return network(dependencies, collision, newestBeta)(QUrl("https://api.modrinth.com/v2/version/p0-v1"), limit);
         if (path.contains("/version/")) {
             const auto id = path.section('/', -1), project = id.section('-', 0, 0), version = id.section('-', 1, 1);
             const auto data = jar(id); QJsonArray deps;
@@ -112,6 +116,77 @@ struct Fixture {
 class WorkspaceServicesTest : public QObject {
     Q_OBJECT
 private slots:
+
+
+
+
+
+
+
+
+
+    void packagesApplyOverridesAndPreserveLocalEdits_data()
+    { QTest::addColumn<QString>("format"); QTest::newRow("mrpack") << QString("mrpack"); QTest::newRow("secondary") << QString("mrpack-secondary"); QTest::newRow("curseforge") << QString("curseforge"); }
+    void packagesApplyOverridesAndPreserveLocalEdits()
+    {
+        QFETCH(QString,format); const bool secondary=format=="mrpack-secondary"; if(secondary) format="mrpack";
+        try {
+            ModrinthService::Fetch fixture;
+            if (secondary) fixture=[](const QUrl& url,qint64 limit) {
+                auto payload=network()(url,limit); auto raw=QJsonDocument::fromJson(payload).object();
+                if(raw["id"]=="p0-v1") {
+                    const auto bytes=jar("secondary"); auto artifacts=raw["files"].toArray();
+                    artifacts.append(QJsonObject{{"filename","secondary.jar"},{"url","https://cdn.modrinth.com/data/secondary.jar"},{"primary",false},{"size",bytes.size()},{"hashes",QJsonObject{{"sha512",QString::fromLatin1(digest(bytes,QCryptographicHash::Sha512))},{"sha1",QString::fromLatin1(digest(bytes,QCryptographicHash::Sha1))}}}});
+                    raw["files"]=artifacts; payload=response(raw);
+                }
+                return payload;
+            };
+            Fixture f(1,{},fixture); const auto archivePath=f.temporary.filePath("import.zip");
+            const QJsonObject loader{{"id","fabric-0.16.9"},{"primary",true}};
+            QJsonObject manifest= format=="mrpack" ? QJsonObject{{"formatVersion",1},{"game","minecraft"},{"dependencies",QJsonObject{{"minecraft","1.21.1"},{"fabric-loader","0.16.9"}}},{"files",QJsonArray{}}} :
+                QJsonObject{{"manifestType","minecraftModpack"},{"manifestVersion",1},{"minecraft",QJsonObject{{"version","1.21.1"},{"modLoaders",QJsonArray{loader}}}},{"files",QJsonArray{}},{"overrides","overrides"}};
+            if (format=="mrpack") {
+                const auto data=jar(secondary ? "secondary" : "p0-v1"); const QString filename=secondary ? "secondary.jar" : "p0-v1.jar";
+                manifest["files"]=QJsonArray{QJsonObject{{"path","mods/"+filename},{"fileSize",data.size()},{"hashes",QJsonObject{{"sha512",QString::fromLatin1(digest(data,QCryptographicHash::Sha512))},{"sha1",QString::fromLatin1(digest(data,QCryptographicHash::Sha1))}}},{"downloads",QJsonArray{"https://cdn.modrinth.com/data/"+filename}}}};
+            }
+            auto* writer=archive_write_new(); archive_write_set_format_zip(writer);
+            const auto wide=archivePath.toStdWString(); QVERIFY(archive_write_open_filename_w(writer,wide.c_str())==ARCHIVE_OK);
+            const QList<QPair<QByteArray,QByteArray>> contents{{format=="mrpack" ? "modrinth.index.json" : "manifest.json",response(manifest)},{"overrides/config/awake.txt","imported config"}};
+            for (const auto& file:contents) {
+                auto* entry=archive_entry_new(); archive_entry_set_pathname(entry,file.first.constData()); archive_entry_set_filetype(entry,AE_IFREG); archive_entry_set_perm(entry,0644); archive_entry_set_size(entry,file.second.size());
+                QVERIFY(archive_write_header(writer,entry)==ARCHIVE_OK); QCOMPARE(archive_write_data(writer,file.second.constData(),file.second.size()),la_ssize_t(file.second.size())); archive_entry_free(entry);
+            }
+            QCOMPARE(archive_write_close(writer),ARCHIVE_OK); archive_write_free(writer);
+            QFile archiveFile(archivePath); QVERIFY(archiveFile.open(QIODevice::ReadOnly)); const auto payload=archiveFile.readAll(); archiveFile.close();
+            InboxService inbox(f.profile); const auto transfer=inbox.begin({{"idempotencyKey","upload"},{"purpose","import"},{"size",QString::number(payload.size())},{"sha256",QString::fromLatin1(digest(payload,QCryptographicHash::Sha256))}});
+            const auto token=transfer["token"].toString(); inbox.write({{"token",token},{"offset","0"},{"bytesBase64",QString::fromLatin1(payload.toBase64())}}); inbox.commit({{"token",token}});
+            const QJsonObject selection{{"token",token},{"format",format}};
+            QCOMPARE(f.services.inspectImport(selection)["files"].toArray().size(),1);
+            auto params=selection; params["idempotencyKey"]="import"; params["physicalId"]=f.workspace["physicalId"]; params["instanceRevision"]=f.inventory()["instanceRevision"];
+            const auto id=f.begin("imports.prepare",params); f.services.prepareImport(id,params);
+            const auto target=f.profile+"/workspaces/"+f.workspace["workspaceId"].toString()+"/.minecraft/config/awake.txt";
+            QVERIFY(!QFileInfo::exists(target)); const auto review=f.services.plan({{"operationId",id}}); QVERIFY(review["total"].toInt()>=2); f.apply(id);
+            QFile config(target); QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(),QByteArray("imported config")); config.close();
+            if (format=="mrpack") { QCOMPARE(f.inventory()["total"].toInt(),2); QCOMPARE(f.item("p0")["metadataState"].toString(),QString("verified")); }
+            QVERIFY(config.open(QIODevice::WriteOnly)); config.write("local user changes"); config.close();
+            params["idempotencyKey"]="modified-import"; params["instanceRevision"]=f.inventory()["instanceRevision"]; const auto next=f.begin("imports.prepare",params);
+            bool refused=false; try { f.services.prepareImport(next,params); } catch(const ServiceError& e) { refused=e.code=="POLICY_CONFLICT"; } QVERIFY(refused);
+            QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(),QByteArray("local user changes"));
+        } catch (const ServiceError& error) { QFAIL(qPrintable(error.code+": "+error.message)); }
+    }
+
+    void policyPinsAreReviewedAndCanBeCleared()
+    {
+        Fixture f; const auto installed=f.prepare(QJsonArray{QJsonObject{{"action","install"},{"projectId","p0"},{"versionId","p0-v1"}}}); f.apply(installed);
+        const QJsonValue inventoryId=f.item("p0")["inventoryId"];
+        const auto pin=f.prepare(QJsonArray{QJsonObject{{"action","policy"},{"inventoryId",inventoryId},{"pinnedVersion","p0-v1"},{"excluded",true}}});
+        QVERIFY(!f.item("p0")["updateLocked"].toBool()); f.apply(pin); QVERIFY(f.item("p0")["updateLocked"].toBool());
+        QVERIFY_THROWS_EXCEPTION(ServiceError,f.prepare(QJsonArray{QJsonObject{{"action","replace"},{"projectId","p0"},{"versionId","p0-v2"}}}));
+        const auto clear=f.prepare(QJsonArray{QJsonObject{{"action","policy"},{"inventoryId",inventoryId},{"pinnedVersion",QJsonValue(QJsonValue::Null)},{"excluded",false}}}); f.apply(clear);
+        QVERIFY(!f.item("p0")["updateLocked"].toBool());
+        const auto update=f.prepare(QJsonArray{QJsonObject{{"action","replace"},{"projectId","p0"},{"versionId","p0-v2"}}}); f.apply(update);
+        QCOMPARE(f.item("p0")["versionId"].toString(),QString("p0-v2"));
+    }
     void dispatchContentionDoesNotFailOrAuthorizeAnExistingOperation_data()
     {
         QTest::addColumn<QString>("method"); QTest::newRow("apply") << QString("transactions.apply"); QTest::newRow("recovery") << QString("recovery.run");

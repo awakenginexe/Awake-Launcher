@@ -7,6 +7,7 @@ inline constexpr quint32 MaxFrameBytes = 1024 * 1024;
 struct Request {
     QString id, method, error;
     QJsonObject params;
+    bool managerExtensions = false;
 };
 QJsonObject version();
 QJsonObject failure(const QString& code, const QString& message, bool retryable = false);

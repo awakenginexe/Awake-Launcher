@@ -73,6 +73,41 @@ bool keeperFinished(const QString& registry)
 class AwakeTransactionsTest : public QObject {
     Q_OBJECT
    private slots:
+    void managedOverrideLifecycle_data()
+    {
+        QTest::addColumn<QString>("mode");
+        for (const auto* mode : {"new", "replace", "stale", "rollback"}) QTest::newRow(mode) << QString(mode);
+    }
+    void managedOverrideLifecycle()
+    {
+        QFETCH(QString, mode);
+        QTemporaryDir temporary; const auto root = temporary.path() + "/instance";
+        QVERIFY(createPrivateStorageDirectory(root));
+        QVERIFY(createPrivateStorageDirectory(root + "/.awake-integration"));
+        QVERIFY(put(root + "/instance.cfg", "fixture"));
+        const auto hash = [](const QByteArray& value) { return QString::fromLatin1(QCryptographicHash::hash(value, QCryptographicHash::Sha256).toHex()); };
+        const auto policy = [&](bool managed, const QByteArray& content) {
+            QJsonObject object{{"format",1},{"projects",QJsonObject{}}};
+            if (managed) object["overrides"] = QJsonObject{{".minecraft/config/a.txt",hash(content)}};
+            return QJsonDocument(object).toJson(QJsonDocument::Compact);
+        };
+        const bool existing = mode != "new";
+        QVERIFY(put(root + "/.awake-integration/policies.json", policy(existing,"old")));
+        if (existing) QVERIFY(put(root + "/.minecraft/config/a.txt", "old"));
+        OperationStore store(temporary.path() + "/operations"); QVERIFY(store.open()); const auto id = operation(store);
+        QVERIFY(put(store.directory() + '/' + id + "/staging/policy", policy(true,"new")));
+        QVERIFY(put(store.directory() + '/' + id + "/staging/config", "new"));
+        TransactionEngine engine(store, root, ".minecraft/mods"); QString reason; const auto revision = engine.revision(&reason); QVERIFY2(!revision.isEmpty(), qPrintable(reason));
+        const auto result = engine.prepare(id, {{".awake-integration/policies.json","policy"},{".minecraft/config/a.txt","config"}}, revision);
+        QVERIFY2(result.contains("result"), qPrintable(QJsonDocument(result).toJson())); const auto plan = result["result"].toObject();
+        if (mode == "stale") QVERIFY(put(root + "/.minecraft/config/a.txt", "user edit"));
+        auto lease = leaseFor(root); QVERIFY(lease);
+        const auto applied = engine.apply(id, plan["planDigest"].toString(), revision, lease,
+            [&](const QString& point, int index) { return mode != "rollback" || point != "after_replace" || index != 1; });
+        if (mode == "stale") { QVERIFY(applied.contains("error")); QCOMPARE(bytes(root + "/.minecraft/config/a.txt"), QByteArray("user edit")); }
+        else if (mode == "rollback") { QVERIFY(applied.contains("error")); QCOMPARE(bytes(root + "/.minecraft/config/a.txt"), QByteArray("old")); QCOMPARE(bytes(root + "/.awake-integration/policies.json"), policy(true,"old")); }
+        else { QVERIFY2(applied.contains("result"), qPrintable(QJsonDocument(applied).toJson())); QCOMPARE(bytes(root + "/.minecraft/config/a.txt"), QByteArray("new")); }
+    }
     void sameTargetEditsArePreservedDuringReplacementAndRemoval_data()
     {
         QTest::addColumn<bool>("removal"); QTest::addColumn<QString>("point");

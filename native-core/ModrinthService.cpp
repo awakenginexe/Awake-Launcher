@@ -18,6 +18,7 @@
 #include <QTimer>
 #include <QMutex>
 #include <QThread>
+#include <QRegularExpression>
 namespace Awake::Core {
 namespace {
 constexpr auto api = "https://api.modrinth.com/v2";
@@ -40,7 +41,7 @@ QByteArray ModrinthService::transfer(const QUrl& url, qint64 limit, const QStrin
 {
     checkCancelled();
     if (url.scheme() != "https" || !url.userInfo().isEmpty() || url.port(-1) != -1 || url.hasFragment() ||
-        !QStringList{"api.modrinth.com", "cdn.modrinth.com", "meta.fabricmc.net", "piston-meta.mojang.com"}.contains(url.host()))
+        !QStringList{"api.modrinth.com", "cdn.modrinth.com", "meta.fabricmc.net", "piston-meta.mojang.com", "meta.prismlauncher.org"}.contains(url.host()))
         throw ServiceError{"PROVIDER_RESTRICTED", "Provider URL is outside the supported HTTPS services."};
     QFile output(path);
     if (!path.isEmpty() && !output.open(QIODevice::WriteOnly | QIODevice::NewOnly)) throw ServiceError{"IO_ERROR", "Private download target is unavailable."};
@@ -116,6 +117,42 @@ QJsonObject ModrinthService::catalog(const QJsonObject& params)
         }
         if (loaders.size() > 2000) bad("Fabric version catalog is too large.");
     }
+    const auto loader = params["loader"].toString();
+    const QMap<QString, QString> ids{{"forge", "net.minecraftforge"}, {"neoforge", "net.neoforged"}, {"quilt", "org.quiltmc.quilt-loader"}};
+    if (ids.contains(loader)) {
+        const auto index = [&](const QString& uid) {
+            const auto document = json(QUrl("https://meta.prismlauncher.org/v1/" + uid + "/index.json"));
+            const auto object = document.object();
+            if (!document.isObject() || object["formatVersion"] != 1 || object["uid"] != uid || !object["versions"].isArray())
+                bad("Loader catalog is invalid.");
+            const auto values = object["versions"].toArray();
+            if (values.isEmpty() || values.size() > 20000) bad("Loader catalog is invalid.");
+            return values;
+        };
+        bool intermediary = game.isEmpty();
+        if (loader == "quilt" && !game.isEmpty()) {
+            for (const auto& value : index("net.fabricmc.intermediary")) {
+                const auto item = value.toObject();
+                if (item["version"] != game) continue;
+                for (const auto& requirement : item["requires"].toArray()) {
+                    const auto req = requirement.toObject();
+                    if (req["uid"] == "net.minecraft" && req["equals"] == game) intermediary = true;
+                }
+            }
+        }
+        for (const auto& value : index(ids.value(loader))) {
+            const auto item = value.toObject(); const auto version = item["version"].toString();
+            if (version.isEmpty() || !item["requires"].isArray()) bad("Loader version metadata is invalid.");
+            bool match = game.isEmpty();
+            for (const auto& requirement : item["requires"].toArray()) {
+                const auto req = requirement.toObject();
+                if ((loader == "quilt" && intermediary && req["uid"] == "net.fabricmc.intermediary") ||
+                    (loader != "quilt" && req["uid"] == "net.minecraft" && req["equals"] == game)) match = true;
+            }
+            if (match && !loaders.contains(version)) loaders.append(version);
+        }
+        if (loaders.size() > 20000) bad("Loader catalog is too large.");
+    }
     return {{"minecraftVersions", games}, {"loaderVersions", loaders}};
 }
 QJsonObject ModrinthService::search(const QJsonObject& params)
@@ -138,11 +175,22 @@ QJsonObject ModrinthService::search(const QJsonObject& params)
     const int total = raw["total_hits"].toInt();
     return {{"projects", projects}, {"total", total}, {"nextOffset", offset + projects.size() < total ? QJsonValue(offset + projects.size()) : QJsonValue(QJsonValue::Null)}};
 }
-ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QString& minecraft, const QString& loader)
+ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QString& minecraft, const QString& loader, const QString& artifactSha512)
 {
     if (!compatible(raw, minecraft, loader)) throw ServiceError{"DEPENDENCY_CONFLICT", "Selected version does not support this Minecraft version and loader."};
     auto native = Modrinth::loadIndexedPackVersion(raw);
     if (!native || native->fileName.isEmpty()) bad("Modrinth version metadata is invalid.");
+    if (!artifactSha512.isEmpty()) {
+        if (!QRegularExpression("^[a-f0-9]{128}$").match(artifactSha512).hasMatch()) throw ServiceError{"INVALID_REQUEST", "Invalid selected artifact hash."};
+        QJsonObject artifact;
+        for (const auto& value : raw["files"].toArray()) if (value.toObject()["hashes"].toObject()["sha512"] == artifactSha512) {
+            if (!artifact.isEmpty()) bad("Selected artifact hash is ambiguous.");
+            artifact = value.toObject();
+        }
+        if (artifact.isEmpty()) bad("Selected version does not contain the requested artifact.");
+        native->fileName = artifact["filename"].toString(); native->downloadUrl = artifact["url"].toString();
+        native->hashType = "sha512"; native->hash = artifactSha512;
+    }
     QJsonArray files, dependencies;
     for (const auto& value : raw["files"].toArray()) {
         const auto file = value.toObject(), hashes = file["hashes"].toObject();
@@ -168,8 +216,13 @@ ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QStr
     if (!published.isValid()) bad("Version publication time is invalid.");
     return {wire, *native, published};
 }
-ResolvedVersion ModrinthService::version(const QString& id, const QString& game, const QString& loader)
-{ return parseVersion(json(QUrl(QString(api) + "/version/" + segment(id))).object(), game, loader); }
+ResolvedVersion ModrinthService::versionByHash(const QString& sha512, const QString& minecraft, const QString& loader)
+{
+    if (!QRegularExpression("^[a-f0-9]{128}$").match(sha512).hasMatch()) throw ServiceError{"INVALID_REQUEST", "Invalid package artifact hash."};
+    return parseVersion(json(QUrl(QString(api) + "/version_file/" + sha512 + "?algorithm=sha512")).object(), minecraft, loader, sha512);
+}
+ResolvedVersion ModrinthService::version(const QString& id, const QString& game, const QString& loader, const QString& artifactSha512)
+{ return parseVersion(json(QUrl(QString(api) + "/version/" + segment(id))).object(), game, loader, artifactSha512); }
 QList<ResolvedVersion> ModrinthService::compatibleVersions(const QJsonObject& params)
 {
     const auto game = params["minecraftVersion"].toString(), loader = params["loader"].toString();

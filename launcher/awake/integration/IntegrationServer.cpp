@@ -168,6 +168,8 @@ void IntegrationServer::acceptClients()
             QByteArray buffer;
             quint32 expected = 0;
             bool negotiated = false, busy = false;
+            bool managerExtensions = false;
+            QJsonObject capabilities;
         };
         auto state = std::make_shared<Client>();
         const auto send = [socket = QPointer<QLocalSocket>(socket), state, timer, protocol = m_info["protocol"]](const QString& id, QJsonObject body, bool close = false) {
@@ -211,7 +213,7 @@ void IntegrationServer::acceptClients()
             state->buffer += socket->read(state->expected - state->buffer.size());
             if (quint32(state->buffer.size()) < state->expected)
                 return;
-            const auto request = parseRequest(state->buffer, m_options.major);
+            auto request = parseRequest(state->buffer, m_options.major);
             state->buffer.clear();
             state->expected = 0;
             timer->start(30000);
@@ -228,7 +230,12 @@ void IntegrationServer::acceptClients()
                 const auto versions = params["versions"].toArray();
                 const auto client = params["client"].toObject();
                 bool supported = false;
-                bool valid = params.size() == 2 && params["versions"].isArray() && !versions.isEmpty() && versions.size() <= 16 &&
+                const bool hasExtensions = params.contains("extensions");
+                const auto extensions = params["extensions"].toArray();
+                const bool optedIn = hasExtensions && !m_options.extension.isEmpty() && params["extensions"].isArray() &&
+                    extensions.size() == 1 && extensions.first().isString() && extensions.first().toString() == m_options.extension;
+                bool valid = params.size() == (hasExtensions ? 3 : 2) && (!hasExtensions || optedIn) &&
+                             params["versions"].isArray() && !versions.isEmpty() && versions.size() <= 16 &&
                              params["client"].isObject() && client.size() == 2 && client["name"].isString() &&
                              !client["name"].toString().isEmpty() && client["name"].toString().size() <= 128 &&
                              client["version"].isString() && client["version"].toString().size() <= 64;
@@ -248,10 +255,12 @@ void IntegrationServer::acceptClients()
                     return;
                 }
                 state->negotiated = true;
+                state->managerExtensions = optedIn;
+                state->capabilities = !optedIn && !m_options.legacyCapabilities.isEmpty() ? m_options.legacyCapabilities : m_capabilities;
                 if (m_options.major != 1) {
                     auto result = m_options.hello;
                     result["protocol"] = m_info["protocol"]; result["profileId"] = m_info["profileId"];
-                    result["sessionId"] = m_info["sessionId"]; result["capabilities"] = m_capabilities;
+                    result["sessionId"] = m_info["sessionId"]; result["capabilities"] = state->capabilities;
                     result["limits"] = QJsonObject{{"frameBytes", int(MaxFrameBytes)}, {"clients", 8}, {"pageItems", 200}};
                     send(request.id, {{"result", result}}); return;
                 }
@@ -259,7 +268,7 @@ void IntegrationServer::acceptClients()
                                                             { "installationId", m_info["installationId"] },
                                                             { "profileId", m_info["profileId"] },
                                                             { "sessionId", m_info["sessionId"] },
-                                                            { "capabilities", capabilities() },
+                                                            { "capabilities", state->capabilities },
                                                             { "limits", QJsonObject{ { "frameBytes", int(MaxFrameBytes) },
                                                                                      { "clients", 8 },
                                                                                      { "pageItems", 500 } } } } } });
@@ -269,7 +278,7 @@ void IntegrationServer::acceptClients()
                 send(request.id, failure("HANDSHAKE_REQUIRED", "Send hello first."));
                 return;
             }
-            if (!m_capabilities.value(request.method).toBool()) {
+            if (!state->capabilities.value(request.method).toBool()) {
                 send(request.id, failure("UNSUPPORTED_CAPABILITY", "This capability is not enabled."));
                 return;
             }
@@ -277,6 +286,7 @@ void IntegrationServer::acceptClients()
                 send(request.id, failure("INVALID_REQUEST", "Parameters do not match the method schema.")); return;
             }
             state->busy = true;
+            request.managerExtensions = state->managerExtensions;
             timer->stop();
             auto reply = [guard = QPointer<QLocalSocket>(socket), state, send, id = request.id](QJsonObject result) {
                 if (!guard)

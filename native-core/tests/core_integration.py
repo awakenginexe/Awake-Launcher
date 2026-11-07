@@ -3,6 +3,8 @@
 Requires Python 3.11+ and jsonschema. --live explicitly permits public Modrinth
 downloads. Never points at a user profile or terminates an unrelated process.
 """
+import base64
+import io
 import argparse
 import csv
 import ctypes as C
@@ -25,6 +27,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--helper', type=Path, required=True)
 parser.add_argument('--fixture-executable', type=Path)
 parser.add_argument('--live', action='store_true')
+parser.add_argument('--legacy-schema', type=Path)
 parser.add_argument('--output', type=Path)
 parser.add_argument('--schema-tools', type=Path)
 args = parser.parse_args()
@@ -34,6 +37,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / 'docs/modpack-manager/core.schema.json').read_text())
+LEGACY_SCHEMA = json.loads(args.legacy_schema.read_text()) if args.legacy_schema else None
 PROTOCOL = {'major': 2, 'minor': 0}
 RUN = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='awake-core-ipc-'))
 if args.output:
@@ -116,7 +120,8 @@ def verify_modules(helper):
 
 
 class Client:
-    def __init__(self, descriptor):
+    def __init__(self, descriptor, extended=True):
+        self.extended = extended
         validate('descriptor', descriptor)
         self.file = open('\\\\.\\pipe\\' + descriptor['serverName'], 'r+b', buffering=0)
         self.handle = msvcrt.get_osfhandle(self.file.fileno())
@@ -168,10 +173,15 @@ class Client:
             return response['error']
         assert 'result' in response, response
         validate(method + '.result', response['result'])
+        if not self.extended and LEGACY_SCHEMA:
+            for definition, value in [('response', response), (method + '.result', response['result'])]:
+                Draft202012Validator({'$ref':'#/$defs/'+definition,'$defs':LEGACY_SCHEMA['$defs']},format_checker=FormatChecker()).validate(value)
         return response['result']
 
     def hello(self):
-        return self.call('hello', {'versions': [PROTOCOL], 'client': {'name': 'packaged-core-fixture', 'version': '1'}})
+        params={'versions': [PROTOCOL], 'client': {'name': 'packaged-core-fixture', 'version': '1'}}
+        if self.extended: params['extensions']=['manager.v0.2']
+        return self.call('hello', params)
 
     def wait(self, operation, states=('completed',), timeout=180, allow_recovery=False):
         deadline = time.monotonic() + timeout
@@ -185,7 +195,8 @@ class Client:
 
 
 class Helper:
-    def __init__(self, profile, label):
+    def __init__(self, profile, label, extended=True):
+        self.extended = extended
         self.profile = profile
         self.output = (RUN / (label + '.log')).open('wb')
         self.process = subprocess.Popen([str(args.helper.resolve()), '--profile', str(profile)], cwd=RUN, env=ENV,
@@ -206,7 +217,7 @@ class Helper:
         raise TimeoutError('Helper startup ' + label)
 
     def connect(self):
-        client = Client(self.descriptor)
+        client = Client(self.descriptor, extended=self.extended)
         hello = client.hello()
         for key in ('profileId', 'sessionId', 'role'):
             assert hello[key] == self.descriptor[key]
@@ -325,7 +336,7 @@ def live_workflow(helper):
     op, plan, params = prepare(client, workspace, [{'action': 'remove', 'inventoryId': next(v for v in items if v['projectId'] == new['projectId'])['inventoryId']}])
     client.close()
     helper.kill()  # Simulate process exit while a durable review plan is pending.
-    helper = Helper(helper.profile, 'live-restarted')
+    helper = Helper(helper.profile, 'live-restarted', extended=helper.extended)
     client = helper.connect()
     assert client.call('operations.get', {'operationId': op})['state'] == 'prepared'
     assert client.call('plans.get', {'operationId': op})['planDigest'] == plan['planDigest']
@@ -347,14 +358,88 @@ def live_workflow(helper):
     helper.shutdown(client)
 
 
+
+def live_milestone(helper):
+    client = helper.connect()
+    catalog = client.call('catalog.versions', {'minecraftVersion':'1.20.1','loader':'forge'})
+    assert catalog['loaderVersions']
+    loader = {'id':'forge','version':catalog['loaderVersions'][0]}
+    op = submit(client,'workspaces.create',{'idempotencyKey':uuid.uuid4().hex,'name':'Disposable Forge import','minecraftVersion':'1.20.1','loader':loader})
+    workspace = client.wait(op)['result']['workspace']
+    root = helper.profile / 'workspaces' / workspace['workspaceId']
+    components = json.loads((root/'mmc-pack.json').read_text())['components']
+    assert any(c['uid']=='net.minecraftforge' and c['version']==loader['version'] for c in components)
+    found = client.call('providers.search',{'provider':'modrinth','minecraftVersion':'1.20.1','loader':'forge','query':'ferritecore'})['projects']
+    project = next(p for p in found if p['title'].lower()=='ferritecore')
+    versions = client.call('providers.versions',{'provider':'modrinth','minecraftVersion':'1.20.1','loader':'forge','projectId':project['projectId']})['versions']
+    version = next(v for v in versions if v['releaseType']=='release')
+    artifact = version['files'][0]
+    manifest = {'formatVersion':1,'game':'minecraft','versionId':'acceptance','name':'Acceptance','files':[{'path':'mods/'+artifact['fileName'],'hashes':{'sha1':artifact['sha1'],'sha512':artifact['sha512']},'downloads':[artifact['url']],'fileSize':int(artifact['size'])}],'dependencies':{'minecraft':'1.20.1','forge':loader['version']}}
+    memory = io.BytesIO()
+    with zipfile.ZipFile(memory,'w',zipfile.ZIP_DEFLATED) as pack:
+        pack.writestr('modrinth.index.json',json.dumps(manifest))
+        pack.writestr('overrides/config/awake-acceptance.txt','common')
+        pack.writestr('client-overrides/config/awake-acceptance.txt','client')
+    payload = memory.getvalue()
+    transfer = client.call('inbox.begin',{'idempotencyKey':uuid.uuid4().hex,'purpose':'import','size':str(len(payload)),'sha256':hashlib.sha256(payload).hexdigest()})
+    token = transfer['token']
+    for offset in range(0,len(payload),256*1024):
+        client.call('inbox.write',{'token':token,'offset':str(offset),'bytesBase64':base64.b64encode(payload[offset:offset+256*1024]).decode()})
+    assert client.call('inbox.commit',{'token':token})['complete']
+    selection = {'token':token,'format':'mrpack'}
+    inspected = client.call('imports.inspect',selection)
+    assert inspected['loader']==loader and inspected['files'][0]['path']=='config/awake-acceptance.txt'
+    request = {**selection,'idempotencyKey':uuid.uuid4().hex,'physicalId':workspace['physicalId'],'instanceRevision':workspace['instanceRevision']}
+    imported = submit(client,'imports.prepare',request)
+    client.wait(imported,('prepared',))
+    assert client.call('inbox.discard',{'token':token})['discarded']
+    assert client.call('inbox.discard',{'token':token})['discarded']
+    client.call('inbox.status',{'token':token},error='TRANSFER_DISCARDED')
+    passed('prepared import survives explicit upload discard and idempotent discard replay')
+    plan = client.call('plans.get',{'operationId':imported,'limit':200})
+    assert plan['nextOffset'] is None
+    assert not (root/'.minecraft/config/awake-acceptance.txt').exists()
+    apply(client,imported,plan)
+    assert (root/'.minecraft/config/awake-acceptance.txt').read_text()=='client'
+    inventory = client.call('mods.list',{'physicalId':workspace['physicalId']})
+    mod = next(m for m in inventory['items'] if m['projectId']==project['projectId'])
+    assert mod['metadataState']=='verified' and zipfile.is_zipfile(root/'.minecraft/mods'/mod['fileName'])
+    pinned, pinplan, _ = prepare(client,workspace,[{'action':'policy','inventoryId':mod['inventoryId'],'pinnedVersion':mod['versionId'],'excluded':True}])
+    apply(client,pinned,pinplan)
+    checked=client.call('updates.check',{'physicalId':workspace['physicalId']})
+    assert next(u for u in checked['updates'] if u['projectId']==mod['projectId'])['excluded']
+    passed('real Forge 1.20.1 mrpack import, Modrinth hash resolution, native metadata, overrides and reviewed pin policy', loader=loader,projectId=mod['projectId'],versionId=mod['versionId'])
+    # Configuration-only CF ZIPs need no credential; required CF files remain blocked.
+    memory=io.BytesIO()
+    with zipfile.ZipFile(memory,'w',zipfile.ZIP_DEFLATED) as pack:
+        pack.writestr('manifest.json',json.dumps({'manifestType':'minecraftModpack','manifestVersion':1,'minecraft':{'version':'1.20.1','modLoaders':[{'id':'forge-'+loader['version'],'primary':True}]},'files':[],'overrides':'overrides'}))
+        pack.writestr('overrides/config/awake-cf-acceptance.txt','curseforge overrides')
+    payload=memory.getvalue()
+    transfer=client.call('inbox.begin',{'idempotencyKey':uuid.uuid4().hex,'purpose':'import','size':str(len(payload)),'sha256':hashlib.sha256(payload).hexdigest()})
+    token=transfer['token'];client.call('inbox.write',{'token':token,'offset':'0','bytesBase64':base64.b64encode(payload).decode()});client.call('inbox.commit',{'token':token})
+    baseline=client.call('mods.list',{'physicalId':workspace['physicalId']})['instanceRevision']
+    imported=submit(client,'imports.prepare',{'idempotencyKey':uuid.uuid4().hex,'token':token,'format':'curseforge','physicalId':workspace['physicalId'],'instanceRevision':baseline})
+    client.wait(imported,('prepared',));plan=client.call('plans.get',{'operationId':imported,'limit':200});apply(client,imported,plan)
+    assert (root/'.minecraft/config/awake-cf-acceptance.txt').read_text()=='curseforge overrides'
+    passed('real packaged-helper CurseForge ZIP configuration import without credential; provider file downloads remain disabled')
+    legacy = Client(helper.descriptor, extended=False)
+    legacy.hello()
+    legacy.call('workspaces.list',error='UNSUPPORTED_CAPABILITY')
+    legacy.call('mods.list',{'physicalId':workspace['physicalId']},error='UNSUPPORTED_CAPABILITY')
+    legacy.close()
+    passed('old client explicitly refused incompatible new workspace without invalid legacy payloads')
+    helper.shutdown(client)
+
 def main():
     helper = Helper(RUN / 'primary', 'primary')
     client = Client(helper.descriptor)
     client.call('core.info', error='HANDSHAKE_REQUIRED')
     hello = client.hello()
-    assert hello['capabilities']['transactions.apply'] and not hello['capabilities']['inbox.begin']
+    assert hello['capabilities']['transactions.apply'] and hello['capabilities']['inbox.begin']
+    assert hello['capabilities']['imports.prepare'] and not hello['capabilities']['providers.curseforge.v1']
     client.call('core.info', {'path': 'C:/forbidden'}, error='INVALID_REQUEST')
-    client.call('inbox.begin', error='UNSUPPORTED_CAPABILITY')
+    client.call('inbox.begin', error='INVALID_REQUEST')
+    client.call('providers.search', {'provider':'curseforge','minecraftVersion':'1.20.1','loader':'forge','query':'jei'}, error='PROVIDER_UNAVAILABLE')
     future = Client(helper.descriptor)
     future.call('hello', {'versions': [{'major': 3, 'minor': 0}, PROTOCOL], 'client': {'name': 'future-fixture', 'version': '1'}})
     future.close()
@@ -370,6 +455,13 @@ def main():
     second_log.close()
     assert duplicate.returncode != 0
     passed('packaged helper without Launcher paths, peer identity, strict protocol and profile exclusion', qtModules=modules)
+    legacy = Client(helper.descriptor, extended=False)
+    legacy_hello=legacy.hello()
+    assert not legacy_hello['capabilities']['inbox.begin'] and 'imports.prepare' not in legacy_hello['capabilities']
+    assert legacy.call('core.info')['supportedLoaders']==['vanilla','fabric']
+    legacy.call('inbox.begin',error='UNSUPPORTED_CAPABILITY')
+    legacy.close()
+    passed('legacy 2.0 handshake and core.info validated against Manager v0.1 schema')
     helper.shutdown(client)
     if args.fixture_executable:
         profile = RUN / 'crash-recovery'
@@ -405,6 +497,10 @@ def main():
         helper.shutdown(client)
     if args.live:
         live_workflow(Helper(RUN / 'live', 'live'))
+        live_milestone(Helper(RUN / 'milestone', 'milestone'))
+        if LEGACY_SCHEMA:
+            live_workflow(Helper(RUN / 'legacy-live', 'legacy-live', extended=False))
+            passed('complete legacy Fabric/Modrinth workflow validated against unchanged Manager v0.1 schema')
     idle = Helper(RUN / 'idle', 'idle')
     client = idle.connect()
     client.close()
