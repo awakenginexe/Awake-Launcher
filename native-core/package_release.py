@@ -123,7 +123,11 @@ def main():
             shutil.copyfile(share / 'copyright', notice)
         for port_name, tree in manifest['buildPorts'].items():
             port = args.registry_ports / tree
-            check_port(port, args.dependency_prefix / 'share' / port_name)
+            share = args.dependency_prefix / 'share' / port_name
+            # Build-only tools (e.g. pkgconf) may come from vcpkg's prebuilt MSYS2 tool instead of the port;
+            # verify the recipe when the port was installed, and always ship the recipe and its source.
+            if (share / 'vcpkg_abi_info.txt').is_file():
+                check_port(port, share)
             shutil.copytree(port, bundle / 'ports' / port_name)
         check_port(root / 'cmake/vcpkg-ports/vcpkg-tool-meson', args.dependency_prefix / 'share/vcpkg-tool-meson')
         shutil.copytree(root / 'cmake/vcpkg-ports/vcpkg-tool-meson', bundle / 'ports/vcpkg-tool-meson')
