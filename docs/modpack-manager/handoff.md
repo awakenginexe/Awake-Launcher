@@ -1,52 +1,58 @@
-# Manager client handoff
-Standalone implementation **0.2.0**, wire protocol **2.0**, opt-in extension **manager.v0.2**. Launcher protocol 1.0 remains separate. No release, tag, merge or push was performed.
+# Manager v0.2.0 final Native Core handoff
 
-## Required source and package
-Pin `3b279ff06668b17590892514f12ccbfdbc0a68c3` on `feat/native-core-manager-020`. Schemas/examples: [core.schema.json](core.schema.json), [core.examples.jsonl](core.examples.jsonl); method semantics and limits: [core-protocol.md](core-protocol.md).
+Implementation **0.2.0**, wire protocol **2.0**, explicit opt-in **manager.v0.2**. Native code/source pin: `b00caf7097897ab60ad0aa247e4964ece667976c` on `feat/native-core-manager-020`. A later artifact/handoff commit only distributes the tested outputs. No merge, tag, Launcher release, stable-version change, or Manager release is part of this work.
 
-Windows x64 helper: `C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/manager-020-package-20261107-173420/core-host/windows-x64/awake-core-host.exe`
+Claude's Manager repository was inspected read-only at `6cd40272e0b053844970f71ca49f3a98a9c5578e`; its working tree remained clean. Re-pin that integration before building the final installer.
 
-Executable SHA-256: `23a9cea1cad321b1b9216375c962aca072a895e95aaf7b9f1515601cbdc63c43`
+## Exact delivery
 
-Complete ZIP: `C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/awake-core-manager-v0.2.0-windows-x64.zip` (6,048,986 bytes)
-
-ZIP SHA-256: `48b0410646c4f0a25e27570551763499b46e57ecaec64b102efae1a2a918ca97`
-
-The ZIP contains `core-host/windows-x64/`: executable, Qt6Core/Qt6Network, Schannel/certificate/network plugins, app-local release MSVC CRT, qt.conf, COPYING.md, dependency notices, SOURCE.json and relative-path SHA256SUMS. Archive dependencies are linked into this build. Copy the entire directory. Manager installation/Tauri UI and clean-machine installer execution were not tested.
-
-## Implemented and tested
-| Area | Evidence |
+| Item | SHA-256 |
 |---|---|
-| Loaders | Real Vanilla 1.20.1, Fabric 1.20.1, Forge 1.20.1, Quilt 1.20.1 and NeoForge 1.21.1 creation; native component metadata checked. Forge/NeoForge exact game requirements and Quilt intermediary validation. No game execution claim. |
-| Modrinth | Packaged real Fabric installation plus required dependency, update, toggles, removal, replay/reconnect/prepared restart, stale-plan rejection. Real Forge 1.20.1 FerriteCore `uXXizFIs/DG5Fn9Sz`, Forge `47.4.28`, imported by mrpack hash resolution with config/client overrides and pinning. |
-| Imports/policies | Reviewed mrpack and CurseForge ZIP overrides; fixture CF required files/dependencies, updates/removal, provider-ID collisions, secondary Modrinth artifacts, pins/exclusions/clear, preservation of local edits. Required unavailable files fail preparation; no partial Apply. |
-| Safety/scale | ZIP hostile metadata/path/bomb/hash cases; durable inbox/restart/replay/discard/quota reuse; guarded config replacement/stale edits/rollback. Existing synthetic 301-project installation, 904-file bulk update and process-interrupted Apply/recovery passed. These are fixtures, not a live 250-mod provider pack. |
-| Contract/compatibility | 149 schema/mock checks. Packaged PID/SID/profile exclusion and app-local DLL checks with Windows-only PATH. Full legacy Fabric lifecycle validated against the unchanged Manager v0.1 schema. New-loader data is explicitly upgrade-blocked for legacy clients. |
+| `awake-core-host.exe` | `b33f41c23c5ad7e3708dce7cb0b466311ce8ea526887cbfa3e110e44f58832e6` |
+| `awake-core-manager-v0.2.0-windows-x64.zip` | `2286079e486b4f067b946121ce7b997a15e985e8ec9598082b13b4995af0b37c` |
+| Helper `SHA256SUMS` | `1e7570229e7742995f2ee56afcdd35ce3cc17af234016657b15a2139160aac97` |
+| `awake-core-source-b00caf709789.zip` | `3352fe74952dba6dc37c6287df7c5f397312d9f39bae84c5a245aaa7561c64ad` |
 
-All 10 native targets passed across the full run and subsequent corrected/affected-target reruns. The initial CF lifecycle fixture held its policy read handle open during Apply; closing that test handle fixed the fixture without weakening guarded writes. After handshake changes, the six affected server/service targets passed again. Packaged acceptance: 20 checks; evidence `C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/manager-020-ipc-20261107-173447/results.json`. Native entrypoints are native-core/tests/core_integration.py, validate_contract.py and CTest. Tests used disposable profiles only.
+Local final outputs: `C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/final-delivery-v020/`. Complete helper directory: `C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/final-package-v020/core-host/windows-x64`. Copy the **entire** directory, including plugins, app-local release CRT, Qt DLLs, COPYING, notices, provenance and manifest.
 
-## Claude integration
-Manager repository was read-only inspected at `4319bf356e0fffd9fa4628e3eb22072310e06236`; no Manager files changed. Its current staging script accepts:
+Public branch artifacts: [helper, source parts, hashes and join tool](../../native-core/redistribution/b00caf709789/README.md). The complete source ZIP is 107,259,439 bytes, so GitHub hosts two ordered parts below its per-file limit. `join_source.py` verifies both parts and the reconstructed ZIP; that reconstruction was tested. Attach the complete ZIP and its `.sha256` alongside the Manager installer and helper ZIP for release. Do not substitute GitHub's automatic source download.
+
+Updated contracts: [core.schema.json](core.schema.json), [core-protocol.md](core-protocol.md), [core.examples.jsonl](core.examples.jsonl). Build/source/licensing instructions: [REDISTRIBUTION.md](../../native-core/REDISTRIBUTION.md); exact sources/ports/patches/hashes: [source-dependencies.json](../../native-core/source-dependencies.json). `SOURCE.json` inside the source archive is authoritative for its executable pin; the archived repository handoff predates this delivery note.
+
+## IPC changes Claude must consume
+
+- `x-methods` now contains `imports.inspect`, `imports.prepare`, `inbox.discard`, their existing parameter/result references, `capability:<method>`, and `extension:"manager.v0.2"`. The old `$defs[method]` fallback is unnecessary with this pin. `inbox.discard.v1` remains only a capability alias.
+- Requested hello extension is explicitly echoed in `result.extensions:["manager.v0.2"]`. `extensions:[]` is acknowledged as empty with legacy capabilities. Unknown, duplicate, wrong-type or malformed offers fail INVALID_REQUEST. A failed handshake authorizes nothing. No extension offer means the result omits this field and remains valid against Manager v0.1's strict schema. Reconnects renegotiate; use the returned array plus capability flags.
+- Extended `mods.list.items[]` adds `policy:{pinnedVersion:string|null,excluded:boolean}` and `nativeLock:boolean`. `updateLocked` retains the OR of all three blockers. Never display that aggregate as a pin. Preserve the other policy setting when pinning/unpinning/excluding/re-including; native locks cannot be cleared through Manager policy changes. `metadataState` still controls verification. Legacy replies omit both new fields.
+- Extended `plans.get.files[]` adds `kind:"mod"|"override"|"bookkeeping"`; legacy replies omit it. Digests, revisions, Apply authorization and journal formats are unchanged.
+- New method/capability `providers.project({provider,projectId})` returns `{project}` in the existing project shape (provider, projectId, title, slug, description, iconUrl, gameVersions, loaders). The compatibility arrays are empty/unknown; versions remain authoritative for compatibility. CurseForge still needs its separately approved native authorization.
+- New `outbox.list` and `outbox.configs.v1` capabilities, and extended-only `outbox.read:true`. List params: `{physicalId,instanceRevision,offset?,limit?}`; result: `{instanceRevision,files:[{path,size,sha256}],total,nextOffset}`. Read params: `{physicalId,instanceRevision,path,offset,length}`; result: `{path,instanceRevision,offset,size,bytesBase64,eof,sha256}`. Paths are `.minecraft`-relative. Only unchanged, policy-tracked `config/` text overrides are eligible, at most 8 MiB per file and 262144 bytes per read. Ownership, physical lease, private-path/reparse checks, original tracked hash and full revision checks apply. Arbitrary/untracked/modified files are refused. Reserved token reads remain unsupported. See protocol for extensions, errors and paging rules.
+
+Add `providers.project`/`outbox.list` to CoreMethod and the new optional capability/read fields to types. Re-pin the schema and CORE_CONTRACT_COMMIT. Update helper-pin.json from public `delivery.json`, then stage the complete helper directory with:
 
 ```powershell
-node scripts/stage-helper.mjs --from "C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/manager-020-package-20261107-173420/core-host/windows-x64" 3b279ff06668b17590892514f12ccbfdbc0a68c3
+node scripts/stage-helper.mjs --from "C:/Users/ANXE/.codex/worktrees/manager-core-020/Awake's Launcher/.validation/final-package-v020/core-host/windows-x64" b00caf7097897ab60ad0aa247e4964ece667976c
 node scripts/stage-helper.mjs --check
 ```
 
-1. Replace `src/backend/core/core.schema.json` with the pinned schema and update CORE_CONTRACT_COMMIT in schema.ts. Extend CoreMethod/types.ts and HelperClient.ts: loader kinds, optional capability keys, provider-scoped identity, optional CurseForge SHA-512, tool/include dependencies, import/transfer types and policy changes. Keep CORE_VERSION 2.0.
-2. Add `extensions:["manager.v0.2"]` to hello params. Without it the helper returns exactly the original capability keys (inbox false) and Vanilla/Fabric core.info shapes. For an older helper rejecting the extension, reconnect/hello without it and disable new features. Never infer availability from catalog labels.
-3. Retain current trusted Rust spawn/PID/SID/image checks, protected profile, one request per pipe, durable polling and recovery UI. Do not attach the helper to kill-on-close; do not write workspace files directly.
-4. Import sequence: bounded inbox upload/commit → imports.inspect → workspaces.create with exact package selections (or matching workspace) → imports.prepare → await prepared → fetch every plans.get page → user review → transactions.apply. includeOptional defaults false. Creation is separate; failed imports preserve the workspace. Discard the upload after staging/abandoning; prepared plans remain valid.
-5. Policy changes use plans.prepare action policy with inventoryId, pinnedVersion (installed ID or null), excluded. Install/replace defaults provider to Modrinth; artifactSha512 retains secondary Modrinth files. Gate CF on providers.curseforge.v1. Run npm test, npm run test:host and actual Tauri installer acceptance after adapting the client.
+The Manager's current pin intentionally rejects the new bytes until updated. Run Manager tests, host tests, final installer build and installer acceptance after re-pinning; no Manager file was changed here.
 
-## Blocked and unsupported
-GitHub secret metadata confirmed `AWAKE_CURSEFORGE_API_KEY` belongs to `awakenginexe/Awake-Launcher`; no value was retrieved. It is neither copied to Manager nor embedded in this helper. No provider-approved public authentication/distribution arrangement was established. The default CF capability is false. Only an independently approved operator deployment may set process-local AWAKE_CORE_CURSEFORGE_AUTHORIZED=1 plus AWAKE_CORE_CURSEFORGE_API_KEY; no credentials cross IPC. CF search/download/dependency/update paths were fixture-tested, not live credential-tested. See [official API terms](https://support.curseforge.com/support/solutions/articles/9000207405-curseforge-3rd-party-api-terms-and-conditions) and [distribution toggle](https://support.curseforge.com/support/solutions/articles/9000207877).
+## Verification
 
-Unsupported: ZIP64/encryption/other compression, non-Modrinth-CDN direct mrpack artifacts (explicit manual/restricted errors), export/outbox, in-place loader changes, existing-instance adoption/shared Launcher writes, upstream baseline reconciliation. New override plans need this helper or newer for recovery; never downgrade or delete authority/journal records to bypass a block. Real Minecraft/auth/GPU behavior, live CF downloads, live 250+ mods and Manager UI/installer validation remain unverified.
+- Full native CTest: **10/10 targets passed**, 503.32 seconds, with opt-in real provider/loader tests. Includes 301-project/bulk mutation and interruption/recovery fixtures. Evidence: `.validation/final-native-ctest.log`.
+- Protocol/schema/mock checks: **200 passed**. Regression tests observed the missing method entries and independent policy fields fail before the fix. Pin-only, exclusion-only, both, clearing both and observed native lock states are tested.
+- **Final package: 24 IPC acceptance checks passed**, using Windows-only runtime PATH in the helper. Real Fabric/Modrinth install/dependencies/update/toggle/remove/reconnect, Forge 1.20.1 FerriteCore `uXXizFIs/DG5Fn9Sz` mrpack hash resolution/override import, config-only CurseForge import, import/discard/replay, explicit extension negotiation/malformed offers, project lookup, plan kinds, config outbox and separate policies all passed. Full legacy Fabric lifecycle validates against the unchanged v0.1 schema; newer workspaces are upgrade-blocked. Packaged helper rolled back a 301-mod interrupted Apply to its exact baseline. Evidence: `.validation/final-packaged-ipc/results.json` and adjacent log.
+- Bundler validates exact committed inputs, executable/build binding, Qt binaries, dependency archives and recipe/patch ABI hashes. Source ZIP internal SHA256SUMS/CRC and package hashes passed; split reconstruction matches the complete ZIP. Independent code review found no actionable defects. Operational secret-pattern and private-file scans passed; only public upstream source/test material is included.
 
-Rebuild with MSVC x64 and Qt plus existing vcpkg dependencies: `cmake -S native-core -B build-core -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=<Qt>;<vcpkg-x64-prefix>" -DBUILD_TESTING=ON`, then `cmake --build build-core --parallel 4`. Deploy into a new directory using native-core/deploy.ps1 with Executable, QtBin, DependencyPrefix and Destination.
+## Source, licensing and limits
 
-The remaining sections retain the separate Launcher integration history; the standalone source/package pin above supersedes older standalone proposals.
+The complete archive contains application sources at the exact binary pin, vcpkg source/tool source, the actual static-library/dynamic-CRT triplet, selected registry/overlay ports and all patches, dependency source archives, installed build/ABI metadata, Qt source at its installed SBOM commit, notices and build instructions. All dependency sources are present locally in the archive; references/hashes are also recorded. No application-specific Qt source patch was made. Qt's substantive source matches its source SBOM after Windows line-ending/Git archive transformations; installed/deployed DLLs have valid Qt Company signatures. Binary SBOM hashes differ after distribution/signing; a byte-identical original build tree and reproducible builds are **not** claimed.
+
+Retain the bundled GPL/Qt/third-party notices and supply complete corresponding source with Manager's release. Source and notices for LZO/LZ4 are included conservatively because those dependency features were enabled; their actual inclusion in the executable was not established. Microsoft runtime redistribution remains subject to its licensed REDIST terms. Review exported config content before publishing it; eligibility is an ownership/hash boundary, not a secret-content classifier.
+
+Still unsupported/unverified: native archive export/token outbox, untracked or locally changed config export, in-place loader changes, shared Launcher adoption, upstream baseline reconciliation, ZIP64/encryption/non-stored/deflate imports. No live authorized CurseForge API/download test or live 250+ provider pack; CF remains disabled by default with no embedded key. Minecraft/auth/GPU execution, Manager UI/installer/release verification, and independently reproduced builds were not performed. The same-user malicious-process boundary is unchanged; no exhaustive hostile concurrent directory-swap claim is made. Preserve recovery/authority records and do not downgrade helpers with new prepared plans.
+
+The remaining sections retain the separate Launcher integration history and are superseded by this standalone pin where applicable.
 
 ## Launcher protocol 1.0 (separate endpoint)
 Use [protocol.md](protocol.md), [wire.schema.json](wire.schema.json), and [requests.schema.json](requests.schema.json). Version 1.0 is experimental.
@@ -105,12 +111,12 @@ Reviewed `docs/LAUNCHER-REQUESTS.md` read-only. No new RPC is enabled by this re
 | Request | Contract status / prerequisite |
 |---|---|
 | R0 | Reserved operation schema now includes nonterminal `rolling_back` and enforces terminal flags. Existing 1.0 read payloads are unchanged. Re-pin before exposing operations; internal store records need a wire adapter, not verbatim serialization. |
-| R1–R2 | Detailed Minecraft/loader fields, paged catalogs, exact loader create shape, configured root IDs and created physicalId remain undefined/unavailable. Negotiate a new minor for extra read fields. |
+| R1â€“R2 | Detailed Minecraft/loader fields, paged catalogs, exact loader create shape, configured root IDs and created physicalId remain undefined/unavailable. Negotiate a new minor for extra read fields. |
 | R3 | Search/version/dependency schemas need permission, distribution and download availability fields. Plain read RPCs are preferable to durable search operations; this revises the disabled draft and needs a client re-pin. Credentials stay native. |
 | R4 | Prepare/evaluate must define exact changes, required/optional dependencies, conflicts, affected-file pagination, hashes, disk budget, expiry and reviewed digest. Update representation is unresolved; no guessed shape. |
-| R5–R6 | JAR manifest inspection and batched update lookup are absent. Native index claims remain unverified. Manager-only pins/exclusions would conflict with canonical instance policies: Manager chooses intent, the owning backend must persist/reconcile it with native locks without erasing pins. Exact policy schema awaits design approval. |
-| R7–R8 | Durable list/get/cancel/progress, recovery wrappers/actions and timestamps need public result schemas. Internal states/storage do not imply public capabilities. |
-| R9–R10 | Bounded content categories, upstream baselines and three-way pack conflict handling remain unavailable. Never accept arbitrary caller paths or delete unknown files silently. |
+| R5â€“R6 | JAR manifest inspection and batched update lookup are absent. Native index claims remain unverified. Manager-only pins/exclusions would conflict with canonical instance policies: Manager chooses intent, the owning backend must persist/reconcile it with native locks without erasing pins. Exact policy schema awaits design approval. |
+| R7â€“R8 | Durable list/get/cancel/progress, recovery wrappers/actions and timestamps need public result schemas. Internal states/storage do not imply public capabilities. |
+| R9â€“R10 | Bounded content categories, upstream baselines and three-way pack conflict handling remain unavailable. Never accept arbitrary caller paths or delete unknown files silently. |
 | R11 | Export requires a consistent snapshot, hashes, provider redistribution rules and explicit output selection; it must work in standalone Manager too. No export capability exists yet. |
 | R12 | `--dir <dataRoot>` is supported and fixture-tested. Endpoint-not-ready and unsupported-build states must stay distinct. No production no-window mode or minimized/tray startup contract is implemented. |
 
@@ -155,8 +161,8 @@ Fresh private synthetic profiles, alternating build order: one discarded warm-up
 
 | Mods | Main startup median (range), ms | Feature startup median (range), ms | Main / feature private memory median, MiB |
 |---|---|---|---|
-| 0 | 796 (727–866) | 782 (666–979) | 38.879 / 38.988 |
-| 305 | 938 (816–1728) | 949 (896–3531) | 38.980 / 38.945 |
+| 0 | 796 (727â€“866) | 782 (666â€“979) | 38.879 / 38.988 |
+| 305 | 938 (816â€“1728) | 949 (896â€“3531) | 38.980 / 38.945 |
 
 Idle CPU medians were zero; maximum measured empty-profile samples were 1.562 CPU ms/second in each build. All sampled idle read/write byte deltas were zero. Feature startup created only integration/v1/endpoint.json and coordinator.lock in integration storage; no operation/staging activity was observed. All fixture mod counts and hashes were preserved.
 
@@ -170,12 +176,12 @@ Smallest demonstrated boundary: DurableIO, OperationStore, physical identity/lea
 
 The copied package ran with only Windows system directories in PATH, app-local Qt/plugin paths and no Launcher discovery. A separate Rust caller verified pipe PID, handshake, 305 mods over two pages and disabled writes. Packaged-process tests verified 305-file Apply/final bytes, durable idempotency/completion, restart rollback after forced replacement interruption, cross-process exclusion using the same registry, client disconnect and helper survival after its spawning Rust parent exited. Disconnect/lifetime fixtures used reads and leases, not an accepted mutation from the real Tauri application. These prove kernel reuse, not production enrollment, native model quiescence or a complete Manager workflow. HTTP staging used a bounded loopback artifact and SHA-256; no real provider/JAR installation was tested.
 
-Measured subset: executable 290,816 bytes; package 12,837,427 bytes unpacked / 4,900,413-byte ZIP (Qt Core/Network, network-information/Schannel/certificate plugins and qt.conf). Five packaged helper starts reached readiness in 122–171 ms, median 148 ms. A single idle sample after paged inventory used 3.0 MiB private / 15.3 MiB working set and zero CPU delta over ten seconds. This excludes Manager UI, future provider/catalog/archive services and the official MSVC redistributable. Schannel reported SSL support; live authenticated HTTPS was not exercised. It is a lower-bound deployment sample, not the final installer size or a clean-machine certification. The three existing kernel suites also ran from relocated app-local packages: integration 21, operations 15 and transactions 22 Qt results passed, no failures/skips. Full Launcher Windows build and 40/40 non-visible CTest suites passed.
+Measured subset: executable 290,816 bytes; package 12,837,427 bytes unpacked / 4,900,413-byte ZIP (Qt Core/Network, network-information/Schannel/certificate plugins and qt.conf). Five packaged helper starts reached readiness in 122â€“171 ms, median 148 ms. A single idle sample after paged inventory used 3.0 MiB private / 15.3 MiB working set and zero CPU delta over ten seconds. This excludes Manager UI, future provider/catalog/archive services and the official MSVC redistributable. Schannel reported SSL support; live authenticated HTTPS was not exercised. It is a lower-bound deployment sample, not the final installer size or a clean-machine certification. The three existing kernel suites also ran from relocated app-local packages: integration 21, operations 15 and transactions 22 Qt results passed, no failures/skips. Full Launcher Windows build and 40/40 non-visible CTest suites passed.
 
 | Service boundary | Remaining dependency / extraction seam |
 |---|---|
 | Provider execution | ResourceAPI and ModrinthAPI/FlameAPI use APPLICATION/network and native tasks. Inject network/settings/credential/user-agent context; reuse adapters, rate limits and restrictions. |
-| Staged downloads | NetJob already has non-Application paths, but Request → FileSink → PSaveFile includes Application for the live save-path registry. Extract that Core registry/context, preserving Task cleanup and affiliation; do not replace it with an untracked writer. |
+| Staged downloads | NetJob already has non-Application paths, but Request â†’ FileSink â†’ PSaveFile includes Application for the live save-path registry. Extract that Core registry/context, preserving Task cleanup and affiliation; do not replace it with an untracked writer. |
 | Creation/loaders/serialization | VanillaInstanceCreationTask, PackProfile and MinecraftInstance depend on native application/models. Keep GUI models outside the core; extract existing typed format/metadata services behind explicit settings/catalog context. Prove round trips before replacing native saves. |
 | Import/export | LocalInstanceImportTask and native pack import/export tasks use instance/resource models; export includes dialogs. Extract format/archive/snapshot services, return structured choices to either UI and preserve unknown files/distribution restrictions. Draft-only workspaces do not meet standalone installation. |
 
