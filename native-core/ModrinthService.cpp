@@ -32,6 +32,11 @@ QJsonObject page(const QString& key, const QJsonArray& all, int offset, int limi
 }
 bool compatible(const QJsonObject& raw, const QString& game, const QString& loader)
 { return raw["game_versions"].toArray().contains(game) && raw["loaders"].toArray().contains(loader); }
+// Sinytra Connector loads Fabric mods on Forge/NeoForge. A Fabric-only artifact is admissible there
+// only when explicitly requested with allowBridge; the caller must then require Connector itself.
+bool bridgeable(const QJsonObject& raw, const QString& game, const QString& loader)
+{ return (loader == "forge" || loader == "neoforge") && raw["game_versions"].toArray().contains(game) && raw["loaders"].toArray().contains("fabric"); }
+const QStringList modLoaders{"fabric", "forge", "neoforge", "quilt"};
 }
 ModrinthService::ModrinthService(std::shared_ptr<std::atomic_bool> cancel, Fetch fixture)
     : m_cancel(std::move(cancel)), m_fixture(std::move(fixture)) {}
@@ -175,9 +180,14 @@ QJsonObject ModrinthService::search(const QJsonObject& params)
     const int total = raw["total_hits"].toInt();
     return {{"projects", projects}, {"total", total}, {"nextOffset", offset + projects.size() < total ? QJsonValue(offset + projects.size()) : QJsonValue(QJsonValue::Null)}};
 }
-ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QString& minecraft, const QString& loader, const QString& artifactSha512)
+ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QString& minecraft, const QString& loader, const QString& artifactSha512, bool allowBridge)
 {
-    if (!compatible(raw, minecraft, loader)) throw ServiceError{"DEPENDENCY_CONFLICT", "Selected version does not support this Minecraft version and loader."};
+    QString bridge;
+    if (!compatible(raw, minecraft, loader)) {
+        if (!allowBridge || !bridgeable(raw, minecraft, loader))
+            throw ServiceError{"DEPENDENCY_CONFLICT", "Selected version does not support this Minecraft version and loader."};
+        bridge = "sinytra-connector";
+    }
     auto native = Modrinth::loadIndexedPackVersion(raw);
     if (!native || native->fileName.isEmpty()) bad("Modrinth version metadata is invalid.");
     if (!artifactSha512.isEmpty()) {
@@ -214,15 +224,39 @@ ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QStr
     if (!Contract().valid("version", wire)) bad("Provider version exceeds the supported contract or lacks required integrity data.");
     const auto published = QDateTime::fromString(native->date, Qt::ISODateWithMs);
     if (!published.isValid()) bad("Version publication time is invalid.");
-    return {wire, *native, published};
+    return {wire, *native, published, bridge};
 }
-ResolvedVersion ModrinthService::versionByHash(const QString& sha512, const QString& minecraft, const QString& loader)
+ResolvedVersion ModrinthService::versionByHash(const QString& sha512, const QString& minecraft, const QString& loader, bool allowBridge)
 {
     if (!QRegularExpression("^[a-f0-9]{128}$").match(sha512).hasMatch()) throw ServiceError{"INVALID_REQUEST", "Invalid package artifact hash."};
-    return parseVersion(json(QUrl(QString(api) + "/version_file/" + sha512 + "?algorithm=sha512")).object(), minecraft, loader, sha512);
+    return parseVersion(json(QUrl(QString(api) + "/version_file/" + sha512 + "?algorithm=sha512")).object(), minecraft, loader, sha512, allowBridge);
 }
-ResolvedVersion ModrinthService::version(const QString& id, const QString& game, const QString& loader, const QString& artifactSha512)
-{ return parseVersion(json(QUrl(QString(api) + "/version/" + segment(id))).object(), game, loader, artifactSha512); }
+ResolvedVersion ModrinthService::version(const QString& id, const QString& game, const QString& loader, const QString& artifactSha512, bool allowBridge)
+{ return parseVersion(json(QUrl(QString(api) + "/version/" + segment(id))).object(), game, loader, artifactSha512, allowBridge); }
+QJsonObject ModrinthService::versionInfo(const QString& id, const QString& minecraft, const QString& loader)
+{
+    const auto raw = json(QUrl(QString(api) + "/version/" + segment(id))).object();
+    if (!raw["id"].isString() || !raw["project_id"].isString() || !raw["version_number"].isString()) bad("Modrinth version metadata is invalid.");
+    return {{"projectId", raw["project_id"]}, {"versionId", raw["id"]}, {"versionNumber", raw["version_number"].toString().left(256)},
+        {"compatible", compatible(raw, minecraft, loader)}};
+}
+QJsonObject ModrinthService::anyArtifact(const QString& projectId, const QString& minecraft)
+{
+    const auto doc = json(Modrinth::versionsUrl(api, projectId, {minecraft}, {}, false));
+    if (!doc.isArray() || doc.array().size() > 100000) bad("Modrinth version list is invalid.");
+    QList<QJsonObject> versions;
+    for (const auto& value : doc.array()) if (value.toObject()["game_versions"].toArray().contains(minecraft)) versions.append(value.toObject());
+    std::stable_sort(versions.begin(), versions.end(), [](const auto& a, const auto& b) { return a["date_published"].toString() > b["date_published"].toString(); });
+    for (const auto& raw : versions) for (const auto& value : raw["files"].toArray()) {
+        const auto file = value.toObject(), hashes = file["hashes"].toObject(); const auto size = file["size"].toDouble(-1);
+        if (!file["primary"].toBool() || !file["filename"].toString().endsWith(".jar", Qt::CaseInsensitive) || size <= 0 || size > 64 * 1024 * 1024) continue;
+        if (!QRegularExpression("^[a-f0-9]{128}$").match(hashes["sha512"].toString()).hasMatch() || !QRegularExpression("^[a-f0-9]{40}$").match(hashes["sha1"].toString()).hasMatch()) continue;
+        if (QUrl(file["url"].toString()).host() != "cdn.modrinth.com") continue;
+        return {{"fileName", file["filename"]}, {"size", QString::number(qint64(size))}, {"sha512", hashes["sha512"]}, {"sha1", hashes["sha1"]}, {"url", file["url"]},
+            {"versionId", raw["id"]}, {"versionNumber", raw["version_number"].toString().left(256)}, {"loaders", raw["loaders"]}};
+    }
+    return {};
+}
 QList<ResolvedVersion> ModrinthService::compatibleVersions(const QJsonObject& params)
 {
     const auto game = params["minecraftVersion"].toString(), loader = params["loader"].toString();
@@ -248,9 +282,18 @@ QJsonObject projectMetadata(const ModPlatform::IndexedPack& pack)
 }
 ModPlatform::IndexedPack ModrinthService::project(const QString& id)
 {
-    ModPlatform::IndexedPack pack;
-    if (!Modrinth::loadIndexedPack(pack, json(QUrl(QString(api) + "/project/" + segment(id))).object()) || pack.resourceType != ModPlatform::ResourceType::Mod)
-        bad("Only supported Modrinth mod projects can be installed.");
+    ModPlatform::IndexedPack pack; const auto raw = json(QUrl(QString(api) + "/project/" + segment(id))).object();
+    if (!Modrinth::loadIndexedPack(pack, raw)) bad("Only supported Modrinth mod projects can be installed.");
+    // The shared parser classifies every project whose loaders include "datapack" as a datapack, so
+    // combined mod+datapack projects (e.g. Stardust Labs worldgen) would be refused. Accept them as mods
+    // only when the provider declares project_type "mod" and a real mod loader. The installed version
+    // must still list the workspace loader and ship a .jar artifact; datapack-only versions never pass.
+    if (pack.resourceType != ModPlatform::ResourceType::Mod) {
+        bool loader = false;
+        for (const auto& value : raw["loaders"].toArray()) loader = loader || modLoaders.contains(value.toString());
+        if (raw["project_type"] != "mod" || !loader) bad("Only supported Modrinth mod projects can be installed.");
+        pack.resourceType = ModPlatform::ResourceType::Mod;
+    }
     return pack;
 }
 QJsonObject ModrinthService::lookup(const QString& id) { return projectMetadata(project(id)); }

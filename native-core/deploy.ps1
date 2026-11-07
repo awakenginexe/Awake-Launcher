@@ -28,7 +28,8 @@ if ($runtime.Count -ne 1) { throw 'Cannot identify the x64 application-local CRT
 $dlls = Get-ChildItem -LiteralPath $runtime[0].FullName -File -Filter '*.dll'
 if ($dlls.Name -notcontains 'vcruntime140.dll' -or $dlls.Name -notcontains 'msvcp140.dll') { throw 'Incomplete x64 CRT.' }
 foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $package.FullName }
-Set-Content -LiteralPath (Join-Path $package.FullName 'qt.conf') -Encoding utf8NoBOM -Value "[Paths]`nPrefix=.`nPlugins=."
+# Byte-identical on Windows PowerShell 5.1 and PowerShell 7 (no BOM, CRLF terminator as Set-Content wrote it).
+[System.IO.File]::WriteAllText((Join-Path $package.FullName 'qt.conf'), "[Paths]`nPrefix=.`nPlugins=.`r`n", (New-Object System.Text.UTF8Encoding($false)))
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../COPYING.md') -Destination (Join-Path $package.FullName 'COPYING.md')
 if ($DependencyPrefix) {
     $dependencies = (Resolve-Path -LiteralPath $DependencyPrefix).Path

@@ -44,6 +44,10 @@
         },
         "retryable": {
           "type": "boolean"
+        },
+        "details": {
+          "$ref": "#/$defs/conflictDetails",
+          "description": "manager.v0.2.1 only: structured DEPENDENCY_CONFLICT review data."
         }
       },
       "required": [
@@ -624,6 +628,10 @@
         },
         "nativeLock": {
           "type": "boolean"
+        },
+        "loaderBridge": {
+          "const": "sinytra-connector",
+          "description": "manager.v0.2.1 only: a Fabric mod loaded through Sinytra Connector."
         }
       },
       "required": [
@@ -1035,6 +1043,12 @@
           "type": "boolean"
         },
         "outbox.list": {
+          "type": "boolean"
+        },
+        "dependencies.resolutions.v1": {
+          "type": "boolean"
+        },
+        "loaders.connector.v1": {
           "type": "boolean"
         }
       },
@@ -1676,7 +1690,10 @@
         "extensions": {
           "type": "array",
           "items": {
-            "const": "manager.v0.2"
+            "enum": [
+              "manager.v0.2",
+              "manager.v0.2.1"
+            ]
           },
           "minItems": 0,
           "maxItems": 1
@@ -1740,7 +1757,10 @@
         "extensions": {
           "type": "array",
           "items": {
-            "const": "manager.v0.2"
+            "enum": [
+              "manager.v0.2",
+              "manager.v0.2.1"
+            ]
           },
           "maxItems": 1
         }
@@ -2156,6 +2176,13 @@
           },
           "maxItems": 1024,
           "minItems": 1
+        },
+        "dependencyResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyResolution"
+          },
+          "maxItems": 256
         }
       },
       "required": [
@@ -2250,6 +2277,14 @@
             "$ref": "#/$defs/dependency"
           },
           "maxItems": 1024
+        },
+        "dependencyResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewedResolution"
+          },
+          "maxItems": 256,
+          "description": "manager.v0.2.1 only: dependency resolutions accepted for this reviewed plan (bound into planDigest)."
         }
       },
       "required": [
@@ -3122,6 +3157,13 @@
         },
         "includeOptional": {
           "type": "boolean"
+        },
+        "dependencyResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyResolution"
+          },
+          "maxItems": 256
         }
       },
       "required": [
@@ -3310,6 +3352,398 @@
         "files",
         "total",
         "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyEvidence": {
+      "type": "object",
+      "description": "Loader metadata read from the verified JARs (mods.toml, neoforge.mods.toml, fabric.mod.json, quilt.mod.json). satisfied: the declared range accepts the selected dependency version; violated: metadata rejects it (or declares a missing dependency mandatory); not_declared: the requester's loader metadata does not declare this dependency; unknown: metadata was unavailable or not evaluable.",
+      "properties": {
+        "result": {
+          "enum": [
+            "satisfied",
+            "violated",
+            "not_declared",
+            "unknown"
+          ]
+        },
+        "modId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "declaredRange": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mandatory": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selectedModVersion": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "result",
+        "modId",
+        "declaredRange",
+        "mandatory",
+        "selectedModVersion"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyRequest": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "versionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "versionNumber": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 255,
+          "minLength": 1
+        },
+        "requestedVersionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestedVersionNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/dependencyEvidence"
+        }
+      },
+      "required": [
+        "provider",
+        "projectId",
+        "title",
+        "versionId",
+        "versionNumber",
+        "fileName",
+        "requestedVersionId",
+        "requestedVersionNumber",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyConflict": {
+      "type": "object",
+      "description": "version_pin: provider metadata pins another version of a project the plan already selects. missing_dependency: a provider requirement has no version for this Minecraft version and loader. incompatible: both sides of a declared incompatibility would be enabled. loader_bridge: a Fabric-only file needs Sinytra Connector, which is not enabled. resolutions lists the reviewed choices the helper will accept in dependencyResolutions.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "version_pin",
+            "missing_dependency",
+            "incompatible",
+            "loader_bridge"
+          ]
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "selected": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "versionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                },
+                "versionNumber": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "minLength": 1
+                },
+                "fileName": {
+                  "type": "string",
+                  "maxLength": 255,
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "versionId",
+                "versionNumber",
+                "fileName"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyRequest"
+          },
+          "maxItems": 32
+        },
+        "candidates": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "versionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "versionNumber": {
+                "type": "string",
+                "maxLength": 256,
+                "minLength": 1
+              }
+            },
+            "required": [
+              "versionId",
+              "versionNumber"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "resolutions": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "enum": [
+              "use_version",
+              "proceed_without"
+            ]
+          }
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "provider",
+        "projectId",
+        "title",
+        "selected",
+        "requests",
+        "candidates",
+        "resolutions",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "conflictDetails": {
+      "type": "object",
+      "properties": {
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyConflict"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "conflicts",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyResolution": {
+      "type": "object",
+      "description": "Reviewed answer to a dependencyConflict: versionId keeps/chooses that version of the dependency project (use_version); null installs the requesters without it (proceed_without). The helper re-checks loader metadata and refuses a resolution it contradicts.",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "versionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "versionId"
+      ],
+      "additionalProperties": false
+    },
+    "reviewedResolution": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "versionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestedBy": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 256,
+                "minLength": 1
+              },
+              "requestedVersionId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "evidence": {
+                "enum": [
+                  "satisfied",
+                  "not_declared",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "title",
+              "requestedVersionId",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "projectId",
+        "title",
+        "versionId",
+        "requestedBy"
       ],
       "additionalProperties": false
     }

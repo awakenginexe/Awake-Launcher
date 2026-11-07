@@ -162,6 +162,7 @@ QJsonArray WorkspaceServices::scan(const QJsonObject& record) const
             {"versionNumber", nullable("versionNumber")}, {"metadataState", state}, {"updateLocked", locked}, {"nativeLock", nativeLock},
             {"policy", QJsonObject{{"pinnedVersion", entry["pinnedVersion"].toString().isEmpty() ? QJsonValue(QJsonValue::Null) : entry["pinnedVersion"]}, {"excluded", entry["excluded"].toBool()}}}});
         if (entry["provider"] == "curseforge") { auto row = result.last().toObject(); row["provider"] = "curseforge"; result.replace(result.size() - 1, row); }
+        if (entry["loaderBridge"] == "sinytra-connector") { auto row = result.last().toObject(); row["loaderBridge"] = "sinytra-connector"; result.replace(result.size() - 1, row); }
     }
     if (result.size() > 100000) throw ServiceError{"LIMIT_EXCEEDED", "Inventory exceeds 100,000 mod files."};
     return result;
@@ -286,6 +287,7 @@ QJsonObject WorkspaceServices::plan(const QJsonObject& params)
     auto result = paged("files", files, params);
     for (const auto* key : {"operationId", "planDigest", "instanceRevision", "expectedInstanceRevision"}) result[key] = value[key];
     result["warnings"] = value["review"].toObject()["warnings"].toArray(); result["dependencies"] = value["review"].toObject()["dependencies"].toArray();
+    if (value["review"].toObject().contains("dependencyResolutions")) result["dependencyResolutions"] = value["review"].toObject()["dependencyResolutions"];
     return result;
 }
 QJsonObject WorkspaceServices::operation(const QString& id) const

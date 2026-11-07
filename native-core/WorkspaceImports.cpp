@@ -93,11 +93,14 @@ void WorkspaceServices::prepareImport(const QString& id, const QJsonObject& requ
         if (url.isEmpty()) throw ServiceError{"PROVIDER_RESTRICTED", "Manual distribution is required for " + path.left(1500) + "; no bytes were applied."};
         const auto hashes = file["hashes"].toObject();
         if (path.startsWith("mods/") && path.count('/') == 1 && path.endsWith(".jar", Qt::CaseInsensitive)) {
-            const auto resolved = m_provider.versionByHash(hashes["sha512"].toString(), record["minecraftVersion"].toString(), record["loader"].toObject()["id"].toString());
+            // A Fabric-only file in a Forge/NeoForge pack is admitted only for this exact hash and only if the
+            // resulting workspace enables Sinytra Connector (enforced by prepare's graph check).
+            const auto resolved = m_provider.versionByHash(hashes["sha512"].toString(), record["minecraftVersion"].toString(), record["loader"].toObject()["id"].toString(), true);
             const auto artifact = resolved.wire["files"].toArray().first().toObject();
             if (artifact["sha512"] != hashes["sha512"] || artifact["sha1"] != hashes["sha1"] || artifact["size"].toString() != QString::number(qint64(file["fileSize"].toDouble())) || artifact["fileName"] != path.mid(5))
                 throw ServiceError{"INTEGRITY_FAILED", "Package file differs from its compatible provider version."};
             select("modrinth", resolved.wire["projectId"].toString(), resolved.wire["versionId"].toString(), hashes["sha512"].toString());
+            if (!resolved.bridge.isEmpty()) { auto change = changes.last().toObject(); change["loaderBridge"] = resolved.bridge; changes.replace(changes.size() - 1, change); }
         } else {
             const auto name = "download-" + QString::number(++ordinal);
             m_provider.download({{"url", url}, {"size", QString::number(qint64(file["fileSize"].toDouble()))}, {"sha512", hashes["sha512"]}, {"sha1", hashes["sha1"]}}, directory + '/' + name);

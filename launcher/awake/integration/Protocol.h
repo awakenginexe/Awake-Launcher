@@ -8,6 +8,8 @@ struct Request {
     QString id, method, error;
     QJsonObject params;
     bool managerExtensions = false;
+    // The single accepted hello extension (e.g. "manager.v0.2" or "manager.v0.2.1"); empty when none.
+    QString managerExtension;
 };
 QJsonObject version();
 QJsonObject failure(const QString& code, const QString& message, bool retryable = false);

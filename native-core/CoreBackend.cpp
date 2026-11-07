@@ -30,7 +30,18 @@ bool legacyResponse(const QJsonValue& value)
     }
     return true;
 }
-QJsonObject serviceFailure(const ServiceError& error) { return failure(error.code, error.message.left(2048), error.retryable); }
+constexpr auto evidenceExtension = "manager.v0.2.1";
+QJsonObject serviceFailure(const ServiceError& error)
+{
+    auto response = failure(error.code, error.message.left(2048), error.retryable);
+    if (!error.details.isEmpty()) { auto body = response["error"].toObject(); body["details"] = error.details; response["error"] = body; }
+    return response;
+}
+QJsonObject withoutDetails(QJsonObject operation)
+{
+    if (operation["error"].isObject()) { auto error = operation["error"].toObject(); error.remove("details"); operation["error"] = error; }
+    return operation;
+}
 QJsonObject page(const QJsonArray& all, const QJsonObject& params)
 {
     QJsonArray values; const int offset = params["offset"].toInt(), limit = params["limit"].toInt(100);
@@ -55,7 +66,8 @@ bool CoreBackend::start(const QString& requested, QString* error)
         IntegrationServer::Options options; options.major = 2; options.directory = "core-v2"; options.prefix = "awake-core-v2-";
         options.capabilities = m_contract.capabilities(true);
         options.extension = "manager.v0.2"; options.legacyCapabilities = m_contract.capabilities(true, false);
-        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.2.0"}, {"storageVersion", 1}};
+        options.nextExtension = evidenceExtension; options.nextCapabilities = m_contract.capabilities(true, true, true);
+        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.2.1"}, {"storageVersion", 1}};
         options.validate = [this](const QString& method, const QJsonObject& params) { return m_contract.valid(method + ".params", params); };
         if (!m_server.start(m_profile, {{"role", "modpack-core"}, {"profileId", m_profileId}},
             [this](const Request& request, IntegrationServer::Reply reply) { handle(request, std::move(reply)); }, options, &reason)) throw ServiceError{"IO_ERROR", reason};
@@ -72,7 +84,28 @@ bool CoreBackend::start(const QString& requested, QString* error)
 }
 void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
 {
-    const auto checked = [this, method = request.method, extensions = request.managerExtensions, reply](QJsonObject response) {
+    const bool evidence = request.managerExtension == evidenceExtension;
+    const auto checked = [this, method = request.method, extensions = request.managerExtensions, evidence, reply](QJsonObject response) {
+        // Paged operation lists never carry conflict details (bounded frames); operations.get returns them.
+        if ((method == "operations.list" || method == "events.poll") && response["result"].isObject()) {
+            auto result = response["result"].toObject();
+            QJsonArray rows; for (const auto& value : result["operations"].toArray()) rows.append(withoutDetails(value.toObject()));
+            result["operations"] = rows; response["result"] = result;
+        }
+        // manager.v0.2.1 additions are invisible to older clients, whose pinned schemas reject unknown fields.
+        if (!evidence) {
+            if (response["error"].isObject()) { auto error = response["error"].toObject(); error.remove("details"); response["error"] = error; }
+            if (response["result"].isObject()) {
+                auto result = response["result"].toObject();
+                if (method == "operations.get") result = withoutDetails(result);
+                if (method == "plans.get") result.remove("dependencyResolutions");
+                if (method == "mods.list") {
+                    QJsonArray rows; for (const auto& value : result["items"].toArray()) { auto row = value.toObject(); row.remove("loaderBridge"); rows.append(row); }
+                    result["items"] = rows;
+                }
+                response["result"] = result;
+            }
+        }
         if (!extensions && response.contains("result") && (method == "mods.list" || method == "plans.get")) {
             auto result = response["result"].toObject(); const auto key = method == "mods.list" ? "items" : "files";
             QJsonArray rows;
@@ -91,6 +124,8 @@ void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
     };
     try {
         WorkspaceServices services(m_profile, *m_store);
+        if (!evidence && request.params.contains("dependencyResolutions"))
+            throw ServiceError{"UNSUPPORTED_CAPABILITY", "Reviewed dependency resolutions require the manager.v0.2.1 extension."};
         if (!request.managerExtensions) {
             bool extended = request.params["provider"] == "curseforge" ||
                 (request.params["loader"].isObject() && !QStringList{"vanilla", "fabric"}.contains(request.params["loader"].toObject()["id"].toString())) ||
@@ -194,7 +229,7 @@ QJsonObject CoreBackend::read(const Request& request)
     const auto method = request.method; const auto params = request.params;
     if (method == "core.info") {
         const auto recovery = services.recoveryStatus();
-        return {{"role", "modpack-core"}, {"coreVersion", "0.2.0"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
+        return {{"role", "modpack-core"}, {"coreVersion", "0.2.1"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
             {"workspaceRoot", m_profile + "/workspaces"}, {"state", recovery["operations"].toArray().isEmpty() && recovery["blockedWorkspaces"].toArray().isEmpty() ? "ready" : "recovery_required"},
             {"supportedLoaders", request.managerExtensions ? QJsonArray{"vanilla", "fabric", "forge", "neoforge", "quilt"} : QJsonArray{"vanilla", "fabric"}}};
     }

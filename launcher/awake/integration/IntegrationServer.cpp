@@ -169,6 +169,7 @@ void IntegrationServer::acceptClients()
             quint32 expected = 0;
             bool negotiated = false, busy = false;
             bool managerExtensions = false;
+            QString managerExtension;
             QJsonObject capabilities;
         };
         auto state = std::make_shared<Client>();
@@ -232,8 +233,10 @@ void IntegrationServer::acceptClients()
                 bool supported = false;
                 const bool hasExtensions = params.contains("extensions");
                 const auto extensions = params["extensions"].toArray();
+                const auto offered = extensions.size() == 1 && extensions.first().isString() ? extensions.first().toString() : QString{};
+                const bool next = !m_options.nextExtension.isEmpty() && offered == m_options.nextExtension;
                 const bool optedIn = hasExtensions && !m_options.extension.isEmpty() && params["extensions"].isArray() &&
-                    extensions.size() == 1 && extensions.first().isString() && extensions.first().toString() == m_options.extension;
+                    (offered == m_options.extension || next);
                 const bool emptyExtensions = hasExtensions && !m_options.extension.isEmpty() && params["extensions"].isArray() && extensions.isEmpty();
                 bool valid = params.size() == (hasExtensions ? 3 : 2) && (!hasExtensions || optedIn || emptyExtensions) &&
                              params["versions"].isArray() && !versions.isEmpty() && versions.size() <= 16 &&
@@ -257,13 +260,14 @@ void IntegrationServer::acceptClients()
                 }
                 state->negotiated = true;
                 state->managerExtensions = optedIn;
-                state->capabilities = !optedIn && !m_options.legacyCapabilities.isEmpty() ? m_options.legacyCapabilities : m_capabilities;
+                state->managerExtension = optedIn ? offered : QString{};
+                state->capabilities = next ? m_options.nextCapabilities : !optedIn && !m_options.legacyCapabilities.isEmpty() ? m_options.legacyCapabilities : m_capabilities;
                 if (m_options.major != 1) {
                     auto result = m_options.hello;
                     result["protocol"] = m_info["protocol"]; result["profileId"] = m_info["profileId"];
                     result["sessionId"] = m_info["sessionId"]; result["capabilities"] = state->capabilities;
                     result["limits"] = QJsonObject{{"frameBytes", int(MaxFrameBytes)}, {"clients", 8}, {"pageItems", 200}};
-                    if (hasExtensions) result["extensions"] = optedIn ? QJsonArray{m_options.extension} : QJsonArray{};
+                    if (hasExtensions) result["extensions"] = optedIn ? QJsonArray{offered} : QJsonArray{};
                     send(request.id, {{"result", result}}); return;
                 }
                 send(request.id, { { "result", QJsonObject{ { "protocol", version() },
@@ -289,6 +293,7 @@ void IntegrationServer::acceptClients()
             }
             state->busy = true;
             request.managerExtensions = state->managerExtensions;
+            request.managerExtension = state->managerExtension;
             timer->stop();
             auto reply = [guard = QPointer<QLocalSocket>(socket), state, send, id = request.id](QJsonObject result) {
                 if (!guard)

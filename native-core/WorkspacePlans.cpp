@@ -6,6 +6,7 @@
 #include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/TransactionEngine.h"
 #include "modplatform/packwiz/Packwiz.h"
+#include "ModMetadata.h"
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -18,6 +19,8 @@ QString providerId(const QJsonObject& value) { return value["provider"].toString
 QString projectKey(const QString& provider, const QString& id) { return provider == "curseforge" ? provider + ':' + id : id; }
 QString projectKey(const QJsonObject& row) { return projectKey(providerId(row), row["projectId"].toString()); }
 constexpr auto mods = ".minecraft/mods";
+// Sinytra Connector loads Fabric mods on Forge/NeoForge; Forgified Fabric API replaces Fabric API there.
+constexpr auto connectorProject = "u58R1TMW", forgifiedFabricApiProject = "Aqlf1Shp", fabricApiProject = "P7dR8mSH";
 QString checkedHash(const QString& path)
 { QString error; const auto value = DurableIO::hash(path, &error); if (value.isEmpty()) throw ServiceError{"INTEGRITY_FAILED", error}; return value; }
 void privateDirectory(const QString& path)
@@ -56,15 +59,22 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
         auto entry = it.value().toObject(); entry["enabled"] = byProject[it.key()]["enabled"]; it.value() = entry;
     }
     QMap<QString, ResolvedVersion> selected; QMap<QString, ModPlatform::IndexedPack> packs;
-    QStringList queue; QSet<QString> touched, removed, unknownRemovals; QMap<QString, bool> unknownToggles;
+    QStringList queue; QSet<QString> touched, removed, unknownRemovals, explicitProjects; QMap<QString, bool> unknownToggles;
     QJsonArray warnings = importWarnings, dependencies; QSet<QString> dependencyIds;
     const auto warn = [&](const QString& text) { if (warnings.size() < 128) warnings.append(text.left(1024)); };
+    // Reviewed dependency resolutions (manager.v0.2.1): dependency project -> accepted version, or null for "proceed without".
+    QMap<QString, QJsonValue> resolutions;
+    for (const auto& value : request["dependencyResolutions"].toArray()) {
+        const auto resolution = value.toObject(); const auto key = projectKey(providerId(resolution), resolution["projectId"].toString());
+        if (resolutions.contains(key)) throw ServiceError{"INVALID_REQUEST", "A dependency resolution is repeated."};
+        resolutions[key] = resolution["versionId"];
+    }
     const auto choose = [&](const ResolvedVersion& version, const ModPlatform::IndexedPack& pack) {
         const auto project = projectKey(version.wire), versionId = version.wire["versionId"].toString();
         if (pack.addonId.toString() != version.wire["projectId"].toString() || !Contract().valid("version", version.wire)) throw ServiceError{"INTEGRITY_FAILED", "Provider version identity is invalid."};
-        if (removed.contains(project)) throw ServiceError{"DEPENDENCY_CONFLICT", "A required dependency was explicitly removed."};
+        if (removed.contains(project)) throw ServiceError{"DEPENDENCY_CONFLICT", "A required dependency was explicitly removed: " + pack.name.left(256)};
         if (selected.contains(project)) {
-            if (selected[project].wire["versionId"] != versionId) throw ServiceError{"DEPENDENCY_CONFLICT", "Two requested dependencies require different versions of " + project};
+            if (selected[project].wire["versionId"] != versionId) throw ServiceError{"DEPENDENCY_CONFLICT", "Two selections require different versions of " + pack.name.left(256) + " (" + project + ")."};
             return;
         }
         const auto old = byProject.value(project);
@@ -72,7 +82,11 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
         if (!old.isEmpty() && old["versionId"] != versionId && old["updateLocked"].toBool()) throw ServiceError{"POLICY_CONFLICT", "A native update lock, exclusion or intentional pin blocks this version change."};
         if (selected.size() >= 1024) throw ServiceError{"LIMIT_EXCEEDED", "Dependency resolution exceeds 1,024 projects."};
         selected[project] = version; packs[project] = pack; queue.append(project);
-        auto entry = desired[project].toObject(); entry["version"] = version.wire;
+        auto entry = desired.value(project).toObject();
+        // Accepted resolutions belong to one requester version; a different version must be reviewed again.
+        if (entry["version"].toObject()["versionId"] != versionId) entry.remove("dependencyResolutions");
+        entry["version"] = version.wire;
+        if (version.bridge.isEmpty()) entry.remove("loaderBridge"); else entry["loaderBridge"] = version.bridge;
         entry["enabled"] = entry.contains("enabled") ? entry["enabled"] : QJsonValue(true); desired[project] = entry;
     };
     for (const auto& value : request["changes"].toArray()) {
@@ -84,7 +98,11 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
             if (touched.contains(project) || (action == "install" && byProject.contains(project)) || (action == "replace" && !byProject.contains(project)))
                 throw ServiceError{"POLICY_CONFLICT", "Conflicting install/replace actions for this project."};
             if (provider == "curseforge" && change.contains("artifactSha512")) throw ServiceError{"INVALID_REQUEST", "CurseForge files are selected by file ID."};
-            touched.insert(project); choose(provider == "curseforge" ? m_curseforge.version(change["projectId"].toString(), change["versionId"].toString(), game, loaderId) : m_provider.version(change["versionId"].toString(), game, loaderId, change["artifactSha512"].toString()), pack);
+            // "loaderBridge" is set only internally by package import for an exact, hash-identified file;
+            // client requests are schema-validated and cannot carry it.
+            const bool bridge = provider == "modrinth" && change["loaderBridge"] == "sinytra-connector" && change.contains("artifactSha512");
+            touched.insert(project); explicitProjects.insert(project);
+            choose(provider == "curseforge" ? m_curseforge.version(change["projectId"].toString(), change["versionId"].toString(), game, loaderId) : m_provider.version(change["versionId"].toString(), game, loaderId, change["artifactSha512"].toString(), bridge), pack);
         } else {
             const auto inventoryId = change["inventoryId"].toString(); const auto row = byInventory.value(inventoryId);
             if (row.isEmpty()) throw ServiceError{"STALE_INSTANCE", "An inventory action no longer identifies a mod."};
@@ -94,70 +112,323 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
             if (action == "policy") {
                 if (project.isEmpty()) throw ServiceError{"POLICY_CONFLICT", "Only provider-identified mods can be pinned or excluded."};
                 if (change["pinnedVersion"].isString() && change["pinnedVersion"] != row["versionId"]) throw ServiceError{"POLICY_CONFLICT", "A pin must identify the installed version."};
-                auto entry = desired[project].toObject(); entry["pinnedVersion"] = change["pinnedVersion"]; entry["excluded"] = change["excluded"]; desired[project] = entry;
+                auto entry = desired.value(project).toObject(); entry["pinnedVersion"] = change["pinnedVersion"]; entry["excluded"] = change["excluded"]; desired[project] = entry;
             } else if (action == "remove") {
                 if (project.isEmpty()) unknownRemovals.insert(inventoryId);
                 else { removed.insert(project); desired.remove(project); }
             } else {
                 const bool enabled = action == "enable";
                 if (project.isEmpty()) unknownToggles[inventoryId] = enabled;
-                else { auto entry = desired[project].toObject(); entry["enabled"] = enabled; desired[project] = entry; }
+                else { auto entry = desired.value(project).toObject(); entry["enabled"] = enabled; desired[project] = entry; }
             }
         }
     }
+    const auto splitKey = [](const QString& key) { return key.startsWith("curseforge:") ? QPair<QString, QString>{"curseforge", key.mid(11)} : QPair<QString, QString>{"modrinth", key}; };
+    // A reviewed "use this version" resolution selects that version before dependencies are expanded,
+    // so every provider pin naming another version of the project is then evaluated against it.
+    for (auto it = resolutions.begin(); it != resolutions.end(); ++it) {
+        m_provider.checkCancelled();
+        if (!it.value().isString()) continue;
+        const auto split = splitKey(it.key()); const auto versionId = it.value().toString();
+        if (selected.contains(it.key())) {
+            if (selected[it.key()].wire["versionId"] != versionId) throw ServiceError{"INVALID_REQUEST", "A dependency resolution names a different version than the selected package file."};
+            continue;
+        }
+        if (desired.value(it.key()).toObject()["version"].toObject()["versionId"] == versionId) continue;
+        choose(split.first == "curseforge" ? m_curseforge.version(split.second, versionId, game, loaderId) : m_provider.version(versionId, game, loaderId),
+            split.first == "curseforge" ? m_curseforge.project(split.second) : m_provider.project(split.second));
+    }
     for (int cursor = 0; cursor < queue.size(); ++cursor) {
-        const auto project = queue[cursor]; const auto provider = providerId(selected[project].wire);
+        const auto project = queue[cursor]; const auto provider = providerId(selected[project].wire); const bool bridged = !selected[project].bridge.isEmpty();
         for (const auto& value : selected[project].wire["dependencies"].toArray()) {
             m_provider.checkCancelled(); const auto dep = value.toObject(); const auto type = dep["type"].toString();
             if (type != "required") { warn(type + " dependency from " + project + ": " + dep["projectId"].toString() + " " + dep["versionId"].toString()); continue; }
             auto depProject = dep["projectId"].toString(), depVersion = dep["versionId"].toString();
-            std::optional<ResolvedVersion> resolved;
-            if (!depVersion.isEmpty()) { resolved = provider == "curseforge" ? m_curseforge.version(depProject, depVersion, game, loaderId) : m_provider.version(depVersion, game, loaderId);
-                if (!depProject.isEmpty() && depProject != resolved->wire["projectId"]) throw ServiceError{"DEPENDENCY_CONFLICT", "Dependency identity mismatch."}; depProject = resolved->wire["projectId"].toString(); }
+            // Under Connector, Forgified Fabric API provides Fabric API; the Fabric API pin itself never applies.
+            if (bridged && provider == "modrinth" && depProject == fabricApiProject) { depProject = forgifiedFabricApiProject; depVersion.clear(); }
+            if (depProject.isEmpty() && !depVersion.isEmpty() && provider == "modrinth") depProject = m_provider.versionInfo(depVersion, game, loaderId)["projectId"].toString();
             if (depProject.isEmpty()) throw ServiceError{"DEPENDENCY_CONFLICT", "Required dependency has no resolvable project or version."};
             const auto depKey = projectKey(provider, depProject);
             if (removed.contains(depKey)) throw ServiceError{"DEPENDENCY_CONFLICT", "A required dependency was explicitly removed."};
-            const auto current = desired[depKey].toObject();
+            const auto current = desired.value(depKey).toObject();
             if (!current.isEmpty() && !current["enabled"].toBool(true)) throw ServiceError{"DEPENDENCY_CONFLICT", "A required dependency is disabled; enable it explicitly."};
-            const auto currentVersion = current["version"].toObject()["versionId"].toString();
-            if (current.isEmpty() || (!depVersion.isEmpty() && depVersion != currentVersion)) {
+            if (!current.isEmpty()) {
+                if (byProject.contains(depKey) && !selected.contains(depKey) && byProject[depKey]["metadataState"] != "verified")
+                    throw ServiceError{"POLICY_CONFLICT", "A required dependency has modified bytes or metadata."};
+                // An installed dependency follows a requester's pin only forward (a newer-published build) and only
+                // when nothing else in this plan selects it. Downgrades and every other mismatch go to review.
+                const auto currentVersion = current["version"].toObject()["versionId"].toString();
+                if (!depVersion.isEmpty() && depVersion != currentVersion && byProject.contains(depKey) && !selected.contains(depKey) &&
+                    !byProject[depKey]["updateLocked"].toBool() && !resolutions.contains(depKey)) {
+                    std::optional<ResolvedVersion> pinnedVersion, installedVersion;
+                    try {
+                        pinnedVersion = provider == "curseforge" ? m_curseforge.version(depProject, depVersion, game, loaderId) : m_provider.version(depVersion, game, loaderId);
+                        installedVersion = provider == "curseforge" ? m_curseforge.version(depProject, currentVersion, game, loaderId) : m_provider.version(currentVersion, game, loaderId);
+                    } catch (const ServiceError& error) { if (error.code != "DEPENDENCY_CONFLICT") throw; }
+                    if (pinnedVersion && installedVersion && pinnedVersion->wire["projectId"] == depProject && pinnedVersion->publishedAt > installedVersion->publishedAt) {
+                        const auto pack = provider == "curseforge" ? m_curseforge.project(depProject) : m_provider.project(depProject);
+                        choose(*pinnedVersion, pack);
+                        warn(QString("%1 is updated to %2 because %3 requires it.").arg(pack.name.left(256), pinnedVersion->wire["versionNumber"].toString().left(128), packs.value(project).name.left(256)));
+                    }
+                }
+            } else if (!bridged && !(resolutions.contains(depKey) && resolutions[depKey].isNull())) {
+                // Absent: install the exact provider pin when it supports this workspace, else the newest compatible release.
+                std::optional<ResolvedVersion> resolved;
+                if (!depVersion.isEmpty()) {
+                    try { resolved = provider == "curseforge" ? m_curseforge.version(depProject, depVersion, game, loaderId) : m_provider.version(depVersion, game, loaderId); }
+                    catch (const ServiceError& error) { if (error.code != "DEPENDENCY_CONFLICT") throw; }
+                    if (resolved && resolved->wire["projectId"] != depProject) throw ServiceError{"DEPENDENCY_CONFLICT", "Dependency identity mismatch."};
+                }
                 if (!resolved) {
                     const QJsonObject query{{"projectId", depProject}, {"minecraftVersion", game}, {"loader", loaderId}, {"limit", 200}};
                     const auto choices = (provider == "curseforge" ? m_curseforge.versions(query) : m_provider.versions(query))["versions"].toArray();
-                    if (choices.isEmpty()) throw ServiceError{"DEPENDENCY_CONFLICT", "No compatible required dependency version exists."};
-                    auto choice = choices.first().toObject();
-                    for (const auto& candidate : choices) if (candidate.toObject()["releaseType"] == "release") { choice = candidate.toObject(); break; }
-                    resolved = provider == "curseforge" ? m_curseforge.version(depProject, choice["versionId"].toString(), game, loaderId) : m_provider.version(choice["versionId"].toString(), game, loaderId);
+                    if (!choices.isEmpty()) {
+                        auto choice = choices.first().toObject();
+                        for (const auto& candidate : choices) if (candidate.toObject()["releaseType"] == "release") { choice = candidate.toObject(); break; }
+                        resolved = provider == "curseforge" ? m_curseforge.version(depProject, choice["versionId"].toString(), game, loaderId) : m_provider.version(choice["versionId"].toString(), game, loaderId);
+                    }
                 }
-                choose(*resolved, provider == "curseforge" ? m_curseforge.project(depProject) : m_provider.project(depProject));
-            } else if (byProject.contains(depKey) && byProject[depKey]["metadataState"] != "verified")
-                throw ServiceError{"POLICY_CONFLICT", "A required dependency has modified bytes or metadata."};
-            depVersion = desired[depKey].toObject()["version"].toObject()["versionId"].toString();
-            if (!dependencyIds.contains(depKey + ':' + depVersion)) {
-                dependencyIds.insert(depKey + ':' + depVersion);
-                QJsonObject dependency{{"projectId", depProject}, {"versionId", depVersion}, {"type", "required"}};
+                // No compatible version: the graph check reports it with loader-metadata evidence.
+                if (resolved) choose(*resolved, provider == "curseforge" ? m_curseforge.project(depProject) : m_provider.project(depProject));
+            }
+            if (!desired.contains(depKey)) continue;
+            const auto chosenVersion = desired.value(depKey).toObject()["version"].toObject()["versionId"].toString();
+            if (!dependencyIds.contains(depKey + ':' + chosenVersion)) {
+                dependencyIds.insert(depKey + ':' + chosenVersion);
+                QJsonObject dependency{{"projectId", depProject}, {"versionId", chosenVersion}, {"type", "required"}};
                 if (provider != "modrinth") dependency["provider"] = provider;
                 dependencies.append(dependency);
             }
         }
     }
     // Check the entire resulting active graph, including existing mods affected by removals or version changes.
+    // Every violation is collected so the review can show all of them at once, with evidence.
+    struct PendingConflict { QString kind, dependency; QList<QPair<QString, QString>> requests; };
+    struct Acceptance { QString requester, dependency, pinned; QJsonValue accepted; bool reviewedNow; };
+    QMap<QString, PendingConflict> pending; QStringList pendingOrder; QList<Acceptance> acceptances;
+    const auto flag = [&](const QString& kind, const QString& dependency, const QString& requester, const QString& pinned) {
+        const auto key = kind + '|' + dependency;
+        if (!pending.contains(key)) { pending[key] = {kind, dependency, {}}; pendingOrder.append(key); }
+        for (const auto& existing : pending[key].requests) if (existing.first == requester) return;
+        pending[key].requests.append({requester, pinned});
+    };
+    const auto enabled = [&](const QString& key) { return desired.contains(key) && desired.value(key).toObject()["enabled"].toBool(true); };
     for (auto it = desired.begin(); it != desired.end(); ++it) {
         const auto entry = it.value().toObject(); if (!entry["enabled"].toBool(true)) continue;
-        for (const auto& value : entry["version"].toObject()["dependencies"].toArray()) {
+        const auto version = entry["version"].toObject(); const auto provider = providerId(version);
+        const bool bridged = !entry["loaderBridge"].toString().isEmpty(); const auto persisted = entry["dependencyResolutions"].toObject();
+        if (bridged && !enabled(connectorProject)) flag("loader_bridge", connectorProject, it.key(), {});
+        for (const auto& value : version["dependencies"].toArray()) {
             const auto dep = value.toObject(); const auto type = dep["type"].toString();
             if (type != "required" && type != "incompatible") continue;
-            const auto project = dep["projectId"].isString() ? projectKey(providerId(entry["version"].toObject()), dep["projectId"].toString()) : QString{}, version = dep["versionId"].toString(); bool match = false;
+            auto depProject = dep["projectId"].isString() ? dep["projectId"].toString() : QString{}; auto pinned = dep["versionId"].toString();
+            if (bridged && provider == "modrinth" && depProject == fabricApiProject) { if (type == "incompatible") continue; depProject = forgifiedFabricApiProject; pinned.clear(); }
+            const auto project = depProject.isEmpty() ? QString{} : projectKey(provider, depProject);
+            bool match = false, present = false; QString presentVersion;
             for (auto other = desired.begin(); other != desired.end(); ++other) {
                 const auto target = other.value().toObject();
-                if (providerId(target["version"].toObject()) != providerId(entry["version"].toObject())) continue;
+                if (providerId(target["version"].toObject()) != provider) continue;
                 if ((!project.isEmpty() && project != other.key()) || !target["enabled"].toBool(true)) continue;
-                if ((project.isEmpty() && version.isEmpty()) || (!version.isEmpty() && target["version"].toObject()["versionId"] != version)) continue;
+                if (project.isEmpty() && pinned.isEmpty()) continue;
+                if (!pinned.isEmpty() && target["version"].toObject()["versionId"] != pinned) {
+                    if (!project.isEmpty()) { present = true; presentVersion = target["version"].toObject()["versionId"].toString(); }
+                    continue;
+                }
                 match = true; break;
             }
-            if ((type == "required" && !match) || (type == "incompatible" && match)) throw ServiceError{"DEPENDENCY_CONFLICT", "Resulting mod graph violates a declared dependency for " + it.key()};
+            if (type == "incompatible") {
+                if (match) flag("incompatible", project.isEmpty() ? (provider == "modrinth" ? m_provider.versionInfo(pinned, game, loaderId)["projectId"].toString() : pinned) : project, it.key(), pinned);
+                continue;
+            }
+            if (match) continue;
+            if (project.isEmpty()) throw ServiceError{"DEPENDENCY_CONFLICT", "Resulting mod graph violates a declared version-only dependency for " + it.key()};
+            std::optional<QJsonValue> accepted; bool reviewedNow = false;
+            if (resolutions.contains(project)) { accepted = resolutions[project]; reviewedNow = true; }
+            else if (persisted.contains(project)) accepted = persisted[project].toObject()["versionId"];
+            if (present && accepted && accepted->isString() && accepted->toString() == presentVersion) { acceptances.append({it.key(), project, pinned, *accepted, reviewedNow}); continue; }
+            if (!present && accepted && accepted->isNull()) { acceptances.append({it.key(), project, pinned, QJsonValue(QJsonValue::Null), reviewedNow}); continue; }
+            flag(present ? "version_pin" : "missing_dependency", project, it.key(), pinned);
         }
     }
+    // Evidence: compare provider claims with the loader metadata inside the verified artifacts.
+    int evidenceDownloads = 0;
+    const auto artifactName = [](const QJsonObject& artifact) { return artifact["sha512"].toString().isEmpty() ? artifact["sha1"].toString() : artifact["sha512"].toString(); };
+    const auto fetchEvidence = [&](const QString& provider, const QJsonObject& artifact) -> QString {
+        const auto name = artifactName(artifact); if (name.isEmpty()) return {};
+        const auto path = directory + "/evidence/" + name;
+        if (QFileInfo::exists(path)) return path;
+        if (evidenceDownloads >= 96) return {};
+        ++evidenceDownloads; privateDirectory(directory + "/evidence");
+        try { if (provider == "curseforge") m_curseforge.download(artifact, path); else m_provider.download(artifact, path); }
+        catch (const ServiceError& error) { if (error.code == "CANCELLED") throw; return {}; }
+        return path;
+    };
+    const auto artifactPath = [&](const QString& key) -> QString {
+        const auto old = byProject.value(key);
+        if (selected.contains(key) && (old.isEmpty() || old["versionId"] != selected[key].wire["versionId"]))
+            return fetchEvidence(providerId(selected[key].wire), selected[key].wire["files"].toArray().first().toObject());
+        if (!old.isEmpty() && old["metadataState"] == "verified") return instanceRoot + '/' + mods + '/' + old["fileName"].toString();
+        return {};
+    };
+    QMap<QString, QString> titles; int lookups = 0;
+    const auto title = [&](const QString& key) -> QString {
+        if (packs.contains(key) && !packs[key].name.isEmpty()) return packs[key].name.left(256);
+        if (titles.contains(key)) return titles[key];
+        const auto split = splitKey(key); QString name = split.second;
+        if (lookups++ < 128) {
+            try { const auto pack = split.first == "curseforge" ? m_curseforge.project(split.second) : m_provider.project(split.second); if (!pack.name.isEmpty()) name = pack.name.left(256); }
+            catch (const ServiceError& error) { if (error.code == "CANCELLED") throw; }
+        }
+        return titles[key] = name;
+    };
+    QMap<QString, QJsonObject> pinLabels;
+    const auto pinLabel = [&](const QString& key, const QString& versionId) -> QJsonObject {
+        if (versionId.isEmpty()) return {};
+        if (pinLabels.contains(versionId)) return pinLabels[versionId];
+        QJsonObject label{{"versionId", versionId}, {"versionNumber", versionId}, {"compatible", false}};
+        if (splitKey(key).first == "modrinth" && pinLabels.size() < 128) {
+            try { label = m_provider.versionInfo(versionId, game, loaderId); } catch (const ServiceError& error) { if (error.code == "CANCELLED") throw; }
+        }
+        return pinLabels[versionId] = label;
+    };
+    QMap<QString, QString> missingArtifacts;
+    const auto dependencyArtifact = [&](const QString& kind, const QString& key) -> QString {
+        if (kind != "missing_dependency") return artifactPath(key);
+        if (missingArtifacts.contains(key)) return missingArtifacts[key];
+        const auto split = splitKey(key); QString path;
+        if (split.first == "modrinth") {
+            try { const auto artifact = m_provider.anyArtifact(split.second, game); if (!artifact.isEmpty()) path = fetchEvidence(split.first, artifact); }
+            catch (const ServiceError& error) { if (error.code == "CANCELLED") throw; }
+        }
+        return missingArtifacts[key] = path;
+    };
+    const auto unknownEvidence = [] { return QJsonObject{{"result", "unknown"}, {"modId", QJsonValue::Null}, {"declaredRange", QJsonValue::Null}, {"mandatory", QJsonValue::Null}, {"selectedModVersion", QJsonValue::Null}}; };
+    const auto evaluate = [&](const QString& kind, const QString& requester, const QString& dependency) -> QJsonObject {
+        auto evidence = unknownEvidence();
+        const auto requesterPath = artifactPath(requester), dependencyPath = dependencyArtifact(kind, dependency);
+        if (requesterPath.isEmpty() || dependencyPath.isEmpty()) return evidence;
+        const auto bridge = desired.value(requester).toObject()["loaderBridge"].toString();
+        const auto requesterMetadata = inspectJar(requesterPath, bridge.isEmpty() ? loaderId : QStringLiteral("fabric"));
+        const auto dependencyMetadata = inspectJar(dependencyPath, loaderId);
+        if (!requesterMetadata.readable || !dependencyMetadata.readable) return evidence;
+        std::optional<DeclaredDependency> declared; QString modId, modVersion;
+        for (const auto& candidate : requesterMetadata.dependencies) for (const auto& mod : dependencyMetadata.mods)
+            if (candidate.modId == mod.first && (!declared || (candidate.mandatory && !declared->mandatory))) { declared = candidate; modId = mod.first; modVersion = mod.second; }
+        if (!declared) {
+            evidence["result"] = "not_declared"; evidence["modId"] = dependencyMetadata.mods.first().first.left(128);
+            if (!dependencyMetadata.mods.first().second.isEmpty() && kind != "missing_dependency") evidence["selectedModVersion"] = dependencyMetadata.mods.first().second.left(128);
+            return evidence;
+        }
+        evidence["modId"] = modId.left(128); evidence["mandatory"] = declared->mandatory;
+        evidence["declaredRange"] = declared->range.isEmpty() ? QStringLiteral("*") : declared->range.left(256);
+        if (kind == "missing_dependency") { evidence["result"] = declared->mandatory ? "violated" : "not_declared"; return evidence; }
+        if (!modVersion.isEmpty()) evidence["selectedModVersion"] = modVersion.left(128);
+        const auto result = satisfies(requesterMetadata.format, declared->range, modVersion);
+        evidence["result"] = result == RangeResult::Satisfied ? "satisfied" : result == RangeResult::Violated ? "violated" : "unknown";
+        return evidence;
+    };
+    // Resolutions reviewed in this request must still agree with the loader metadata. A pin may be kept unless
+    // metadata rejects the version; a provider requirement may be skipped only when metadata does not declare it.
+    QMap<QString, QJsonObject> acceptedEvidence;
+    for (const auto& acceptance : acceptances) {
+        m_provider.checkCancelled();
+        if (!acceptance.reviewedNow) continue;
+        const auto kind = acceptance.accepted.isNull() ? QStringLiteral("missing_dependency") : QStringLiteral("version_pin");
+        const auto evidence = evaluate(kind, acceptance.requester, acceptance.dependency); const auto result = evidence["result"].toString();
+        if (result == "violated" || (kind == "missing_dependency" && result != "not_declared")) flag(kind, acceptance.dependency, acceptance.requester, acceptance.pinned);
+        else acceptedEvidence[acceptance.requester + '|' + acceptance.dependency] = evidence;
+    }
+    if (!pending.isEmpty()) {
+        QJsonArray conflicts; QStringList summary;
+        for (const auto& key : pendingOrder) {
+            m_provider.checkCancelled();
+            if (conflicts.size() >= 64) break;
+            const auto& item = pending[key]; const auto split = splitKey(item.dependency); const auto dependencyTitle = title(item.dependency);
+            const auto target = desired.value(item.dependency).toObject()["version"].toObject();
+            QJsonValue chosen(QJsonValue::Null);
+            if ((item.kind == "version_pin" || item.kind == "incompatible") && !target.isEmpty())
+                chosen = QJsonObject{{"versionId", target["versionId"]}, {"versionNumber", target["versionNumber"].toString().left(256)}, {"fileName", target["files"].toArray().first().toObject()["fileName"]}};
+            QJsonArray requests, candidates; QSet<QString> candidateIds; QStringList requesterNames; bool reviewable = true;
+            if (chosen.isObject() && item.kind == "version_pin") { candidates.append(QJsonObject{{"versionId", target["versionId"]}, {"versionNumber", target["versionNumber"].toString().left(256)}}); candidateIds.insert(target["versionId"].toString()); }
+            for (const auto& request : item.requests) {
+                if (requests.size() >= 32) break;
+                const auto& requester = request.first; const auto& pinned = request.second;
+                const auto version = desired.value(requester).toObject()["version"].toObject(); const auto label = pinLabel(item.dependency, pinned);
+                const auto evidence = item.kind == "loader_bridge" || item.kind == "incompatible" ? unknownEvidence() : evaluate(item.kind, requester, item.dependency);
+                const auto result = evidence["result"].toString();
+                if (item.kind == "version_pin" && result == "violated") reviewable = false;
+                if (item.kind == "missing_dependency" && result != "not_declared") reviewable = false;
+                const auto requesterTitle = title(requester); requesterNames.append(requesterTitle);
+                requests.append(QJsonObject{{"provider", providerId(version)}, {"projectId", version["projectId"]}, {"title", requesterTitle}, {"versionId", version["versionId"]},
+                    {"versionNumber", version["versionNumber"].toString().left(256)}, {"fileName", version["files"].toArray().first().toObject()["fileName"]},
+                    {"requestedVersionId", pinned.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(pinned)},
+                    {"requestedVersionNumber", label.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(label["versionNumber"].toString().left(256))}, {"evidence", evidence}});
+                if (item.kind == "version_pin" && !explicitProjects.contains(item.dependency) && !label.isEmpty() && label["compatible"].toBool() &&
+                    !candidateIds.contains(pinned) && candidates.size() < 8) { candidateIds.insert(pinned); candidates.append(QJsonObject{{"versionId", pinned}, {"versionNumber", label["versionNumber"].toString().left(256)}}); }
+            }
+            QJsonArray offered; QString message; const bool one = requesterNames.size() == 1;
+            const auto names = requesterNames.mid(0, 3).join(", ") + (requesterNames.size() > 3 ? QString(" and %1 more").arg(requesterNames.size() - 3) : QString{});
+            if (item.kind == "version_pin") {
+                if (reviewable) offered.append("use_version");
+                message = QString("%1 %2 a different %3 version than the selected %4.").arg(names, one ? "pins" : "pin", dependencyTitle, target["versionNumber"].toString().left(128));
+                message += reviewable ? " Loader metadata does not rule out the selected version; review it, then keep it or choose another listed version."
+                                      : " At least one mod's loader metadata rejects the selected version.";
+            } else if (item.kind == "missing_dependency") {
+                if (reviewable) offered.append("proceed_without");
+                message = QString("%1 %2 %3, but no %3 version supports Minecraft %4 with %5.").arg(names, one ? "requires" : "require", dependencyTitle, game, loaderId);
+                message += reviewable ? " The mod's own loader metadata does not declare it, so the provider requirement does not appear to apply to this loader."
+                                      : " The requirement cannot be ruled out from the mod's loader metadata.";
+            } else if (item.kind == "loader_bridge") {
+                message = QString("%1 %2 Fabric-only and can load here only through Sinytra Connector, which is not enabled. Add Connector (with Forgified Fabric API) or leave %3 out.")
+                    .arg(names, one ? "is" : "are", one ? "it" : "them");
+            } else {
+                message = QString("%1 %2 %3 incompatible, and both would be enabled.").arg(names, one ? "declares" : "declare", dependencyTitle);
+            }
+            conflicts.append(QJsonObject{{"kind", item.kind}, {"provider", split.first}, {"projectId", split.second}, {"title", dependencyTitle}, {"selected", chosen},
+                {"requests", requests}, {"candidates", candidates}, {"resolutions", offered}, {"message", message.left(1024)}});
+            summary.append(dependencyTitle + " (" + requesterNames.mid(0, 2).join(", ") + (requesterNames.size() > 2 ? ", ..." : "") + ")");
+        }
+        // Keep details well inside one 1 MiB protocol frame: drop trailing requests, then trailing conflicts.
+        bool truncated = pending.size() > conflicts.size();
+        const auto encodedSize = [&] { return QJsonDocument(QJsonObject{{"conflicts", conflicts}}).toJson(QJsonDocument::Compact).size(); };
+        while (encodedSize() > 192 * 1024 && !conflicts.isEmpty()) {
+            truncated = true; auto last = conflicts.last().toObject(); auto requests = last["requests"].toArray();
+            if (requests.size() > 1) { requests.removeLast(); last["requests"] = requests; conflicts.replace(conflicts.size() - 1, last); }
+            else if (conflicts.size() > 1) conflicts.removeLast();
+            else break;
+        }
+        const QJsonObject details{{"conflicts", conflicts}, {"truncated", truncated}};
+        if (!Contract().valid("conflictDetails", details)) throw ServiceError{"DEPENDENCY_CONFLICT", "Dependency review is required; conflict details exceeded the contract."};
+        throw ServiceError{"DEPENDENCY_CONFLICT", QString("Dependency review required (%1): %2").arg(pending.size()).arg(summary.join("; ")).left(2048), false, details};
+    }
+    // Record accepted resolutions on the requester's entry so later plans keep honouring them for that version.
+    QJsonArray reviewed; QMap<QString, int> reviewedIndex;
+    for (const auto& acceptance : acceptances) {
+        auto entry = desired.value(acceptance.requester).toObject(); auto stored = entry["dependencyResolutions"].toObject();
+        const auto evidenceKey = acceptance.requester + '|' + acceptance.dependency;
+        const auto evidence = acceptedEvidence.contains(evidenceKey) ? acceptedEvidence[evidenceKey]["result"].toString() : stored[acceptance.dependency].toObject()["evidence"].toString("unknown");
+        stored[acceptance.dependency] = QJsonObject{{"versionId", acceptance.accepted}, {"requestedVersionId", acceptance.pinned.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(acceptance.pinned)}, {"evidence", evidence}};
+        entry["dependencyResolutions"] = stored; desired[acceptance.requester] = entry;
+        if (!acceptance.reviewedNow) continue;
+        const auto split = splitKey(acceptance.dependency); const auto requester = desired.value(acceptance.requester).toObject()["version"].toObject();
+        if (!reviewedIndex.contains(acceptance.dependency)) {
+            reviewedIndex[acceptance.dependency] = reviewed.size();
+            QJsonObject row{{"projectId", split.second}, {"title", title(acceptance.dependency)}, {"versionId", acceptance.accepted}, {"requestedBy", QJsonArray{}}};
+            if (split.first != "modrinth") row["provider"] = split.first;
+            reviewed.append(row);
+        }
+        auto row = reviewed[reviewedIndex[acceptance.dependency]].toObject(); auto by = row["requestedBy"].toArray();
+        if (by.size() < 32) by.append(QJsonObject{{"projectId", requester["projectId"]}, {"title", title(acceptance.requester)},
+            {"requestedVersionId", acceptance.pinned.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(acceptance.pinned)}, {"evidence", evidence}});
+        row["requestedBy"] = by; reviewed.replace(reviewedIndex[acceptance.dependency], row);
+        const auto targetVersion = desired.value(acceptance.dependency).toObject()["version"].toObject()["versionNumber"].toString();
+        warn(acceptance.accepted.isNull()
+            ? QString("Reviewed: %1 is installed without %2 (the provider requirement is not declared in its loader metadata).").arg(title(acceptance.requester), title(acceptance.dependency))
+            : QString("Reviewed: %1 keeps %2 %3 instead of its provider pin (evidence: %4).").arg(title(acceptance.requester), title(acceptance.dependency), targetVersion, evidence));
+    }
+    for (auto it = desired.begin(); it != desired.end(); ++it)
+        if (it.value().toObject()["loaderBridge"] == "sinytra-connector" && selected.contains(it.key()))
+            warn(QString("%1 is a Fabric mod and will load through Sinytra Connector.").arg(title(it.key())));
     QSet<QString> destinations, indexes;
     for (auto it = desired.begin(); it != desired.end(); ++it) {
         const auto entry = it.value().toObject();
@@ -179,7 +450,7 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
     if (!selected.isEmpty()) requireResult(m_store.transition(id, "downloading"));
     int downloaded = 0;
     for (auto it = selected.begin(); it != selected.end(); ++it) {
-        m_provider.checkCancelled(); const auto project = it.key(); auto entry = desired[project].toObject(); const auto old = byProject.value(project);
+        m_provider.checkCancelled(); const auto project = it.key(); auto entry = desired.value(project).toObject(); const auto old = byProject.value(project);
         const auto wire = it.value().wire;
         if (!old.isEmpty() && old["versionId"] == wire["versionId"]) continue;
         const auto artifact = wire["files"].toArray().first().toObject(); const auto filename = artifact["fileName"].toString();
@@ -190,7 +461,10 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
             if (!collision.isEmpty() && projectKey(collision) != project) throw ServiceError{"POLICY_CONFLICT", "An artifact would overwrite an unrelated or unknown file. Remove it in a separate reviewed operation first."};
         }
         if (!old.isEmpty() && old["fileName"].toString().compare(target, Qt::CaseInsensitive) == 0) target = old["fileName"].toString();
-        const auto artifactName = "artifact-" + QString::number(++ordinal); if (providerId(wire) == "curseforge") m_curseforge.download(artifact, directory + "/staging/" + artifactName);
+        const auto artifactName = "artifact-" + QString::number(++ordinal);
+        const auto evidenceCopy = directory + "/evidence/" + (artifact["sha512"].toString().isEmpty() ? artifact["sha1"].toString() : artifact["sha512"].toString());
+        if (QFileInfo::exists(evidenceCopy)) copy(evidenceCopy, directory + "/staging/" + artifactName); // hash-verified when fetched for evidence
+        else if (providerId(wire) == "curseforge") m_curseforge.download(artifact, directory + "/staging/" + artifactName);
         else m_provider.download(artifact, directory + "/staging/" + artifactName);
         auto pack = packs[project]; pack.slug = providerId(wire) + '-' + wire["projectId"].toString();
         auto nativeVersion = it.value().native;
@@ -247,7 +521,9 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
         stage(".awake-integration/policies.json", "policies");
     }
     QList<FileChange> table; for (const auto& change : changes) table.append(change);
-    requireResult(engine.prepare(id, table, request["instanceRevision"].toString(), {{"warnings", warnings}, {"dependencies", dependencies}}));
+    QJsonObject review{{"warnings", warnings}, {"dependencies", dependencies}};
+    if (!reviewed.isEmpty()) review["dependencyResolutions"] = reviewed;
+    requireResult(engine.prepare(id, table, request["instanceRevision"].toString(), review));
 }
 void WorkspaceServices::apply(const QString& id, const QJsonObject& request)
 {

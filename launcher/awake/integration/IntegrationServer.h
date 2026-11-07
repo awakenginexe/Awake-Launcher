@@ -21,6 +21,10 @@ class IntegrationServer : public QObject {
         std::function<bool(const QString&, const QJsonObject&)> validate;
         QString extension;
         QJsonObject legacyCapabilities;
+        // Optional higher opt-in level. A client offering exactly this string gets nextCapabilities;
+        // clients offering `extension` (or none) keep their existing capability map and payloads.
+        QString nextExtension;
+        QJsonObject nextCapabilities;
     };
     explicit IntegrationServer(QObject* parent = nullptr);
     ~IntegrationServer() override;

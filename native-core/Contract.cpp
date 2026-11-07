@@ -68,7 +68,7 @@ bool Contract::check(const QJsonObject& schema, const QJsonValue& value, int dep
         (schema.contains("maximum") && value.toDouble() > schema["maximum"].toDouble()))) return false;
     return true;
 }
-QJsonObject Contract::capabilities(bool writes, bool extensions) const
+QJsonObject Contract::capabilities(bool writes, bool extensions, bool evidence) const
 {
     QJsonObject result;
     for (const auto& name : m_definitions["capabilities"].toObject()["required"].toArray()) {
@@ -81,6 +81,7 @@ QJsonObject Contract::capabilities(bool writes, bool extensions) const
     for (const auto* capability : {"providers.project", "outbox.list", "outbox.read", "outbox.configs.v1"}) result[capability] = true;
     result["providers.curseforge.v1"] = CurseForgeService().available();
     result["inbox.discard.v1"] = writes; result["inbox.discard"] = writes;
+    if (evidence) { result["dependencies.resolutions.v1"] = writes; result["loaders.connector.v1"] = writes; }
     return result;
 }
 }

@@ -28,6 +28,7 @@ parser.add_argument('--helper', type=Path, required=True)
 parser.add_argument('--fixture-executable', type=Path)
 parser.add_argument('--live', action='store_true')
 parser.add_argument('--legacy-schema', type=Path)
+parser.add_argument('--previous-schema', type=Path, help='core.schema.json pinned by Manager v0.2.0 (b00caf709); manager.v0.2 replies must still validate against it')
 parser.add_argument('--output', type=Path)
 parser.add_argument('--schema-tools', type=Path)
 args = parser.parse_args()
@@ -38,6 +39,8 @@ from jsonschema import Draft202012Validator, FormatChecker
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / 'docs/modpack-manager/core.schema.json').read_text())
 LEGACY_SCHEMA = json.loads(args.legacy_schema.read_text()) if args.legacy_schema else None
+PREVIOUS_SCHEMA = json.loads(args.previous_schema.read_text()) if args.previous_schema else None
+EVIDENCE_EXTENSION = 'manager.v0.2.1'
 PROTOCOL = {'major': 2, 'minor': 0}
 RUN = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='awake-core-ipc-'))
 if args.output:
@@ -120,8 +123,9 @@ def verify_modules(helper):
 
 
 class Client:
-    def __init__(self, descriptor, extended=True):
+    def __init__(self, descriptor, extended=True, extension='manager.v0.2'):
         self.extended = extended
+        self.extension = extension
         validate('descriptor', descriptor)
         self.file = open('\\\\.\\pipe\\' + descriptor['serverName'], 'r+b', buffering=0)
         self.handle = msvcrt.get_osfhandle(self.file.fileno())
@@ -176,11 +180,14 @@ class Client:
         if not self.extended and LEGACY_SCHEMA:
             for definition, value in [('response', response), (method + '.result', response['result'])]:
                 Draft202012Validator({'$ref':'#/$defs/'+definition,'$defs':LEGACY_SCHEMA['$defs']},format_checker=FormatChecker()).validate(value)
+        if self.extended and self.extension == 'manager.v0.2' and PREVIOUS_SCHEMA and method in PREVIOUS_SCHEMA['x-methods']:
+            for definition, value in [('response', response), (method + '.result', response['result'])]:
+                Draft202012Validator({'$ref':'#/$defs/'+definition,'$defs':PREVIOUS_SCHEMA['$defs']},format_checker=FormatChecker()).validate(value)
         return response['result']
 
     def hello(self):
         params={'versions': [PROTOCOL], 'client': {'name': 'packaged-core-fixture', 'version': '1'}}
-        if self.extended: params['extensions']=['manager.v0.2']
+        if self.extended: params['extensions']=[self.extension]
         return self.call('hello', params)
 
     def wait(self, operation, states=('completed',), timeout=180, allow_recovery=False):
@@ -195,8 +202,9 @@ class Client:
 
 
 class Helper:
-    def __init__(self, profile, label, extended=True):
+    def __init__(self, profile, label, extended=True, extension='manager.v0.2'):
         self.extended = extended
+        self.extension = extension
         self.profile = profile
         self.output = (RUN / (label + '.log')).open('wb')
         self.process = subprocess.Popen([str(args.helper.resolve()), '--profile', str(profile)], cwd=RUN, env=ENV,
@@ -217,7 +225,7 @@ class Helper:
         raise TimeoutError('Helper startup ' + label)
 
     def connect(self):
-        client = Client(self.descriptor, extended=self.extended)
+        client = Client(self.descriptor, extended=self.extended, extension=self.extension)
         hello = client.hello()
         for key in ('profileId', 'sessionId', 'role'):
             assert hello[key] == self.descriptor[key]
@@ -448,6 +456,98 @@ def live_milestone(helper):
     passed('old client explicitly refused incompatible new workspace without invalid legacy payloads')
     helper.shutdown(client)
 
+def upload(client, payload):
+    transfer = client.call('inbox.begin', {'idempotencyKey': uuid.uuid4().hex, 'purpose': 'import', 'size': str(len(payload)), 'sha256': hashlib.sha256(payload).hexdigest()})
+    token = transfer['token']
+    for offset in range(0, len(payload), 256 * 1024):
+        client.call('inbox.write', {'token': token, 'offset': str(offset), 'bytesBase64': base64.b64encode(payload[offset:offset + 256 * 1024]).decode()})
+    assert client.call('inbox.commit', {'token': token})['complete']
+    return token
+
+
+def modrinth(path):
+    import urllib.request
+    request = urllib.request.Request('https://api.modrinth.com/v2/' + path, headers={'User-Agent': 'awake-core-ipc-acceptance (github.com/awakenginexe/Awake-Launcher)'})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read())
+
+
+def live_blockers(helper):
+    """All five Revelations blocker classes with real public Modrinth files (no private pack data)."""
+    client = helper.connect()
+    hello = client.hello()
+    assert hello['extensions'] == [EVIDENCE_EXTENSION] and hello['capabilities']['dependencies.resolutions.v1'] and hello['capabilities']['loaders.connector.v1']
+    catalog = client.call('catalog.versions', {'minecraftVersion': '1.20.1', 'loader': 'forge'})
+    loader = {'id': 'forge', 'version': '47.4.0' if '47.4.0' in catalog['loaderVersions'] else catalog['loaderVersions'][0]}
+    creation = submit(client, 'workspaces.create', {'idempotencyKey': uuid.uuid4().hex, 'name': 'Disposable real blocker acceptance', 'minecraftVersion': '1.20.1', 'loader': loader})
+    workspace = client.wait(creation)['result']['workspace']
+    puzzles = next(v['id'] for v in modrinth('project/QAGBst4M/version?game_versions=%5B%221.20.1%22%5D&loaders=%5B%22forge%22%5D') if v['version_number'] == 'v8.1.33-1.20.1-Forge')
+    # Connector beta.49, Forgified Fabric API, Mod Menu (Fabric-only), Incendium (mod+datapack), Puzzles Lib 8.1.33,
+    # Easy Magic 8.0.1 (pins Puzzles Lib 8.0.15), Skeleton AI Fix (provider requires Forge Config API Port),
+    # Refined Storage 1.12.4 and RSInfinityBooster 1.0+41 (pins Refined Storage 1.12.3).
+    chosen = ['1MQDrKN7', 'g0MxcWXy', 'lEkperf6', 'uUqarp2H', puzzles, 'W2xPEG9I', 'VMGmo5Si', 'ZITLFjjf', 'UkT7CCGr']
+    files = []
+    for version_id in chosen:
+        version = modrinth('version/' + version_id)
+        artifact = next(f for f in version['files'] if f['primary'])
+        files.append({'path': 'mods/' + artifact['filename'], 'hashes': {'sha1': artifact['hashes']['sha1'], 'sha512': artifact['hashes']['sha512']},
+                      'downloads': [artifact['url']], 'fileSize': artifact['size']})
+    manifest = {'formatVersion': 1, 'game': 'minecraft', 'versionId': 'blockers', 'name': 'Blockers', 'files': files, 'dependencies': {'minecraft': '1.20.1', 'forge': loader['version']}}
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as pack:
+        pack.writestr('modrinth.index.json', json.dumps(manifest))
+    payload = buffer.getvalue()
+
+    def attempt(resolutions):
+        token = upload(client, payload)
+        baseline = client.call('mods.list', {'physicalId': workspace['physicalId']})['instanceRevision']
+        request = {'idempotencyKey': uuid.uuid4().hex, 'token': token, 'format': 'mrpack', 'physicalId': workspace['physicalId'], 'instanceRevision': baseline}
+        if resolutions:
+            request['dependencyResolutions'] = resolutions
+        started = time.monotonic()
+        operation = submit(client, 'imports.prepare', request)
+        status = client.wait(operation, ('prepared', 'failed'), timeout=900)
+        return operation, status, time.monotonic() - started
+
+    operation, status, seconds = attempt(None)
+    assert status['state'] == 'failed' and status['error']['code'] == 'DEPENDENCY_CONFLICT', status
+    conflicts = status['error']['details']['conflicts']
+    summary = {(c['kind'], c['title']): c for c in conflicts}
+    assert set(summary) == {('version_pin', 'Puzzles Lib'), ('missing_dependency', 'Forge Config API Port'), ('version_pin', 'Refined Storage')}, sorted(summary)
+    easy = summary[('version_pin', 'Puzzles Lib')]['requests'][0]
+    assert easy['title'] == 'Easy Magic' and easy['evidence']['result'] == 'satisfied' and easy['evidence']['declaredRange'] == '[8.0.0,)', easy
+    skeleton = summary[('missing_dependency', 'Forge Config API Port')]['requests'][0]
+    assert skeleton['title'] == 'Skeleton AI Fix' and skeleton['evidence']['result'] == 'not_declared', skeleton
+    assert 'QAGBst4M' not in status['error']['message'] and 'Puzzles Lib' in status['error']['message']
+    resolutions = []
+    for conflict in conflicts:
+        assert conflict['resolutions'], conflict
+        resolutions.append({'projectId': conflict['projectId'], 'versionId': conflict['selected']['versionId'] if conflict['kind'] == 'version_pin' else None})
+    passed('real blocker pack reports every conflict with names and loader evidence', seconds=round(seconds, 1),
+           conflicts=[{'kind': c['kind'], 'title': c['title'], 'evidence': [r['evidence']['result'] for r in c['requests']]} for c in conflicts])
+    operation, status, seconds = attempt(resolutions)
+    assert status['state'] == 'prepared', status
+    plan = client.call('plans.get', {'operationId': operation, 'limit': 200})
+    assert len(plan['dependencyResolutions']) == 3 and any('Sinytra Connector' in w for w in plan['warnings'])
+    apply(client, operation, plan)
+    items = client.call('mods.list', {'physicalId': workspace['physicalId'], 'limit': 200})['items']
+    assert len(items) == len(chosen) and all(i['metadataState'] == 'verified' for i in items), items
+    assert [i['projectId'] for i in items if i.get('loaderBridge') == 'sinytra-connector'] == ['mOgUt4GM'], items
+    root = helper.profile / 'workspaces' / workspace['workspaceId'] / '.minecraft/mods'
+    expected = {f['hashes']['sha512'] for f in files}
+    assert {hashlib.sha512((root / i['fileName']).read_bytes()).hexdigest() for i in items} == expected
+    passed('real blocker pack imports after reviewed resolutions: Connector Fabric file, mod+datapack project, pins and undeclared requirement', prepareSeconds=round(seconds, 1), files=len(items))
+    older = Client(helper.descriptor)
+    older.hello()
+    older_items = older.call('mods.list', {'physicalId': workspace['physicalId'], 'limit': 200})['items']
+    assert all('loaderBridge' not in i for i in older_items)
+    older.call('plans.prepare', {'idempotencyKey': uuid.uuid4().hex, 'physicalId': workspace['physicalId'], 'instanceRevision': plan['expectedInstanceRevision'],
+                                 'changes': [{'action': 'disable', 'inventoryId': items[0]['inventoryId']}], 'dependencyResolutions': []}, error='UNSUPPORTED_CAPABILITY')
+    older.close()
+    passed('manager.v0.2 clients see no v0.2.1 fields and cannot send reviewed resolutions')
+    helper.shutdown(client)
+
+
 def main():
     helper = Helper(RUN / 'primary', 'primary')
     client = Client(helper.descriptor)
@@ -472,6 +572,14 @@ def main():
     negotiation.call('outbox.list', {}, error='UNSUPPORTED_CAPABILITY')
     negotiation.close()
     passed('explicit extension acknowledgement, malformed offers rejected, empty offer stays legacy')
+    evidence = Client(helper.descriptor, extension=EVIDENCE_EXTENSION)
+    level = evidence.hello()
+    assert level['extensions'] == [EVIDENCE_EXTENSION] and level['coreVersion'] == '0.2.1'
+    assert level['capabilities']['dependencies.resolutions.v1'] and level['capabilities']['loaders.connector.v1']
+    evidence.call('hello', {**base_hello, 'extensions': ['manager.v0.2', EVIDENCE_EXTENSION]}, error='INVALID_REQUEST')
+    evidence.close()
+    assert 'dependencies.resolutions.v1' not in hello['capabilities'] and 'loaders.connector.v1' not in hello['capabilities']
+    passed('manager.v0.2.1 negotiated explicitly; manager.v0.2 capability map unchanged')
     future = Client(helper.descriptor)
     future.call('hello', {'versions': [{'major': 3, 'minor': 0}, PROTOCOL], 'client': {'name': 'future-fixture', 'version': '1'}})
     future.close()
@@ -531,6 +639,7 @@ def main():
     if args.live:
         live_workflow(Helper(RUN / 'live', 'live'))
         live_milestone(Helper(RUN / 'milestone', 'milestone'))
+        live_blockers(Helper(RUN / 'blockers', 'blockers', extension=EVIDENCE_EXTENSION))
         if LEGACY_SCHEMA:
             live_workflow(Helper(RUN / 'legacy-live', 'legacy-live', extended=False))
             passed('complete legacy Fabric/Modrinth workflow validated against unchanged Manager v0.1 schema')

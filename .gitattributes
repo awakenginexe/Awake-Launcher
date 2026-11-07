@@ -2,3 +2,5 @@
 **/testdata/** -text -diff
 # Translation source keys preserve significant upstream whitespace.
 launcher/awake/translations/*.ts whitespace=-blank-at-eol
+# Delivery files are hashed byte-for-byte by their SHA256SUMS; never convert line endings.
+native-core/redistribution/** -text
