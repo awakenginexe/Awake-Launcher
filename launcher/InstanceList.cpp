@@ -809,6 +809,11 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     }
 
     auto instanceRoot = FS::PathCombine(rootDirOf(id), id);
+    const QFileInfo ownership(FS::PathCombine(instanceRoot, ".awake-integration"));
+    if (ownership.exists() || ownership.isSymLink() || ownership.isJunction()) {
+        qWarning() << "Instance requires external ownership/recovery coordination:" << instanceRoot;
+        return nullptr;
+    }
     auto instanceSettings = std::make_unique<INISettingsObject>(FS::PathCombine(instanceRoot, "instance.cfg"));
 
     instanceSettings->registerSetting("InstanceType", "");

@@ -11,6 +11,7 @@
 #include <QSignalSpy>
 
 #include <array>
+#include <atomic>
 
 /* Does nothing. Only used for testing. */
 class BasicTask : public Task {
@@ -101,6 +102,15 @@ class TaskTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void canceledConcurrentParentCanRunNewWork()
+    {
+        auto oldChild = makeShared<ConcurrentTask>(); oldChild->addTask(makeShared<BasicTask>());
+        QueuedChildTask parent; parent.addTask(oldChild); parent.start();
+        QVERIFY(parent.abort());
+        auto fresh = makeShared<BasicTask>(); parent.addTask(fresh); parent.start();
+        QTRY_VERIFY_WITH_TIMEOUT(parent.isFinished(), 1000);
+        QVERIFY(parent.wasSuccessful()); QVERIFY(fresh->wasSuccessful());
+    }
     void canceledParentDoesNotStartQueuedChild_data()
     {
         QTest::addColumn<bool>("restart");

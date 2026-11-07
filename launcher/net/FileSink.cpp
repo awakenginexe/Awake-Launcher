@@ -44,6 +44,8 @@ namespace Net {
 
 auto FileSink::init(QNetworkRequest& request) -> InitResult
 {
+    if (m_outputFile) { m_outputFile->cancelWriting(); m_outputFile.reset(); }
+    m_wroteAnyData = false;
     auto result = initCache(request);
     if (!result || *result != InitType::Ok) {
         return result;
@@ -55,7 +57,6 @@ auto FileSink::init(QNetworkRequest& request) -> InitResult
         return std::unexpected("Could not create folder");
     }
 
-    m_wroteAnyData = false;
     m_outputFile.reset(new PSaveFile(m_filename));
     if (!m_outputFile->open(QIODevice::WriteOnly)) {
         const auto error = QString("Could not open %1 for writing: %2").arg(m_filename).arg(m_outputFile->errorString());
@@ -69,6 +70,7 @@ auto FileSink::init(QNetworkRequest& request) -> InitResult
 
 auto FileSink::write(const QByteArray& data) -> Result<>
 {
+    if (!m_outputFile) return std::unexpected("Download sink is not open");
     writeAllValidators(data);
     if (m_outputFile->write(data) != data.size()) {
         QString error = QString("Failed writing into %1: %2").arg(m_filename);
@@ -92,12 +94,15 @@ void FileSink::abort()
 {
     if (m_outputFile) {
         m_outputFile->cancelWriting();
+        m_outputFile.reset();
     }
+    m_wroteAnyData = false;
     failAllValidators();
 }
 
 auto FileSink::finalize(QNetworkReply& reply) -> Result<>
 {
+    if (!m_outputFile) return std::unexpected("Download sink is not open");
     bool gotFile = false;
     QVariant statusCodeV = reply.attribute(QNetworkRequest::HttpStatusCodeAttribute);
     bool validStatus = false;

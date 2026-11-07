@@ -89,7 +89,7 @@ Config::Config()
 
     // Assume that builds outside of Git repos are "stable"
     if (GIT_REFSPEC == QStringLiteral("GITDIR-NOTFOUND") || GIT_TAG == QStringLiteral("GITDIR-NOTFOUND") ||
-        GIT_REFSPEC == QStringLiteral("") || GIT_TAG == QStringLiteral("GIT-NOTFOUND")) {
+        GIT_COMMIT.isEmpty() || GIT_TAG == QStringLiteral("GIT-NOTFOUND")) {
         GIT_REFSPEC = "refs/heads/stable";
         GIT_TAG = versionString();
         GIT_COMMIT = "";
@@ -137,7 +137,7 @@ QString Config::printableVersionString() const
     QString vstr = versionString();
 
     // If the build is not a main release, append the channel
-    if (VERSION_CHANNEL != "stable" && GIT_TAG != vstr) {
+    if (VERSION_CHANNEL != "stable" && GIT_TAG != vstr && GIT_TAG != "v" + vstr) {
         vstr += "-" + VERSION_CHANNEL;
     }
     return vstr;

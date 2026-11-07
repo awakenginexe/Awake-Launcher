@@ -131,3 +131,5 @@ if(WIN32)
     target_link_libraries(AwakeIntegration advapi32)
 endif()
 set_tests_properties(AwakeIntegration PROPERTIES TIMEOUT 60)
+
+ecm_add_test(BuildConfig_test.cpp LINK_LIBRARIES BuildConfig Qt6::Test TEST_NAME BuildConfigTest)

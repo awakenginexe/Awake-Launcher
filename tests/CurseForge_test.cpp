@@ -9,11 +9,14 @@
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QTest>
 #include <QTimer>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QCryptographicHash>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <memory>
 #include "Application.h"
 #include "InstanceList.h"
@@ -29,7 +32,11 @@
 #include "minecraft/mod/tasks/LocalShaderPackParseTask.h"
 #include "modplatform/flame/FlameAPI.h"
 #include "modplatform/flame/FlameCheckUpdate.h"
+#include "modplatform/modrinth/ModrinthAPI.h"
 #include "net/ApiHeaderProxy.h"
+#include "net/NetJob.h"
+#include "net/FileSink.h"
+#include "net/Request.h"
 #include "settings/SettingsObject.h"
 #include "ui/dialogs/NewInstanceDialog.h"
 #include "ui/dialogs/ResourceDownloadDialog.h"
@@ -58,10 +65,172 @@ static bool runTask(Task* task, int timeout = 60000)
     }
     return task->wasSuccessful();
 }
+class ProviderDispatchFailure : public Task {
+    void executeTask() override { emitFailed("Fixture failure before HTTP dispatch"); }
+};
+class FixtureResourceAPI : public ResourceAPI {
+   public:
+    std::optional<QString> url;
+    bool failBeforeHttp = false;
+    mutable QByteArray response;
+    QList<SortingMethod> getSortingMethods() const override { return {}; }
+    std::optional<QString> getSearchURL(const SearchArgs&) const override { return url; }
+    std::optional<QString> getInfoURL(const QString&) const override { return url; }
+    std::optional<QString> getVersionsURL(const VersionSearchArgs&) const override { return url; }
+    std::optional<QString> getDependencyURL(const DependencySearchArgs&) const override { return url; }
+    std::pair<Task::Ptr, QByteArray*> getProjects(QStringList) const override { return {nullptr, nullptr}; }
+    std::pair<Task::Ptr, QByteArray*> getModCategories() const override { return {nullptr, nullptr}; }
+    QList<ModPlatform::Category> loadModCategories(const QByteArray&) const override { return {}; }
+    Result<> loadIndexedPack(ModPlatform::IndexedPack& pack, const QJsonObject& object) const override
+    { return ModrinthAPI::get().loadIndexedPack(pack, object); }
+    Result<ModPlatform::IndexedVersion> loadIndexedPackVersion(QJsonObject& object, ModPlatform::ResourceType type) const override
+    { return ModrinthAPI::get().loadIndexedPackVersion(object, type); }
+    QJsonArray documentToArray(QJsonDocument& document) const override { return ModrinthAPI::get().documentToArray(document); }
+    Result<> loadExtraPackInfo(ModPlatform::IndexedPack& pack, QJsonObject& object) const override
+    { return ModrinthAPI::get().loadExtraPackInfo(pack, object); }
+    std::pair<Task::Ptr, QByteArray*> getProject(const QString& id, bool retry) const override
+    {
+        if (!failBeforeHttp) return ResourceAPI::getProject(id, retry);
+        auto job = makeShared<NetJob>("Provider dispatch fixture", APPLICATION->network());
+        job->setAskRetry(false); job->addTask(makeShared<ProviderDispatchFailure>());
+        return {job, &response};
+    }
+};
+class CacheHitFileSink : public Net::FileSink {
+   public:
+    using FileSink::FileSink;
+    bool cacheHit = false;
+    InitResult initCache(QNetworkRequest&) override { return cacheHit ? InitType::CacheHit : InitType::Ok; }
+};
 
 class CurseForgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void cacheHitClosesAPreviousPartialDownload()
+    {
+        QTemporaryDir temporary;
+        const auto path = temporary.path() + "/artifact.jar";
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("original"); }
+        const auto entries = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System);
+        CacheHitFileSink sink(path);
+        QNetworkRequest request(QUrl("http://127.0.0.1/fixture"));
+        QVERIFY(sink.init(request)); QVERIFY(sink.write("partial replacement"));
+        sink.cacheHit = true;
+        const auto cached = sink.init(request); QVERIFY(cached); QCOMPARE(*cached, Net::Sink::InitType::CacheHit);
+        QCOMPARE(QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System), entries);
+        QFile original(path); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), QByteArray("original"));
+    }
+    void requestBodyFailureClosesTheSinkBeforeNotification()
+    {
+        QTemporaryDir temporary;
+        const auto entries = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System);
+        Net::Request::Spec spec;
+        spec.method = Net::HttpMethod::Post; spec.url = QUrl("http://127.0.0.1/fixture");
+        spec.data = Net::Request::ByteArrayFactory([]() -> std::expected<QByteArray, QString> { return std::unexpected(QString("Fixture body failure")); });
+        auto request = Net::Request::makeCustomRequest(spec);
+        request->setSink(std::make_unique<Net::FileSink>(temporary.path() + "/artifact.jar"));
+        bool closedBeforeFailure = false;
+        connect(request.get(), &Task::failed, this, [&](const QString&) {
+            closedBeforeFailure = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System) == entries;
+        });
+        request->start(); QVERIFY(request->isFinished()); QVERIFY(!request->wasSuccessful());
+        QVERIFY(closedBeforeFailure);
+    }
+    void canceledDownloadsCloseTemporaryFiles_data()
+    {
+        QTest::addColumn<bool>("existing");
+        QTest::newRow("new-file") << false;
+        QTest::newRow("replacement") << true;
+    }
+    void canceledDownloadsCloseTemporaryFiles()
+    {
+        QFETCH(bool, existing);
+        QTemporaryDir temporary;
+        const auto target = temporary.path() + "/artifact.jar";
+        if (existing) { QFile original(target); QVERIFY(original.open(QIODevice::WriteOnly)); original.write("original"); }
+        const auto entries = QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System);
+        Net::FileSink sink(target);
+        QNetworkRequest request(QUrl("http://127.0.0.1/fixture"));
+        QVERIFY(sink.init(request)); QVERIFY(sink.write("partial replacement"));
+        sink.abort();
+        QVERIFY(!sink.write("late bytes"));
+        QCOMPARE(QDir(temporary.path()).entryList(QDir::Files | QDir::Hidden | QDir::System), entries);
+        if (existing) { QFile original(target); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), QByteArray("original")); }
+        else QVERIFY(!QFile::exists(target));
+    }
+    void unsupportedProviderRequestsReportFailure_data()
+    {
+        QTest::addColumn<int>("method");
+        QTest::newRow("search") << 0;
+        QTest::newRow("versions") << 1;
+        QTest::newRow("dependency") << 2;
+        QTest::newRow("project") << 3;
+    }
+    void unsupportedProviderRequestsReportFailure()
+    {
+        QFETCH(int, method);
+        FixtureResourceAPI api;
+        auto pack = std::make_shared<ModPlatform::IndexedPack>(); pack->addonId = "fixture"; pack->name = "Fixture";
+        int failed = 0, succeeded = 0;
+        auto failure = [&](const QString&, int code) { ++failed; QCOMPARE(code, -1); };
+        if (method == 0) {
+            QVERIFY(!api.searchProjects({}, {[&](auto&) { ++succeeded; }, failure, {}}));
+        } else if (method == 1) {
+            ResourceAPI::VersionSearchArgs args; args.pack = pack; args.resourceType = ModPlatform::ResourceType::Mod;
+            QVERIFY(!api.getProjectVersions(args, {[&](auto&) { ++succeeded; }, failure, {}}));
+        } else if (method == 2) {
+            ResourceAPI::DependencySearchArgs args; args.dependency.addonId = "fixture";
+            QVERIFY(!api.getDependencyVersion(args, {[&](auto&) { ++succeeded; }, failure, {}}));
+        } else QVERIFY(!api.getProjectInfo({pack}, {[&](auto&) { ++succeeded; }, failure, {}}, false));
+        QCOMPARE(failed, 1); QCOMPARE(succeeded, 0);
+    }
+    void malformedProviderResponsesReportFailure_data()
+    {
+        QTest::addColumn<bool>("dependency");
+        QTest::newRow("versions") << false;
+        QTest::newRow("dependency") << true;
+    }
+    void malformedProviderResponsesReportFailure()
+    {
+        QFETCH(bool, dependency);
+        QTcpServer server; QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        connect(&server, &QTcpServer::newConnection, this, [&] {
+            auto* socket = server.nextPendingConnection();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+                socket->readAll();
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nnot-json");
+                socket->disconnectFromHost();
+            });
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+        const auto proxy = APPLICATION->network()->proxy();
+        auto restore = qScopeGuard([&] { APPLICATION->network()->setProxy(proxy); });
+        APPLICATION->network()->setProxy(QNetworkProxy::NoProxy);
+        FixtureResourceAPI api; api.url = QString("http://127.0.0.1:%1/fixture").arg(server.serverPort());
+        int failed = 0, succeeded = 0;
+        auto failure = [&](const QString&, int code) { ++failed; QCOMPARE(code, -1); };
+        Task::Ptr task;
+        if (dependency) {
+            ResourceAPI::DependencySearchArgs args; args.dependency.addonId = "fixture";
+            task = api.getDependencyVersion(args, {[&](auto&) { ++succeeded; }, failure, {}});
+        } else {
+            ResourceAPI::VersionSearchArgs args; args.pack = std::make_shared<ModPlatform::IndexedPack>(); args.pack->name = "Fixture";
+            args.resourceType = ModPlatform::ResourceType::Mod;
+            task = api.getProjectVersions(args, {[&](auto&) { ++succeeded; }, failure, {}});
+        }
+        QVERIFY(task); QVERIFY(runTask(task.get(), 5000));
+        QCOMPARE(failed, 1); QCOMPARE(succeeded, 0);
+    }
+    void dependencyCancellationReportsAbort()
+    {
+        FixtureResourceAPI api; api.url = "http://127.0.0.1:9/fixture";
+        ResourceAPI::DependencySearchArgs args; args.dependency.addonId = "fixture";
+        int aborted = 0, failed = 0, succeeded = 0;
+        auto task = api.getDependencyVersion(args, {[&](auto&) { ++succeeded; }, [&](const QString&, int) { ++failed; }, [&] { ++aborted; }});
+        QVERIFY(task); task->start(); QVERIFY(task->abort());
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QCOMPARE(aborted, 1); QCOMPARE(failed, 0); QCOMPARE(succeeded, 0);
+    }
     void initTestCase()
     {
         QTRY_COMPARE_WITH_TIMEOUT(APPLICATION->status(), Application::Initialized, 15000);

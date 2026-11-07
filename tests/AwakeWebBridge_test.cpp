@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QBuffer>
+#include "BuildConfig.h"
+#include "ui/dialogs/AboutDialog.h"
 #include <QLocalSocket>
 #include <QElapsedTimer>
 #include <QtEndian>
@@ -93,6 +95,28 @@ using namespace Awake::Web;
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+    void externallyOwnedInstancesAreNotLoadedForNativeMutation()
+    {
+        auto* instances = APPLICATION->instances();
+        const QString id = "core-owned-fixture";
+        const auto root = instances->primaryDir() + '/' + id;
+        QVERIFY(QDir().mkpath(root + "/.awake-integration"));
+        const QByteArray original("InstanceType=OneSix\nname=Owned fixture\n");
+        QFile config(root + "/instance.cfg"); QVERIFY(config.open(QIODevice::WriteOnly)); config.write(original); config.close();
+        QFile marker(root + "/.awake-integration/ownership.json"); QVERIFY(marker.open(QIODevice::WriteOnly)); marker.write("ownership fixture"); marker.close();
+        instances->loadList();
+        QVERIFY(!instances->getInstanceById(id));
+        QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(), original); config.close();
+        QVERIFY(QDir(root).removeRecursively());
+    }
+    void aboutShowsTheCompiledApplicationVersion()
+    {
+        AboutDialog about;
+        const auto* label = about.findChild<QLabel*>("versionLabel");
+        QVERIFY(label);
+        QCOMPARE(label->text(), BuildConfig.printableVersionString());
+        QCOMPARE(QCoreApplication::applicationVersion().section(QChar::LineFeed, 0, 0), label->text());
+    }
     void integrationReadOnlyDiscovery()
     {
 #ifndef Q_OS_WIN

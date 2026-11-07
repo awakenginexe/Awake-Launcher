@@ -107,9 +107,12 @@ auto NetJob::abort() -> bool
 {
     m_queuedStartsCanceled->store(true);
     // fail all downloads on the queue
-    for (auto task : m_queue)
-        m_failed.insert(task.get(), task);
+    const auto queued = m_queue;
     m_queue.clear();
+    for (auto task : queued) {
+        m_failed.insert(task.get(), task);
+        task->cancelBeforeStart();
+    }
 
     if (m_doing.isEmpty()) {
         if (isRunning()) emitAborted();

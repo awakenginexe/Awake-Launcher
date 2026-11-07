@@ -189,6 +189,7 @@ class Request : public Task {
     std::vector<std::unique_ptr<Net::HeaderProxy>> m_headerProxies;
 
     int m_retryCount = 0;
+    State m_resultState = State::Running;
     QTimer m_retryTimer;
 
     int m_redirectCount = 0;
