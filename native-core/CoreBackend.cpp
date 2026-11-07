@@ -39,7 +39,8 @@ QJsonObject serviceFailure(const ServiceError& error)
 }
 QJsonObject withoutDetails(QJsonObject operation)
 {
-    if (operation["error"].isObject()) { auto error = operation["error"].toObject(); error.remove("details"); operation["error"] = error; }
+    // value(): operator[] on a non-const QJsonObject would insert "error": null into successful operations.
+    if (operation.value("error").isObject()) { auto error = operation.value("error").toObject(); error.remove("details"); operation["error"] = error; }
     return operation;
 }
 QJsonObject page(const QJsonArray& all, const QJsonObject& params)
@@ -87,16 +88,16 @@ void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
     const bool evidence = request.managerExtension == evidenceExtension;
     const auto checked = [this, method = request.method, extensions = request.managerExtensions, evidence, reply](QJsonObject response) {
         // Paged operation lists never carry conflict details (bounded frames); operations.get returns them.
-        if ((method == "operations.list" || method == "events.poll") && response["result"].isObject()) {
-            auto result = response["result"].toObject();
+        if ((method == "operations.list" || method == "events.poll") && response.value("result").isObject()) {
+            auto result = response.value("result").toObject();
             QJsonArray rows; for (const auto& value : result["operations"].toArray()) rows.append(withoutDetails(value.toObject()));
             result["operations"] = rows; response["result"] = result;
         }
         // manager.v0.2.1 additions are invisible to older clients, whose pinned schemas reject unknown fields.
         if (!evidence) {
-            if (response["error"].isObject()) { auto error = response["error"].toObject(); error.remove("details"); response["error"] = error; }
-            if (response["result"].isObject()) {
-                auto result = response["result"].toObject();
+            if (response.value("error").isObject()) { auto error = response.value("error").toObject(); error.remove("details"); response["error"] = error; }
+            if (response.value("result").isObject()) {
+                auto result = response.value("result").toObject();
                 if (method == "operations.get") result = withoutDetails(result);
                 if (method == "plans.get") result.remove("dependencyResolutions");
                 if (method == "mods.list") {
