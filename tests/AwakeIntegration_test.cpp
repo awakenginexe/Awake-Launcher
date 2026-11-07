@@ -184,6 +184,8 @@ class AwakeIntegrationTest : public QObject {
         };
         QVERIFY2(server.start(tmp.path(), { { "installationId", "fixture-install" }, { "profileId", "fixture-profile" } }, handler, &error),
                  qPrintable(error));
+        QVERIFY(profileAccessIsPrivate(tmp.path() + "/integration"));
+        QVERIFY(profileAccessIsPrivate(tmp.path() + "/integration/v1"));
         QVERIFY(QFile::exists(server.descriptorPath()));
         const auto descriptor = server.descriptorPath();
         IntegrationServer duplicate;
@@ -319,6 +321,17 @@ class AwakeIntegrationTest : public QObject {
         IntegrationServer server;
         QVERIFY(!server.start(tmp.path(), {}, {}));
         QVERIFY(!QFile::exists(tmp.path() + "/integration/v1/endpoint.json"));
+
+        QTemporaryDir privateRoot;
+        const auto publicDirectory = privateRoot.path() + "/integration";
+        QVERIFY(QDir().mkdir(publicDirectory, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        const auto nativePublicDirectory = QDir::toNativeSeparators(publicDirectory);
+        QCOMPARE(SetNamedSecurityInfoW(const_cast<LPWSTR>(reinterpret_cast<LPCWSTR>(nativePublicDirectory.utf16())), SE_FILE_OBJECT,
+                                       DACL_SECURITY_INFORMATION, nullptr, nullptr, newAcl, nullptr), DWORD(ERROR_SUCCESS));
+        IntegrationServer existingUnsafeDirectory;
+        QVERIFY(!existingUnsafeDirectory.start(privateRoot.path(), {}, {}));
+        QVERIFY(!profileAccessIsPrivate(publicDirectory));
+        QVERIFY(!QFile::exists(privateRoot.path() + "/integration/v1/endpoint.json"));
     }
 #endif
 

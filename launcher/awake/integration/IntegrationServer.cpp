@@ -48,7 +48,10 @@ bool IntegrationServer::start(const QString& dataRoot, QJsonObject info, Handler
         const QFileInfo before(directory);
         if (before.isSymLink() || before.isJunction())
             return reject("Integration directories must not be filesystem links.");
-        if (!QDir().mkpath(directory) || !profileAccessIsPrivate(directory))
+        // Set the current user as owner even when the Windows token defaults to a group.
+        const bool available = before.exists() ? before.isDir() :
+            QDir().mkdir(directory, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        if (!available || !profileAccessIsPrivate(directory))
             return reject("The integration directory is unavailable or not private.");
     }
     auto owner = std::make_unique<QLockFile>(QDir(directory).filePath("coordinator.lock"));

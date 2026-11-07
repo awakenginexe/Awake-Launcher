@@ -95,6 +95,36 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $flags = (Select-String -Path build/CMakeCache.txt -Pattern '^CMAKE_CXX_FLAGS:STRING=').Line
           if ($flags -notmatch '/EHsc' -or $flags -notmatch '/experimental:deterministic' -or $flags -notmatch '/pathmap:') { throw 'Release compiler flags must preserve exception support and path mapping.' }
+      - name: Validate private IPC profile startup
+        run: |
+          cmake --build --preset windows_msvc --config Release --target AwakeIntegration --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # IPC fixtures need inheritable private ACLs even on the runner's shared D: workspace.
+          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+          foreach ($path in @('build/tests/.validation', 'build/.validation/native-temp')) {
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+            $acl = [Security.AccessControl.DirectorySecurity]::new()
+            $acl.SetOwner($sid)
+            $acl.SetAccessRuleProtection($true, $false)
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+            $acl.AddAccessRule($rule)
+            Set-Acl -LiteralPath $path -AclObject $acl
+          }
+          $env:TEMP = $env:TMP = (Resolve-Path build/.validation/native-temp).Path
+          $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          $profile = New-Item -ItemType Directory -Path 'build/.validation/native-temp/startup-probe'
+          $acl = Get-Acl -LiteralPath $profile.FullName
+          Write-Output "Windows default directory owner: $($acl.Owner)"
+          $acl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
+          Set-Acl -LiteralPath $profile.FullName -AclObject $acl
+          & build/Release/AwakeIntegration.exe --probe-profile $profile.FullName
+          $result = $LASTEXITCODE
+          foreach ($directory in @($profile.FullName, "$($profile.FullName)/integration", "$($profile.FullName)/integration/v1")) {
+            if (Test-Path -LiteralPath $directory) { Get-Acl -LiteralPath $directory | Format-List Owner, Sddl }
+          }
+          if ($result) { throw "Private IPC startup failed: $result" }
+          ctest --preset windows_msvc --build-config Release -R '^AwakeIntegration$'
+          if ($LASTEXITCODE) { Get-Content build/tests/AwakeIntegration-results.txt; exit $LASTEXITCODE }
       - name: Build
         run: cmake --build --preset windows_msvc --config Release --parallel 4
       - name: Verify application version and source identity
@@ -125,18 +155,6 @@ jobs:
       - name: Test
         run: |
           $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
-          # IPC fixtures need inheritable private ACLs even on the runner's shared D: workspace.
-          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-          foreach ($path in @('build/tests/.validation', 'build/.validation/native-temp')) {
-            New-Item -ItemType Directory -Path $path -Force | Out-Null
-            $acl = [Security.AccessControl.DirectorySecurity]::new()
-            $acl.SetOwner($sid)
-            $acl.SetAccessRuleProtection($true, $false)
-            $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-            $acl.AddAccessRule($rule)
-            Set-Acl -LiteralPath $path -AclObject $acl
-          }
-          $env:TEMP = $env:TMP = (Resolve-Path build/.validation/native-temp).Path
           ctest --preset windows_msvc --build-config Release
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm --prefix launcher/awake-web test
