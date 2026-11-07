@@ -2,5 +2,6 @@
 **/testdata/** -text -diff
 # Translation source keys preserve significant upstream whitespace.
 launcher/awake/translations/*.ts whitespace=-blank-at-eol
-# Delivery files are hashed byte-for-byte by their SHA256SUMS; never convert line endings.
-native-core/redistribution/** -text
+# Delivery files are hashed byte-for-byte by their SHA256SUMS; never convert line endings. They are build
+# outputs of earlier commits, so source archives (git archive) exclude them instead of nesting deliveries.
+native-core/redistribution/** -text export-ignore
