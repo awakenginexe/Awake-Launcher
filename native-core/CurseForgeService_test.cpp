@@ -43,6 +43,8 @@ int main(int argc, char** argv)
     auto p = QJsonObject{{"projectId", "12"}, {"minecraftVersion", "1.20.1"}, {"loader", "forge"}, {"offset", 0}, {"limit", 50}};
     assert(service.search(p)["projects"].toArray().size() == 1);
     assert(service.project("12").addonId.toString() == "12");
+    const auto details=service.lookup("12");
+    assert(details["provider"] == "curseforge" && details["projectId"] == "12" && details["title"] == "Example");
     auto v = service.version("12", "42", "1.20.1", "forge");
     assert(v.wire["dependencies"].toArray()[0].toObject()["type"] == "required");
     assert(service.versions(p)["versions"].toArray().size() == 2 && filePages == 2);

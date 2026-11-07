@@ -505,6 +505,13 @@
           "type": "string",
           "pattern": "^[0-9]+$",
           "maxLength": 20
+        },
+        "kind": {
+          "enum": [
+            "mod",
+            "override",
+            "bookkeeping"
+          ]
         }
       },
       "required": [
@@ -582,13 +589,41 @@
           ]
         },
         "updateLocked": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Aggregate block: nativeLock OR policy.excluded OR policy.pinnedVersion is not null. Retained for legacy clients."
         },
         "provider": {
           "enum": [
             "modrinth",
             "curseforge"
           ]
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "pinnedVersion": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "excluded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "pinnedVersion",
+            "excluded"
+          ],
+          "additionalProperties": false
+        },
+        "nativeLock": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -992,6 +1027,15 @@
         },
         "inbox.discard": {
           "type": "boolean"
+        },
+        "providers.project": {
+          "type": "boolean"
+        },
+        "outbox.configs.v1": {
+          "type": "boolean"
+        },
+        "outbox.list": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -1098,7 +1142,9 @@
             "outbox.read",
             "imports.inspect",
             "imports.prepare",
-            "inbox.discard"
+            "inbox.discard",
+            "providers.project",
+            "outbox.list"
           ]
         },
         "params": {
@@ -1544,6 +1590,38 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "providers.project"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/providers.project.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "outbox.list"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/outbox.list.params"
+              }
+            }
+          }
         }
       ]
     },
@@ -1600,7 +1678,7 @@
           "items": {
             "const": "manager.v0.2"
           },
-          "minItems": 1,
+          "minItems": 0,
           "maxItems": 1
         }
       },
@@ -1658,6 +1736,13 @@
             "pageItems"
           ],
           "additionalProperties": false
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "const": "manager.v0.2"
+          },
+          "maxItems": 1
         }
       },
       "required": [
@@ -2678,62 +2763,152 @@
       "$ref": "#/$defs/transfer"
     },
     "outbox.read.params": {
-      "type": "object",
-      "properties": {
-        "token": {
-          "type": "string",
-          "format": "uuid"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            }
+          },
+          "required": [
+            "token",
+            "offset",
+            "length"
+          ],
+          "additionalProperties": false
         },
-        "offset": {
-          "type": "string",
-          "pattern": "^[0-9]+$",
-          "maxLength": 20
-        },
-        "length": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 262144
+        {
+          "type": "object",
+          "properties": {
+            "physicalId": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "instanceRevision": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            }
+          },
+          "required": [
+            "physicalId",
+            "instanceRevision",
+            "path",
+            "offset",
+            "length"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "token",
-        "offset",
-        "length"
-      ],
-      "additionalProperties": false
+      ]
     },
     "outbox.read.result": {
-      "type": "object",
-      "properties": {
-        "token": {
-          "type": "string",
-          "format": "uuid"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "bytesBase64": {
+              "type": "string",
+              "maxLength": 349528
+            },
+            "eof": {
+              "type": "boolean"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "token",
+            "offset",
+            "bytesBase64",
+            "eof",
+            "sha256"
+          ],
+          "additionalProperties": false
         },
-        "offset": {
-          "type": "string",
-          "pattern": "^[0-9]+$",
-          "maxLength": 20
-        },
-        "bytesBase64": {
-          "type": "string",
-          "maxLength": 349528
-        },
-        "eof": {
-          "type": "boolean"
-        },
-        "sha256": {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "instanceRevision": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "bytesBase64": {
+              "type": "string",
+              "maxLength": 349528
+            },
+            "eof": {
+              "type": "boolean"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "instanceRevision",
+            "size",
+            "offset",
+            "bytesBase64",
+            "eof",
+            "sha256"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "token",
-        "offset",
-        "bytesBase64",
-        "eof",
-        "sha256"
-      ],
-      "additionalProperties": false
+      ]
     },
     "response": {
       "oneOf": [
@@ -3014,6 +3189,129 @@
       "result": {
         "$ref": "#/$defs/inbox.discard.result"
       }
+    },
+    "providers.project.params": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        }
+      },
+      "required": [
+        "provider",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "providers.project.result": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "$ref": "#/$defs/project"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "additionalProperties": false
+    },
+    "outbox.list.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "physicalId",
+        "instanceRevision"
+      ],
+      "additionalProperties": false
+    },
+    "outbox.list.result": {
+      "type": "object",
+      "properties": {
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              "size": {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "maxLength": 20
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "size",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "instanceRevision",
+        "files",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
     }
   },
   "x-methods": {
@@ -3207,7 +3505,59 @@
       },
       "result": {
         "$ref": "#/$defs/outbox.read.result"
-      }
+      },
+      "capability": "outbox.read",
+      "extension": "manager.v0.2"
+    },
+    "imports.inspect": {
+      "params": {
+        "$ref": "#/$defs/imports.inspect.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.inspect.result"
+      },
+      "capability": "imports.inspect",
+      "extension": "manager.v0.2"
+    },
+    "imports.prepare": {
+      "params": {
+        "$ref": "#/$defs/imports.prepare.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.prepare.result"
+      },
+      "capability": "imports.prepare",
+      "extension": "manager.v0.2"
+    },
+    "inbox.discard": {
+      "params": {
+        "$ref": "#/$defs/inbox.discard.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.discard.result"
+      },
+      "capability": "inbox.discard",
+      "extension": "manager.v0.2"
+    },
+    "providers.project": {
+      "params": {
+        "$ref": "#/$defs/providers.project.params"
+      },
+      "result": {
+        "$ref": "#/$defs/providers.project.result"
+      },
+      "capability": "providers.project",
+      "extension": "manager.v0.2"
+    },
+    "outbox.list": {
+      "params": {
+        "$ref": "#/$defs/outbox.list.params"
+      },
+      "result": {
+        "$ref": "#/$defs/outbox.list.result"
+      },
+      "capability": "outbox.list",
+      "extension": "manager.v0.2"
     }
   }
 }

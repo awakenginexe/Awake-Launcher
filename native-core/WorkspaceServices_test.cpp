@@ -165,16 +165,72 @@ private slots:
             auto params=selection; params["idempotencyKey"]="import"; params["physicalId"]=f.workspace["physicalId"]; params["instanceRevision"]=f.inventory()["instanceRevision"];
             const auto id=f.begin("imports.prepare",params); f.services.prepareImport(id,params);
             const auto target=f.profile+"/workspaces/"+f.workspace["workspaceId"].toString()+"/.minecraft/config/awake.txt";
-            QVERIFY(!QFileInfo::exists(target)); const auto review=f.services.plan({{"operationId",id}}); QVERIFY(review["total"].toInt()>=2); f.apply(id);
+            QVERIFY(!QFileInfo::exists(target)); const auto review=f.services.plan({{"operationId",id}}); QVERIFY(review["total"].toInt()>=2);
+            for (const auto& value : review["files"].toArray()) {
+                const auto file=value.toObject(); const auto path=file["path"].toString();
+                QCOMPARE(file["kind"].toString(),path==".minecraft/config/awake.txt" ? QString("override") : path.endsWith(".jar") ? QString("mod") : QString("bookkeeping"));
+            }
+            f.apply(id);
             QFile config(target); QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(),QByteArray("imported config")); config.close();
+            QJsonObject exported{{"physicalId",f.workspace["physicalId"]},{"instanceRevision",f.inventory()["instanceRevision"]}};
+            const auto listed=f.services.outboxList(exported);
+            QCOMPARE(listed["total"].toInt(),1); QCOMPARE(listed["files"].toArray().first().toObject()["path"].toString(),QString("config/awake.txt"));
+            exported["path"]="config/awake.txt"; exported["offset"]="0"; exported["length"]=8;
+            const auto first=f.services.outboxRead(exported);
+            QCOMPARE(QByteArray::fromBase64(first["bytesBase64"].toString().toLatin1()),QByteArray("imported")); QVERIFY(!first["eof"].toBool());
+            exported["offset"]="8"; exported["length"]=262144;
+            const auto last=f.services.outboxRead(exported);
+            QCOMPARE(QByteArray::fromBase64(last["bytesBase64"].toString().toLatin1()),QByteArray(" config")); QVERIFY(last["eof"].toBool());
+            for (const auto* refused : {"../instance.cfg","config/../../instance.cfg","C:/private.txt","config/untracked.txt","mods/p0-v1.jar"}) {
+                exported["path"]=refused; QVERIFY_THROWS_EXCEPTION(ServiceError,f.services.outboxRead(exported));
+            }
+            exported["path"]="config/awake.txt"; exported["offset"]="18446744073709551615";
+            QVERIFY_THROWS_EXCEPTION(ServiceError,f.services.outboxRead(exported));
+            exported["offset"]="0";
+            auto stale=exported; stale["instanceRevision"]=QString(64,'0'); QVERIFY_THROWS_EXCEPTION(ServiceError,f.services.outboxRead(stale));
             if (format=="mrpack") { QCOMPARE(f.inventory()["total"].toInt(),2); QCOMPARE(f.item("p0")["metadataState"].toString(),QString("verified")); }
             QVERIFY(config.open(QIODevice::WriteOnly)); config.write("local user changes"); config.close();
+            QVERIFY_THROWS_EXCEPTION(ServiceError,f.services.outboxRead(exported));
+            exported["instanceRevision"]=f.inventory()["instanceRevision"];
+            QVERIFY_THROWS_EXCEPTION(ServiceError,f.services.outboxRead(exported));
             params["idempotencyKey"]="modified-import"; params["instanceRevision"]=f.inventory()["instanceRevision"]; const auto next=f.begin("imports.prepare",params);
             bool refused=false; try { f.services.prepareImport(next,params); } catch(const ServiceError& e) { refused=e.code=="POLICY_CONFLICT"; } QVERIFY(refused);
             QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(),QByteArray("local user changes"));
         } catch (const ServiceError& error) { QFAIL(qPrintable(error.code+": "+error.message)); }
     }
 
+    void policyStatesAreIndependent()
+    {
+        Fixture f;
+        f.apply(f.prepare(QJsonArray{QJsonObject{{"action","install"},{"projectId","p0"},{"versionId","p0-v1"}}}));
+        const QJsonValue inventoryId=f.item("p0")["inventoryId"];
+        const auto set = [&](QJsonValue pin, bool excluded) {
+            f.apply(f.prepare(QJsonArray{QJsonObject{{"action","policy"},{"inventoryId",inventoryId},{"pinnedVersion",pin},{"excluded",excluded}}}));
+        };
+        const auto check = [&](QJsonValue pin, bool excluded, bool locked) {
+            const auto row=f.item("p0"); const auto policy=row["policy"].toObject();
+            QCOMPARE(policy["pinnedVersion"],pin); QCOMPARE(policy["excluded"],QJsonValue(excluded));
+            QCOMPARE(row["nativeLock"],QJsonValue(false)); QCOMPARE(row["updateLocked"],QJsonValue(locked));
+        };
+        check(QJsonValue(QJsonValue::Null),false,false);
+        set("p0-v1",false); check("p0-v1",false,true);
+        QVERIFY(f.services.updates({{"physicalId",f.workspace["physicalId"]}})["updates"].toArray().first().toObject()["excluded"].toBool());
+        QVERIFY_THROWS_EXCEPTION(ServiceError,f.prepare(QJsonArray{QJsonObject{{"action","replace"},{"projectId","p0"},{"versionId","p0-v2"}}}));
+        set(QJsonValue(QJsonValue::Null),true); check(QJsonValue(QJsonValue::Null),true,true);
+        QVERIFY_THROWS_EXCEPTION(ServiceError,f.prepare(QJsonArray{QJsonObject{{"action","replace"},{"projectId","p0"},{"versionId","p0-v2"}}}));
+        set("p0-v1",true); check("p0-v1",true,true);
+        set(QJsonValue(QJsonValue::Null),false); check(QJsonValue(QJsonValue::Null),false,false);
+        const auto instance=f.profile+"/workspaces/"+f.workspace["workspaceId"].toString();
+        const auto index=instance+"/.minecraft/mods/.index/modrinth-p0.pw.toml";
+        QFile native(index); QVERIFY(native.open(QIODevice::ReadOnly)); auto data=native.readAll(); native.close();
+        QVERIFY(data.contains("x-prismlauncher-lock-update = false")); data.replace("x-prismlauncher-lock-update = false","x-prismlauncher-lock-update = true");
+        QVERIFY(native.open(QIODevice::WriteOnly)); QCOMPARE(native.write(data),qint64(data.size())); native.close();
+        const auto row=f.item("p0");
+        QCOMPARE(row["nativeLock"],QJsonValue(true)); QCOMPARE(row["updateLocked"],QJsonValue(true));
+        QCOMPARE(row["policy"].toObject()["pinnedVersion"],QJsonValue(QJsonValue::Null));
+        QCOMPARE(row["policy"].toObject()["excluded"],QJsonValue(false));
+        QVERIFY_THROWS_EXCEPTION(ServiceError,f.prepare(QJsonArray{QJsonObject{{"action","policy"},{"inventoryId",inventoryId},{"pinnedVersion",QJsonValue(QJsonValue::Null)},{"excluded",false}}}));
+    }
     void policyPinsAreReviewedAndCanBeCleared()
     {
         Fixture f; const auto installed=f.prepare(QJsonArray{QJsonObject{{"action","install"},{"projectId","p0"},{"versionId","p0-v1"}}}); f.apply(installed);

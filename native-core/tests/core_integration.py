@@ -398,14 +398,32 @@ def live_milestone(helper):
     passed('prepared import survives explicit upload discard and idempotent discard replay')
     plan = client.call('plans.get',{'operationId':imported,'limit':200})
     assert plan['nextOffset'] is None
+    assert {f['kind'] for f in plan['files']} == {'mod','override','bookkeeping'}
     assert not (root/'.minecraft/config/awake-acceptance.txt').exists()
     apply(client,imported,plan)
     assert (root/'.minecraft/config/awake-acceptance.txt').read_text()=='client'
     inventory = client.call('mods.list',{'physicalId':workspace['physicalId']})
     mod = next(m for m in inventory['items'] if m['projectId']==project['projectId'])
     assert mod['metadataState']=='verified' and zipfile.is_zipfile(root/'.minecraft/mods'/mod['fileName'])
-    pinned, pinplan, _ = prepare(client,workspace,[{'action':'policy','inventoryId':mod['inventoryId'],'pinnedVersion':mod['versionId'],'excluded':True}])
+    details=client.call('providers.project',{'provider':'modrinth','projectId':project['projectId']})['project']
+    assert details['projectId']==project['projectId'] and details['title'] and details['provider']=='modrinth'
+    selection={'physicalId':workspace['physicalId'],'instanceRevision':inventory['instanceRevision']}
+    exported=client.call('outbox.list',selection)
+    assert exported['total']==1 and exported['files'][0]['path']=='config/awake-acceptance.txt'
+    data=client.call('outbox.read',{**selection,'path':'config/awake-acceptance.txt','offset':'0','length':262144})
+    assert base64.b64decode(data['bytesBase64'])==b'client' and data['eof']
+    client.call('outbox.read',{**selection,'path':'../instance.cfg','offset':'0','length':10},error='NOT_FOUND')
+    client.call('outbox.read',{'token':str(uuid.uuid4()),'offset':'0','length':10},error='UNSUPPORTED_CAPABILITY')
+    passed('provider project lookup, explicit plan kinds and restricted tracked-config outbox over packaged IPC')
+    for pin, excluded in [(mod['versionId'],False),(None,True),(mod['versionId'],True),(None,False)]:
+        pinned, pinplan, _ = prepare(client,workspace,[{'action':'policy','inventoryId':mod['inventoryId'],'pinnedVersion':pin,'excluded':excluded}])
+        apply(client,pinned,pinplan)
+        row=next(m for m in client.call('mods.list',{'physicalId':workspace['physicalId']})['items'] if m['projectId']==mod['projectId'])
+        assert row['policy']=={'pinnedVersion':pin,'excluded':excluded} and not row['nativeLock']
+        assert row['updateLocked']==bool(pin or excluded)
+    pinned, pinplan, _ = prepare(client,workspace,[{'action':'policy','inventoryId':mod['inventoryId'],'pinnedVersion':mod['versionId'],'excluded':False}])
     apply(client,pinned,pinplan)
+    passed('pin-only, exclusion-only, combined and cleared policies read back independently over packaged IPC')
     checked=client.call('updates.check',{'physicalId':workspace['physicalId']})
     assert next(u for u in checked['updates'] if u['projectId']==mod['projectId'])['excluded']
     passed('real Forge 1.20.1 mrpack import, Modrinth hash resolution, native metadata, overrides and reviewed pin policy', loader=loader,projectId=mod['projectId'],versionId=mod['versionId'])
@@ -435,11 +453,25 @@ def main():
     client = Client(helper.descriptor)
     client.call('core.info', error='HANDSHAKE_REQUIRED')
     hello = client.hello()
+    assert hello['extensions'] == ['manager.v0.2']
     assert hello['capabilities']['transactions.apply'] and hello['capabilities']['inbox.begin']
     assert hello['capabilities']['imports.prepare'] and not hello['capabilities']['providers.curseforge.v1']
     client.call('core.info', {'path': 'C:/forbidden'}, error='INVALID_REQUEST')
     client.call('inbox.begin', error='INVALID_REQUEST')
+    client.call('providers.project', {'provider':'curseforge','projectId':'12'}, error='PROVIDER_UNAVAILABLE')
     client.call('providers.search', {'provider':'curseforge','minecraftVersion':'1.20.1','loader':'forge','query':'jei'}, error='PROVIDER_UNAVAILABLE')
+    negotiation = Client(helper.descriptor)
+    base_hello = {'versions': [PROTOCOL], 'client': {'name': 'negotiation-fixture', 'version': '1'}}
+    for extensions in (['unknown'], ['manager.v0.2', 'manager.v0.2'], 'manager.v0.2', [None]):
+        negotiation.call('hello', {**base_hello, 'extensions': extensions}, error='INVALID_REQUEST')
+        negotiation.call('core.info', error='HANDSHAKE_REQUIRED')
+    empty = negotiation.call('hello', {**base_hello, 'extensions': []})
+    assert empty['extensions'] == [] and 'imports.prepare' not in empty['capabilities']
+    negotiation.call('imports.inspect', {}, error='UNSUPPORTED_CAPABILITY')
+    negotiation.call('providers.project', {'provider':'modrinth','projectId':'sodium'}, error='UNSUPPORTED_CAPABILITY')
+    negotiation.call('outbox.list', {}, error='UNSUPPORTED_CAPABILITY')
+    negotiation.close()
+    passed('explicit extension acknowledgement, malformed offers rejected, empty offer stays legacy')
     future = Client(helper.descriptor)
     future.call('hello', {'versions': [{'major': 3, 'minor': 0}, PROTOCOL], 'client': {'name': 'future-fixture', 'version': '1'}})
     future.close()
@@ -457,6 +489,7 @@ def main():
     passed('packaged helper without Launcher paths, peer identity, strict protocol and profile exclusion', qtModules=modules)
     legacy = Client(helper.descriptor, extended=False)
     legacy_hello=legacy.hello()
+    assert 'extensions' not in legacy_hello
     assert not legacy_hello['capabilities']['inbox.begin'] and 'imports.prepare' not in legacy_hello['capabilities']
     assert legacy.call('core.info')['supportedLoaders']==['vanilla','fabric']
     legacy.call('inbox.begin',error='UNSUPPORTED_CAPABILITY')

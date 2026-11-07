@@ -78,6 +78,7 @@ QJsonObject Contract::capabilities(bool writes, bool extensions) const
     }
     if (!extensions) return result;
     for (const auto* capability : {"loaders.forge.v1", "loaders.neoforge.v1", "loaders.quilt.v1", "policies.v1", "imports.inspect", "imports.prepare"}) result[capability] = writes || QString(capability) != "imports.prepare";
+    for (const auto* capability : {"providers.project", "outbox.list", "outbox.read", "outbox.configs.v1"}) result[capability] = true;
     result["providers.curseforge.v1"] = CurseForgeService().available();
     result["inbox.discard.v1"] = writes; result["inbox.discard"] = writes;
     return result;

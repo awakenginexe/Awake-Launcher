@@ -73,6 +73,17 @@ bool CoreBackend::start(const QString& requested, QString* error)
 void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
 {
     const auto checked = [this, method = request.method, extensions = request.managerExtensions, reply](QJsonObject response) {
+        if (!extensions && response.contains("result") && (method == "mods.list" || method == "plans.get")) {
+            auto result = response["result"].toObject(); const auto key = method == "mods.list" ? "items" : "files";
+            QJsonArray rows;
+            for (const auto& value : result[key].toArray()) {
+                auto row = value.toObject();
+                if (method == "mods.list") { row.remove("policy"); row.remove("nativeLock"); }
+                else row.remove("kind");
+                rows.append(row);
+            }
+            result[key] = rows; response["result"] = result;
+        }
         if (!extensions && response.contains("result") && !legacyResponse(response["result"])) { reply(failure("UNSUPPORTED_CAPABILITY", "This data requires the manager.v0.2 extension; upgrade the client.")); return; }
         const auto key = response.contains("error") ? "error" : method + ".result";
         const auto value = response.contains("error") ? response["error"] : response["result"];
@@ -189,6 +200,9 @@ QJsonObject CoreBackend::read(const Request& request)
     }
     if (method == "catalog.versions") return provider.catalog(params);
     if (method == "providers.search") return params["provider"] == "curseforge" ? curseforge.search(params) : provider.search(params);
+    if (method == "providers.project") return {{"project", params["provider"] == "curseforge" ? curseforge.lookup(params["projectId"].toString()) : provider.lookup(params["projectId"].toString())}};
+    if (method == "outbox.list") return services.outboxList(params);
+    if (method == "outbox.read") return services.outboxRead(params);
     if (method == "providers.versions") return params["provider"] == "curseforge" ? curseforge.versions(params) : provider.versions(params);
     if (method == "imports.inspect") return services.inspectImport(params);
     if (method == "inbox.begin") return inbox.begin(params);

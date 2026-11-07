@@ -142,7 +142,7 @@ QJsonArray WorkspaceServices::scan(const QJsonObject& record) const
         if (!base.endsWith(".jar", Qt::CaseInsensitive)) continue;
         const auto digest = hash(file.absoluteFilePath()); const auto key = base.toCaseFolded();
         if (found.contains(key)) throw ServiceError{"POLICY_CONFLICT", "Both enabled and disabled copies of a mod exist."}; found.insert(key);
-        const auto entry = metadata.value(key).second; QString state = "unknown"; bool locked = false;
+        const auto entry = metadata.value(key).second; QString state = "unknown"; bool nativeLock = false, locked = false;
         if (!entry.isEmpty()) {
             const auto indexPath = root(record) + '/' + mods + "/.index/" + entry["indexFile"].toString();
             const auto indexHash = hash(indexPath);
@@ -153,12 +153,14 @@ QJsonArray WorkspaceServices::scan(const QJsonObject& record) const
                 native.filename == entry["fileName"] && native.provider == (entry["provider"] == "curseforge" ? ModPlatform::ResourceProvider::FLAME : ModPlatform::ResourceProvider::MODRINTH) &&
                 native.hashFormat == (entry["provider"] == "curseforge" ? "sha1" : "sha512") && native.hash == artifact[native.hashFormat] &&
                 DurableIO::hash(file.absoluteFilePath(), nullptr, entry["provider"] == "curseforge" ? QCryptographicHash::Sha1 : QCryptographicHash::Sha512) == artifact[native.hashFormat] ? "verified" : "modified";
-            locked = native.lockUpdate || entry["updateLocked"].toBool() || entry["excluded"].toBool() || !entry["pinnedVersion"].toString().isEmpty();
+            nativeLock = native.lockUpdate || entry["updateLocked"].toBool();
+            locked = nativeLock || entry["excluded"].toBool() || !entry["pinnedVersion"].toString().isEmpty();
         }
         const auto nullable = [&](const char* field) { return entry.isEmpty() ? QJsonValue(QJsonValue::Null) : entry[field]; };
         result.append(QJsonObject{{"inventoryId", sha(file.fileName().toUtf8())}, {"fileName", file.fileName()}, {"enabled", enabled},
             {"size", QString::number(file.size())}, {"sha256", digest}, {"projectId", nullable("projectId")}, {"versionId", nullable("versionId")},
-            {"versionNumber", nullable("versionNumber")}, {"metadataState", state}, {"updateLocked", locked}});
+            {"versionNumber", nullable("versionNumber")}, {"metadataState", state}, {"updateLocked", locked}, {"nativeLock", nativeLock},
+            {"policy", QJsonObject{{"pinnedVersion", entry["pinnedVersion"].toString().isEmpty() ? QJsonValue(QJsonValue::Null) : entry["pinnedVersion"]}, {"excluded", entry["excluded"].toBool()}}}});
         if (entry["provider"] == "curseforge") { auto row = result.last().toObject(); row["provider"] = "curseforge"; result.replace(result.size() - 1, row); }
     }
     if (result.size() > 100000) throw ServiceError{"LIMIT_EXCEEDED", "Inventory exceeds 100,000 mod files."};
@@ -222,6 +224,53 @@ void WorkspaceServices::create(const QString& id, const QJsonObject& request)
     writeRecord(m_profile + "/catalog/" + id + ".json", record);
     requireResult(m_store.transition(id, "completed", {{"workspace", view}, {"verified", true}}));
 }
+namespace {
+bool exportableConfig(const QString& path)
+{
+    if (!path.startsWith(".minecraft/config/") || !QStringList{"json", "toml", "cfg", "conf", "ini", "properties", "txt", "yaml", "yml"}.contains(QFileInfo(path).suffix().toLower())) return false;
+    for (const auto& part : path.split('/')) if (!leaf(part)) return false;
+    return true;
+}
+}
+QJsonObject WorkspaceServices::outboxList(const QJsonObject& params)
+{
+    if (!Contract().valid("outbox.list.params", params)) throw ServiceError{"INVALID_REQUEST", "Invalid outbox selection."};
+    const auto record = workspaceRecord(params["physicalId"].toString()); auto lease = acquire(record);
+    TransactionEngine engine(m_store, root(record), mods); const auto before = engine.revision();
+    if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Configuration paths cannot be verified."};
+    if (params["instanceRevision"] != before) throw ServiceError{"STALE_INSTANCE", "Workspace changed before export."};
+    if (QFileInfo::exists(root(record) + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Resolve workspace recovery before export."};
+    const auto tracked = policies(record)["overrides"].toObject(); QJsonArray files;
+    for (auto it = tracked.begin(); it != tracked.end(); ++it) {
+        if (!exportableConfig(it.key())) continue;
+        const auto path = root(record) + '/' + it.key(); const QFileInfo info(path);
+        if (hash(path) != it.value()) throw ServiceError{"POLICY_CONFLICT", "Export requires unchanged tracked configuration: " + it.key()};
+        if (info.size() > 8 * 1024 * 1024) throw ServiceError{"LIMIT_EXCEEDED", "Configuration export is limited to 8 MiB per file."};
+        files.append(QJsonObject{{"path", it.key().mid(11)}, {"size", QString::number(info.size())}, {"sha256", it.value()}});
+    }
+    if (engine.revision() != before) throw ServiceError{"STALE_INSTANCE", "Workspace changed during export enumeration."};
+    auto result = paged("files", files, params); result["instanceRevision"] = before; return result;
+}
+QJsonObject WorkspaceServices::outboxRead(const QJsonObject& params)
+{
+    if (params.contains("token")) throw ServiceError{"UNSUPPORTED_CAPABILITY", "Token-based archive outbox is not implemented."};
+    if (!Contract().valid("outbox.read.params", params)) throw ServiceError{"INVALID_REQUEST", "Invalid outbox read."};
+    const auto record = workspaceRecord(params["physicalId"].toString()); auto lease = acquire(record);
+    TransactionEngine engine(m_store, root(record), mods); const auto before = engine.revision();
+    if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Configuration paths cannot be verified."};
+    if (params["instanceRevision"] != before) throw ServiceError{"STALE_INSTANCE", "Workspace changed before export."};
+    if (QFileInfo::exists(root(record) + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Resolve workspace recovery before export."};
+    const auto relative = ".minecraft/" + params["path"].toString(); const auto tracked = policies(record)["overrides"].toObject();
+    if (!exportableConfig(relative) || !tracked.contains(relative)) throw ServiceError{"NOT_FOUND", "Only tracked supported config overrides can be exported."};
+    const auto data = bytes(root(record) + '/' + relative);
+    if (sha(data) != tracked[relative]) throw ServiceError{"POLICY_CONFLICT", "Export requires unchanged tracked configuration."};
+    bool valid = false; const auto offset = params["offset"].toString().toULongLong(&valid); const auto length = params["length"].toInt();
+    if (!valid || offset > quint64(data.size())) throw ServiceError{"INVALID_REQUEST", "Outbox offset exceeds the file."};
+    if (engine.revision() != before) throw ServiceError{"STALE_INSTANCE", "Workspace changed during export read."};
+    const auto chunk = data.mid(qsizetype(offset), length);
+    return {{"path", params["path"]}, {"instanceRevision", before}, {"offset", params["offset"]}, {"size", QString::number(data.size())},
+        {"bytesBase64", QString::fromLatin1(chunk.toBase64())}, {"eof", offset + quint64(chunk.size()) == quint64(data.size())}, {"sha256", tracked[relative]}};
+}
 QJsonObject WorkspaceServices::plan(const QJsonObject& params)
 {
     const auto id = params["operationId"].toString(); requireResult(m_store.get(id));
@@ -231,6 +280,8 @@ QJsonObject WorkspaceServices::plan(const QJsonObject& params)
     QJsonArray files;
     for (const auto& entry : value["files"].toArray()) { const auto file = entry.toObject(); files.append(QJsonObject{{"path", file["path"]},
         {"action", file["afterHash"] == "missing" ? "remove" : file["beforeHash"] == "missing" ? "install" : "replace"},
+        {"kind", file["path"].toString().startsWith(".awake-integration/") || file["path"].toString().startsWith(".minecraft/mods/.index/") ? "bookkeeping" :
+            file["path"].toString().startsWith(".minecraft/mods/") && (file["path"].toString().endsWith(".jar", Qt::CaseInsensitive) || file["path"].toString().endsWith(".jar.disabled", Qt::CaseInsensitive)) ? "mod" : "override"},
         {"beforeSha256", file["beforeHash"]}, {"afterSha256", file["afterHash"]}, {"size", file["sizeAfter"]}}); }
     auto result = paged("files", files, params);
     for (const auto* key : {"operationId", "planDigest", "instanceRevision", "expectedInstanceRevision"}) result[key] = value[key];

@@ -12,6 +12,7 @@ struct ServiceError {
     QString code, message;
     bool retryable = false;
 };
+QJsonObject projectMetadata(const ModPlatform::IndexedPack& pack);
 struct ResolvedVersion { QJsonObject wire; ModPlatform::IndexedVersion native; QDateTime publishedAt; };
 class ModrinthService {
 public:
@@ -24,6 +25,7 @@ public:
     QList<ResolvedVersion> compatibleVersions(const QJsonObject& params);
     ResolvedVersion version(const QString& id, const QString& minecraft, const QString& loader, const QString& artifactSha512 = {});
     ModPlatform::IndexedPack project(const QString& id);
+    QJsonObject lookup(const QString& id);
     ResolvedVersion versionByHash(const QString& sha512, const QString& minecraft, const QString& loader);
     void download(const QJsonObject& artifact, const QString& destination);
     void checkCancelled() const;

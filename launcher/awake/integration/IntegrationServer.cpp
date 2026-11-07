@@ -234,7 +234,8 @@ void IntegrationServer::acceptClients()
                 const auto extensions = params["extensions"].toArray();
                 const bool optedIn = hasExtensions && !m_options.extension.isEmpty() && params["extensions"].isArray() &&
                     extensions.size() == 1 && extensions.first().isString() && extensions.first().toString() == m_options.extension;
-                bool valid = params.size() == (hasExtensions ? 3 : 2) && (!hasExtensions || optedIn) &&
+                const bool emptyExtensions = hasExtensions && !m_options.extension.isEmpty() && params["extensions"].isArray() && extensions.isEmpty();
+                bool valid = params.size() == (hasExtensions ? 3 : 2) && (!hasExtensions || optedIn || emptyExtensions) &&
                              params["versions"].isArray() && !versions.isEmpty() && versions.size() <= 16 &&
                              params["client"].isObject() && client.size() == 2 && client["name"].isString() &&
                              !client["name"].toString().isEmpty() && client["name"].toString().size() <= 128 &&
@@ -262,6 +263,7 @@ void IntegrationServer::acceptClients()
                     result["protocol"] = m_info["protocol"]; result["profileId"] = m_info["profileId"];
                     result["sessionId"] = m_info["sessionId"]; result["capabilities"] = state->capabilities;
                     result["limits"] = QJsonObject{{"frameBytes", int(MaxFrameBytes)}, {"clients", 8}, {"pageItems", 200}};
+                    if (hasExtensions) result["extensions"] = optedIn ? QJsonArray{m_options.extension} : QJsonArray{};
                     send(request.id, {{"result", result}}); return;
                 }
                 send(request.id, { { "result", QJsonObject{ { "protocol", version() },

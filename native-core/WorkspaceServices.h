@@ -24,6 +24,8 @@ public:
     QJsonObject list(const QJsonObject& params);
     QJsonObject inventory(const QJsonObject& params);
     QJsonObject updates(const QJsonObject& params);
+    QJsonObject outboxList(const QJsonObject& params);
+    QJsonObject outboxRead(const QJsonObject& params);
     QJsonObject plan(const QJsonObject& params);
     QJsonObject operation(const QString& id) const;
     QJsonObject recoveryStatus();

@@ -20,6 +20,19 @@ private slots:
         QVERIFY(!contract.valid("hello.params", QJsonObject{{"versions", QJsonArray{}}, {"client", client}}));
         QVERIFY(contract.valid("hello.params", QJsonObject{{"versions", QJsonArray{QJsonObject{{"major", 3}, {"minor", 0}}, QJsonObject{{"major", 2}, {"minor", 0}}}}, {"client", client}}));
     }
+    void projectLookupUsesProviderMetadata()
+    {
+        ModrinthService provider({},[](const QUrl& url,qint64) {
+            if (url.path() != "/v2/project/project-id") throw ServiceError{"INVALID_REQUEST","Unexpected route"};
+            return QByteArray(R"({"id":"project-id","slug":"friendly","title":"Friendly Name","description":"Description","project_type":"mod","client_side":"required","server_side":"required"})");
+        });
+        const auto project=provider.lookup("project-id");
+        QCOMPARE(project["title"].toString(),QString("Friendly Name"));
+        QCOMPARE(project["provider"].toString(),QString("modrinth"));
+        QVERIFY(Contract().valid("providers.project.result",QJsonObject{{"project",project}}));
+        QVERIFY(!Contract().valid("providers.project.params",QJsonObject{{"provider","modrinth"},{"projectId","../escape"}}));
+        QVERIFY(!Contract().valid("outbox.read.params",QJsonObject{{"physicalId","id"},{"instanceRevision",QString(64,'0')},{"path","config/a.txt"},{"offset","0"},{"length",262145}}));
+    }
     void downloadIntegrityAndCancellation()
     {
         QTemporaryDir temporary;

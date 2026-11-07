@@ -250,6 +250,7 @@ QJsonObject CurseForgeService::versions(const QJsonObject& params) {
     const auto next = offset + rows.size();
     return {{"versions", rows}, {"total", all.size()}, {"nextOffset", next < all.size() ? QJsonValue(next) : QJsonValue(QJsonValue::Null)}};
 }
+QJsonObject CurseForgeService::lookup(const QString& id) { return projectMetadata(project(id)); }
 void CurseForgeService::download(const QJsonObject& artifact, const QString& destination) {
     bool ok = false; const auto size = artifact["size"].toString().toLongLong(&ok); const auto expected = artifact["sha1"].toString();
     if (!ok || size <= 0 || size > artifactLimit || !QRegularExpression("^[0-9a-f]{40}$").match(expected).hasMatch()) bad("CurseForge artifact integrity data is invalid.");

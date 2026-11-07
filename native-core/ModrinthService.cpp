@@ -239,6 +239,13 @@ QJsonObject ModrinthService::versions(const QJsonObject& params)
     for (const auto& version : compatibleVersions(params)) all.append(version.wire);
     return page("versions", all, params["offset"].toInt(), params["limit"].toInt(50));
 }
+QJsonObject projectMetadata(const ModPlatform::IndexedPack& pack)
+{
+    return {{"provider", pack.provider == ModPlatform::ResourceProvider::FLAME ? "curseforge" : "modrinth"},
+        {"projectId", pack.addonId.toString()}, {"slug", pack.slug}, {"title", pack.name}, {"description", pack.description},
+        {"iconUrl", pack.logoUrl.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(pack.logoUrl)},
+        {"gameVersions", QJsonArray{}}, {"loaders", QJsonArray{}}};
+}
 ModPlatform::IndexedPack ModrinthService::project(const QString& id)
 {
     ModPlatform::IndexedPack pack;
@@ -246,6 +253,7 @@ ModPlatform::IndexedPack ModrinthService::project(const QString& id)
         bad("Only supported Modrinth mod projects can be installed.");
     return pack;
 }
+QJsonObject ModrinthService::lookup(const QString& id) { return projectMetadata(project(id)); }
 void ModrinthService::download(const QJsonObject& artifact, const QString& destination)
 {
     const auto size = artifact["size"].toString().toLongLong();

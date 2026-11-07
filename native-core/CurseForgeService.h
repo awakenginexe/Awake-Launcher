@@ -14,6 +14,7 @@ public:
     QList<ResolvedVersion> compatibleVersions(const QJsonObject& params);
     ResolvedVersion version(const QString& projectId, const QString& fileId, const QString& minecraft, const QString& loader);
     ModPlatform::IndexedPack project(const QString& id);
+    QJsonObject lookup(const QString& id);
     void download(const QJsonObject& artifact, const QString& destination);
 private:
     std::shared_ptr<std::atomic_bool> m_cancel;

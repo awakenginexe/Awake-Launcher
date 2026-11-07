@@ -9,6 +9,16 @@ for name in ('wire.schema.json', 'requests.schema.json', 'core.schema.json'):
     Draft202012Validator.check_schema(json.loads((docs / name).read_text()))
 schema = json.loads((docs / 'core.schema.json').read_text())
 checks = 3
+for method in ('imports.inspect', 'imports.prepare', 'inbox.discard'):
+    assert method in schema['x-methods'], f'missing method table entry: {method}'
+    assert schema['x-methods'][method]['params'] == {'$ref': '#/$defs/' + method + '.params'}
+    assert schema['x-methods'][method]['result'] == {'$ref': '#/$defs/' + method + '.result'}
+    assert schema['x-methods'][method]['capability'] == method
+    assert schema['x-methods'][method]['extension'] == 'manager.v0.2'
+    checks += 5
+request_methods = set(schema['$defs']['request']['properties']['method']['enum'])
+assert set(schema['x-methods']) == request_methods
+checks += 1
 
 
 def check(definition, value):
