@@ -227,6 +227,7 @@ class Helper:
     def connect(self):
         client = Client(self.descriptor, extended=self.extended, extension=self.extension)
         hello = client.hello()
+        client.hello_result = hello
         for key in ('profileId', 'sessionId', 'role'):
             assert hello[key] == self.descriptor[key]
         return client
@@ -475,7 +476,7 @@ def modrinth(path):
 def live_blockers(helper):
     """All five Revelations blocker classes with real public Modrinth files (no private pack data)."""
     client = helper.connect()
-    hello = client.hello()
+    hello = client.hello_result
     assert hello['extensions'] == [EVIDENCE_EXTENSION] and hello['capabilities']['dependencies.resolutions.v1'] and hello['capabilities']['loaders.connector.v1']
     catalog = client.call('catalog.versions', {'minecraftVersion': '1.20.1', 'loader': 'forge'})
     loader = {'id': 'forge', 'version': '47.4.0' if '47.4.0' in catalog['loaderVersions'] else catalog['loaderVersions'][0]}
