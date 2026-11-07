@@ -1,3 +1,38 @@
+# Native Core 0.2.1 handoff: complex Forge 1.20.1 packs (supersedes the 0.2.0 delivery below)
+
+Implementation **0.2.1**, wire protocol **2.0**, extensions **`manager.v0.2.1`** (new, implies `manager.v0.2`) and `manager.v0.2`. Native code commits on `feat/native-core-manager-020`: `31d0611a9` (fixes, contract, tests), `09472fc6d` and `4151b4ca1` (packaging only), `b06c9a804` (reply-filter fix). **Executable/source pin: `b06c9a804503545207bacfa3bfdf8bfe23604e07`.** The delivery directory is [`native-core/redistribution/b06c9a804503/`](../../native-core/redistribution/b06c9a804503/README.md). No merge, tag, Launcher release or Manager release is part of this work.
+
+| Item | SHA-256 |
+|---|---|
+| `awake-core-host.exe` | `a71b35e946ffef00bed4b1200c4796e7d16001dac8089481d0192035ae64124b` |
+| `awake-core-manager-v0.2.1-windows-x64.zip` | `0aea4ce7f3adcd7fd920d55c4b751623c5846be24331b2846e9624b026bc6792` |
+| Helper `SHA256SUMS` | `aacd3d97188c45aa63b1f9a290d0c1d39a531c74e1126e7ef044e8c81116f752` |
+| `awake-core-source-b06c9a804503.zip` (107,287,939 bytes, two committed parts) | `543dcc404bdb9bb6f319dceb6e860b1040a7c55611fba5443d934444237503ee` |
+| `core.schema.json` (Git blob, unchanged since `31d0611a9`) | `26539795e4da1929fd6977032da25798de6f0274c8af7375740c5b403ba0e3e7` |
+
+## What changed (from real Revelations v1.4.2 findings)
+
+1. **Combined mod and datapack projects** (Incendium, Geophilic, Hearths, …). The shared Prism parser marks every project whose loaders include `datapack` as a datapack. `ModrinthService::project` now accepts such a project as a mod only when `project_type` is `mod` and a real mod loader is listed. The version must still list the workspace loader and ship a `.jar`. Datapack-only versions and projects stay refused.
+2. **Sinytra Connector.** `imports.prepare` admits a Fabric-only file in a Forge/NeoForge workspace under three conditions: the package identifies that exact file by SHA-512, the Minecraft version matches, and the resulting workspace enables Connector (`u58R1TMW`). Fabric API (`P7dR8mSH`) is satisfied by Forgified Fabric API (`Aqlf1Shp`). No other dependency of a bridged mod is installed automatically. `plans.prepare` never bridges. The bridge is stored in `policies.json` (`loaderBridge`), shown by `mods.list`, and re-checked on every plan: removing Connector is a `loader_bridge` conflict.
+3. **Provider pins, undeclared requirements and add-on version spreads** (EasyMagic/LegendaryTooltips/GoetyRevelation/fdbosses, SkeletonAIFix, Refined Storage add-ons). Provider `version_id` pins are upload-time snapshots, and the enforced requirement is in the JAR. Two examples, verified on public files:
+   - EasyMagic Forge 8.0.1 pins Puzzles Lib `v8.0.15`, while its `mods.toml` requires `puzzleslib [8.0.0,)`.
+   - SkeletonAIFix Forge's provider record requires Forge Config API Port, which has only Fabric builds for 1.20.1, and its `mods.toml` does not declare it.
+
+   The resolver now checks the whole graph, collects every `version_pin`, `missing_dependency`, `incompatible` and `loader_bridge` problem, and reads bounded loader metadata from the verified JARs (`ModMetadata.cpp`: `mods.toml`, `neoforge.mods.toml`, `fabric.mod.json`, `quilt.mod.json`, `MANIFEST.MF`; Maven ranges and SemVer predicates). It then fails with DEPENDENCY_CONFLICT before staging, with titles and structured `error.details`. Accepted `dependencyResolutions` are re-checked against the evidence, bound into `planDigest` and persisted per requester version. An installed dependency follows a pin only to a newer-published build; downgrades always go to review.
+4. **Protocol.** `manager.v0.2.1` adds `error.details`, the `dependencyResolutions` parameter, `plans.get.dependencyResolutions`, `mods.list.items[].loaderBridge`, and the capabilities `dependencies.resolutions.v1` and `loaders.connector.v1`. Older clients receive byte-identical shapes. `IntegrationServer` gained an optional second extension level; the Launcher 1.0 endpoint configures none. Details travel only in direct errors and `operations.get`, capped at 64 conflicts × 32 requesters and 192 KiB.
+5. **Reproducible outer checksums.** The `.sha256` sidecars are written as LF, and `publish_redistribution.py` writes the delivery directory as exact LF bytes. `native-core/redistribution/** -text export-ignore`, so a checkout reproduces the hashed bytes on any platform. The source archive no longer nests earlier deliveries. The `b00caf709789` manifest now records its committed bytes (5 entries corrected; ZIP, executable and parts unchanged). A fresh `core.autocrlf=true` clone verifies 8/8.
+6. `deploy.ps1` runs on Windows PowerShell 5.1 with byte-identical `qt.conf`.
+
+## Verification (this session, Windows 11, MSVC 19.44, Qt 6.11.2 official, vcpkg from the bundled ports)
+
+- Baseline before changes: CTest 10/10.
+- Final build `b06c9a804`: CTest **11/11 (419 s)**, including the new `DependencyResolutionTest` (12 cases).
+- `validate_contract.py`: 220 checks.
+- Packaged-helper IPC harness (`tests/core_integration.py --live --previous-schema <b00caf709 schema> --legacy-schema <Manager v0.1 schema>`) on the final package: **28/28 checks**. It includes 301-mod crash recovery, the live Fabric/Forge/CurseForge-config workflows, `manager.v0.2` replies validated against the previous schema, and a live five-blocker pack built from public Modrinth files: Connector beta.49, Forgified Fabric API, Mod Menu, Incendium, Puzzles Lib 8.1.33, Easy Magic 8.0.1, Skeleton AI Fix, Refined Storage 1.12.4 and RSInfinityBooster 1.0+41. Every conflict was reported at once with names and evidence (Puzzles Lib/Refined Storage `satisfied`, Forge Config API Port `not_declared`); after reviewed resolutions all 9 files were imported, verified and hash-identical.
+- Toolchain reconstruction: the joined `b00caf709789` source ZIP and its internal manifest verified; `git archive` of vcpkg `908da3a3` equals the bundled `vcpkg-source.tar`; Qt6Core/Qt6Network are byte-identical to the recorded DLLs. vcpkg used its prebuilt MSYS2 `pkgconf` tool rather than building the `pkgconf` port (build-only; recipe and source still bundled). Builds are not claimed reproducible.
+
+Not verified: the owner's actual 407-JAR pack (its files are not on this machine), Minecraft runtime/gameplay (including whether a given Fabric mod works under Connector), live authorized CurseForge, and large-collection UI performance.
+
 # Manager v0.2.0 final Native Core handoff
 
 Implementation **0.2.0**, wire protocol **2.0**, explicit opt-in **manager.v0.2**. Native code/source pin: `b00caf7097897ab60ad0aa247e4964ece667976c` on `feat/native-core-manager-020`. A later artifact/handoff commit only distributes the tested outputs. No merge, tag, Launcher release, stable-version change, or Manager release is part of this work.
