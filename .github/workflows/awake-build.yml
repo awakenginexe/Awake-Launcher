@@ -91,19 +91,22 @@ jobs:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
           AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
         run: |
-          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DCMAKE_CXX_FLAGS=/pathmap:$env:GITHUB_WORKSPACE=C:/src/AwakeLauncher" "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
+          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DCMAKE_CXX_FLAGS_INIT=/experimental:deterministic /pathmap:$env:GITHUB_WORKSPACE=C:/src/AwakeLauncher" "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $flags = (Select-String -Path build/CMakeCache.txt -Pattern '^CMAKE_CXX_FLAGS:STRING=').Line
+          if ($flags -notmatch '/EHsc' -or $flags -notmatch '/experimental:deterministic' -or $flags -notmatch '/pathmap:') { throw 'Release compiler flags must preserve exception support and path mapping.' }
       - name: Build
         run: cmake --build --preset windows_msvc --config Release --parallel 4
       - name: Verify application version and source identity
         run: |
           $expected = $env:AWAKE_RELEASE_TAG.Substring(1)
-          $version = (Get-Item build/awakelauncher.exe).VersionInfo
+          $version = (Get-Item build/Release/awakelauncher.exe).VersionInfo
           if ($version.FileVersion -ne "$expected.0" -or $version.ProductVersion -ne "$expected.0") { throw 'Executable version strings differ.' }
           foreach ($prefix in 'File', 'Product') {
             $numeric = @($version."${prefix}MajorPart", $version."${prefix}MinorPart", $version."${prefix}BuildPart", $version."${prefix}PrivatePart") -join '.'
             if ($numeric -ne "$expected.0") { throw 'Executable numeric version differs.' }
           }
-          $info = [Diagnostics.ProcessStartInfo]::new((Resolve-Path build/awakelauncher.exe).Path)
+          $info = [Diagnostics.ProcessStartInfo]::new((Resolve-Path build/Release/awakelauncher.exe).Path)
           $info.UseShellExecute = $false; $info.CreateNoWindow = $true
           $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
           $info.ArgumentList.Add('--version')
@@ -113,7 +116,7 @@ jobs:
           $output = $process.StandardOutput.ReadToEnd()
           if ($process.ExitCode -ne 0 -or $output.Trim().Split("`n")[0].Trim() -ne "AwakeLauncher $expected" -or !$output.Contains($env:GITHUB_SHA)) { throw 'Runtime version or commit differs.' }
           $process.Dispose()
-          $bytes = [IO.File]::ReadAllBytes((Resolve-Path build/awakelauncher.exe))
+          $bytes = [IO.File]::ReadAllBytes((Resolve-Path build/Release/awakelauncher.exe))
           $ascii = [Text.Encoding]::UTF8.GetString($bytes)
           $unicode = [Text.Encoding]::Unicode.GetString($bytes)
           foreach ($path in @($env:GITHUB_WORKSPACE, $env:GITHUB_WORKSPACE.Replace([IO.Path]::DirectorySeparatorChar, [char]'/'), '.codex')) {
@@ -157,7 +160,7 @@ jobs:
             choco install nsis --yes --no-progress
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
-          if ((Get-FileHash build/awakelauncher.exe).Hash -ne (Get-FileHash install/awakelauncher.exe).Hash) { throw 'Staged binary differs from the tested build.' }
+          if ((Get-FileHash build/Release/awakelauncher.exe).Hash -ne (Get-FileHash install/awakelauncher.exe).Hash) { throw 'Staged binary differs from the tested build.' }
           ./scripts/package-release-source.ps1 -Version $env:AWAKE_RELEASE_TAG.Substring(1) -Commit $env:GITHUB_SHA -PackageDir install -OutputDir dist
           ./scripts/test-update-handoff.ps1 -Makensis $nsis
           ./scripts/package-windows-setup.ps1 -PackageDir install -Version $env:AWAKE_RELEASE_TAG.Substring(1) -OutputDir dist -MakeNsis $nsis
