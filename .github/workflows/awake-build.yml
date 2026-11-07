@@ -125,6 +125,18 @@ jobs:
       - name: Test
         run: |
           $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          # IPC fixtures need inheritable private ACLs even on the runner's shared D: workspace.
+          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+          foreach ($path in @('build/tests/.validation', 'build/.validation/native-temp')) {
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+            $acl = [Security.AccessControl.DirectorySecurity]::new()
+            $acl.SetOwner($sid)
+            $acl.SetAccessRuleProtection($true, $false)
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+            $acl.AddAccessRule($rule)
+            Set-Acl -LiteralPath $path -AclObject $acl
+          }
+          $env:TEMP = $env:TMP = (Resolve-Path build/.validation/native-temp).Path
           ctest --preset windows_msvc --build-config Release
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm --prefix launcher/awake-web test
@@ -136,6 +148,7 @@ jobs:
           path: |
             build/Testing/Temporary/
             build/tests/AwakeWebShell-results.txt
+            build/tests/AwakeIntegration-results.txt
             build/.validation/repaint-*.png
           if-no-files-found: ignore
       - name: Package Windows x64 builds

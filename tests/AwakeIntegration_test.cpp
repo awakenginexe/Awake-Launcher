@@ -457,6 +457,9 @@ int main(int argc, char** argv)
     }
 #endif
     AwakeIntegrationTest test;
-    return QTest::qExec(&test, argc, argv);
+    auto testArgs = app.arguments();
+    if (!testArgs.contains("-o"))
+        testArgs << "-o" << "AwakeIntegration-results.txt,txt";
+    return QTest::qExec(&test, testArgs);
 }
 #include "AwakeIntegration_test.moc"
