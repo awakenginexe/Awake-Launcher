@@ -88,6 +88,20 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "CMAKE_PREFIX_PATH=$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64" >> $env:GITHUB_ENV
           "$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64/bin" >> $env:GITHUB_PATH
+      - name: Fetch pinned build tools through the GitHub API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $metadata = Get-Content cmake/vcpkg/scripts/vcpkg-tool-metadata.txt -Raw | ConvertFrom-StringData
+          $tag = $metadata.VCPKG_TOOL_RELEASE_TAG
+          gh release download $tag --repo microsoft/vcpkg-tool --pattern vcpkg.exe --dir cmake/vcpkg --clobber
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $digest = gh api "repos/microsoft/vcpkg-tool/releases/tags/$tag" --jq '.assets[] | select(.name=="vcpkg.exe") | .digest'
+          if ($LASTEXITCODE -or $digest -notmatch '^sha256:[0-9a-f]{64}$' -or (Get-FileHash cmake/vcpkg/vcpkg.exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest.Substring(7)) { throw 'vcpkg executable verification failed.' }
+          $tool = (Get-Content cmake/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools | Where-Object { $_.name -eq 'cmake' -and $_.os -eq 'windows' -and $_.arch -eq 'amd64' }
+          gh release download "v$($tool.version)" --repo Kitware/CMake --pattern $tool.archive --dir cmake/vcpkg/downloads --clobber
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ((Get-FileHash "cmake/vcpkg/downloads/$($tool.archive)" -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw 'Pinned CMake archive verification failed.' }
       - name: Configure with release services
         env:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
