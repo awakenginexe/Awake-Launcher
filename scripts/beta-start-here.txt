@@ -1,0 +1,26 @@
+Awake coordinated beta: Windows x64 installers and optional Portable ZIPs
+
+Use Launcher v3.1.0-beta.1 with Manager v0.2.0-beta.1.
+https://github.com/awakenginexe/Awake-Launcher/releases/tag/v3.1.0-beta.1
+https://github.com/awakenginexe/Awake-Modpack-Manager/releases/tag/v0.2.0-beta.1
+
+1. Download both Windows-x64-Setup.exe installers and verify them against SHA256SUMS.txt on each release page.
+2. Run the installers. They install or update the apps for your Windows user. Use separate folders/data locations if keeping a stable installation alongside the beta.
+3. Start Awake Modpack Manager. Its Native Core 0.2.1 helper is already bundled. Do not install a separate helper.
+4. If needed, open Settings > Launcher connection and select your beta Launcher installation folder.
+5. Create a Minecraft workspace, install some Modrinth mods, and finish Review & apply.
+6. Choose Open in Awake Launcher on the workspace card. For a one-time manual link, use Link Existing Manager Workspace and select the workspace path shown by Manager.
+7. Sign in to your authorized Microsoft account through Launcher if necessary, select the shared instance and click Play.
+8. Quit Minecraft normally before changing mods in Manager. Reopen the same linked instance to use those changes.
+
+There is ONE physical playable workspace, with no exported, imported or duplicated playable copy. Do not move linked workspace folders manually.
+
+Portable ZIP alternative: extract both ZIPs into their own writable folders. Run awakelauncher.exe from Launcher and Run-Manager-Beta.cmd from Manager. The Launcher portable marker and Manager script use separate beta data; installers use the normal app data locations.
+Windows 10/11 x64 is required. Manager's installer can fetch Microsoft Edge WebView2; the portable ZIP requires WebView2 already installed.
+
+The Launcher Actions build configures its approved Microsoft application ID and CurseForge API access from repository secrets. Manager's unchanged helper still disables CurseForge network access by default; a Manager Actions build does not inherit Launcher's key.
+
+These apps and the helper are unsigned beta software, not production-ready. Other loader/modpack combinations have not all received the shared-instance gameplay test. Read the known issues in both release notes.
+Report bugs with versions, Minecraft/loader versions, steps and error messages through GitHub Issues. Remove tokens, private logs, worlds and proprietary modpack data from attachments.
+https://github.com/awakenginexe/Awake-Launcher/issues
+https://github.com/awakenginexe/Awake-Modpack-Manager/issues
