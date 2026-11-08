@@ -111,6 +111,9 @@ class BaseInstance : public QObject {
     /// The instance's ID. The ID SHALL be determined by LAUNCHER internally. The ID IS guaranteed to
     /// be unique.
     QString id() const;
+    bool isManagerLinked() const { return !m_managerPhysicalId.isEmpty(); }
+    QString managerPhysicalId() const { return m_managerPhysicalId; }
+    void setManagerLinked(const QString& physicalId) { m_managerPhysicalId = physicalId; }
     QString uuid() const { return m_uuid; }
     void regenerateUuid();
 
@@ -297,6 +300,7 @@ class BaseInstance : public QObject {
 
    protected: /* data */
     QString m_rootDir;
+    QString m_managerPhysicalId;
     std::unique_ptr<SettingsObject> m_settings;
     // InstanceFlags m_flags;
     bool m_isRunning = false;

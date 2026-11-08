@@ -15,6 +15,9 @@
 #include <utility>
 
 #include "Application.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceOperationScope.h"
+#endif
 #include "FileSystem.h"
 
 #include "minecraft/mod/tasks/ResourceFolderLoadTask.h"
@@ -31,6 +34,13 @@
 
 ResourceFolderModel::ResourceFolderModel(const QDir& dir, MinecraftInstance* instance, bool isIndexed, bool createDir, QObject* parent)
     : QAbstractListModel(parent), m_dir(dir), m_instance(instance), m_watcher(this), m_isIndexed(isIndexed)
+    , m_resourceResolver([] {
+#ifdef Q_OS_WIN
+        // The idle parser outlives a launch; only its active work should inherit the lease.
+        Awake::Integration::InstanceOperationScope scope({});
+#endif
+        return ConcurrentTask();
+    }())
 {
     if (createDir) {
         FS::ensureFolderPathExists(m_dir.absolutePath());
@@ -102,6 +112,7 @@ bool ResourceFolderModel::stopWatching(const QStringList& paths)
 
 bool ResourceFolderModel::installResource(QString originalPath)
 {
+    if (m_instance && m_instance->isManagerLinked()) return false;
     // NOTE: fix for GH-1178: remove trailing slash to avoid issues with using the empty result of QFileInfo::fileName
     originalPath = FS::NormalizePath(originalPath);
     QFileInfo fileInfo(originalPath);
@@ -180,6 +191,7 @@ bool ResourceFolderModel::installResource(QString originalPath)
 
 void ResourceFolderModel::installResourceWithFlameMetadata(const QString& path, ModPlatform::IndexedVersion& vers)
 {
+    if (m_instance && m_instance->isManagerLinked()) return;
     auto install = [this, path] { installResource(path); };
     if (vers.addonId.isValid()) {
         ModPlatform::IndexedPack pack{
@@ -215,6 +227,7 @@ void ResourceFolderModel::installResourceWithFlameMetadata(const QString& path, 
 
 bool ResourceFolderModel::uninstallResource(const QString& fileName, bool preserveMetadata)
 {
+    if (m_instance && m_instance->isManagerLinked()) return false;
     for (auto& resource : m_resources) {
         auto resourceFileInfo = resource->fileinfo();
         auto resourceFileName = resource->fileinfo().fileName();
@@ -235,6 +248,7 @@ bool ResourceFolderModel::uninstallResource(const QString& fileName, bool preser
 
 bool ResourceFolderModel::deleteResources(const QModelIndexList& indexes)
 {
+    if (m_instance && m_instance->isManagerLinked()) return false;
     if (indexes.isEmpty()) {
         return true;
     }
@@ -255,6 +269,7 @@ bool ResourceFolderModel::deleteResources(const QModelIndexList& indexes)
 
 void ResourceFolderModel::deleteMetadata(const QModelIndexList& indexes)
 {
+    if (m_instance && m_instance->isManagerLinked()) return;
     if (indexes.isEmpty()) {
         return;
     }
@@ -273,6 +288,7 @@ void ResourceFolderModel::deleteMetadata(const QModelIndexList& indexes)
 
 bool ResourceFolderModel::setResourceEnabled(const QModelIndexList& indexes, EnableAction action)
 {
+    if (m_instance && m_instance->isManagerLinked()) return false;
     if (m_instance != nullptr && m_instance->isRunning()) {
         auto response =
             CustomMessageBox::selectable(nullptr, tr("Confirm toggle"),
@@ -440,7 +456,7 @@ Task* ResourceFolderModel::createUpdateTask()
 {
     auto indexDir2 = indexDir();
     auto* task = new ResourceFolderLoadTask(dir(), indexDir2, m_isIndexed, m_firstFolderLoad,
-                                            [this](const QFileInfo& file) { return createResource(file); });
+                                            [this](const QFileInfo& file) { return createResource(file); }, m_instance && m_instance->isManagerLinked());
     m_firstFolderLoad = false;
     return task;
 }
@@ -1039,6 +1055,7 @@ QList<Resource*> ResourceFolderModel::selectedResources(const QModelIndexList& i
 
 bool ResourceFolderModel::setUpdateLock(const QModelIndexList& indexes, EnableAction action)
 {
+    if (m_instance && m_instance->isManagerLinked()) return false;
     if (indexes.isEmpty()) {
         return true;
     }

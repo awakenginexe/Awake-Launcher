@@ -651,8 +651,13 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
         if (!APPLICATION->instances()->getInstanceById(id)) return fail(tr("This instance no longer exists."));
         setSelectedInstanceById(id);
         if (!m_selectedInstance || m_selectedInstance->id() != id) return fail(tr("The instance could not be selected."));
+        if (m_selectedInstance->isManagerLinked() && QStringList{"copy", "export", "delete", "edit", "manage"}.contains(action))
+            return fail(tr("Manage this workspace's mods and files in Awake Modpack Manager."));
     }
-    if (action == "launch") {
+    if (action == "linkManagerWorkspace") {
+        const auto path = QFileDialog::getExistingDirectory(this, tr("Link Existing Manager Workspace"));
+        if (!path.isEmpty() && !APPLICATION->linkManagerWorkspace(path)) return fail(tr("The workspace could not be linked."));
+    } else if (action == "launch") {
         if (m_selectedInstance->isRunning() || !m_selectedInstance->canLaunch()) return fail(tr("This instance cannot be launched right now."));
         ui->actionLaunchInstance->trigger();
     } else if (action == "create") {
@@ -1485,7 +1490,7 @@ bool MainWindow::instanceFromInstanceTask(InstanceTask* rawTask, QString* error)
 
 void MainWindow::on_actionCopyInstance_triggered()
 {
-    if (!m_selectedInstance)
+    if (!m_selectedInstance || m_selectedInstance->isManagerLinked())
         return;
 
     if (m_webMode) {
@@ -2715,6 +2720,12 @@ void MainWindow::setInstanceActionsEnabled(bool enabled)
     ui->actionDeleteInstance->setEnabled(enabled);
     ui->actionCopyInstance->setEnabled(enabled);
     ui->actionCreateInstanceShortcut->setEnabled(enabled);
+    if (enabled && m_selectedInstance->isManagerLinked()) {
+        ui->actionEditInstance->setEnabled(false);
+        ui->actionExportInstance->setEnabled(false);
+        ui->actionDeleteInstance->setEnabled(false);
+        ui->actionCopyInstance->setEnabled(false);
+    }
 }
 
 void MainWindow::refreshCurrentInstance()

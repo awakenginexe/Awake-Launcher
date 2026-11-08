@@ -204,6 +204,7 @@ class Application : public QApplication {
     static QString updaterBinaryName();
 
     static QUrl normalizeImportUrl(const QString& url);
+    bool linkManagerWorkspace(const QString& path);
 
    signals:
     void awakeUpdateStateChanged();
@@ -310,6 +311,7 @@ class Application : public QApplication {
     QString m_detectedOpenALPath;
     QString m_detectedSDLPath;
     QString m_instanceIdToLaunch;
+    QString m_managerWorkspaceToLink;
     QString m_serverToJoin;
     QString m_worldToJoin;
     QString m_profileToUse;

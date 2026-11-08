@@ -47,12 +47,14 @@ ResourceFolderLoadTask::ResourceFolderLoadTask(const QDir& resourceDir,
                                                const QDir& indexDir,
                                                bool isIndexed,
                                                bool cleanOrphan,
-                                               std::function<Resource*(const QFileInfo&)> createFunction)
+                                               std::function<Resource*(const QFileInfo&)> createFunction,
+                                               bool readOnly)
     : Task(false)
     , m_resource_dir(resourceDir)
     , m_index_dir(indexDir)
     , m_is_indexed(isIndexed)
-    , m_clean_orphan(cleanOrphan)
+    , m_clean_orphan(cleanOrphan && !readOnly)
+    , m_readOnly(readOnly)
     , m_create_func(std::move(createFunction))
     , m_result(new Result())
     , m_mainThread(thread())
@@ -77,7 +79,7 @@ void ResourceFolderLoadTask::executeTask()
             continue;
         }
         auto newFilePath = FS::getUniqueResourceName(filePath);
-        if (newFilePath != filePath) {
+        if (!m_readOnly && newFilePath != filePath) {
             FS::move(filePath, newFilePath);
             entry = QFileInfo(newFilePath);
         }

@@ -188,6 +188,7 @@ QVariantMap Bridge::snapshot()
         data.iconUrl = iconUrl(instance);
         data.pinned = pins.contains(data.id);
         data.canLaunch = instance->canLaunch();
+        data.managerLinked = instance->isManagerLinked();
         data.running = instance->isRunning();
         running = running || data.running;
         data.broken = instance->hasVersionBroken();
@@ -612,7 +613,7 @@ QVariantMap Bridge::updateInstancePack(const QString& id, const QString& version
 {
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving() || m_modCatalog->busy(id) ||
-        !instance || !instance->isManagedPack() || instance->isRunning() || !instance->canLaunch())
+        !instance || instance->isManagerLinked() || !instance->isManagedPack() || instance->isRunning() || !instance->canLaunch())
         return fail("updateInstancePack", tr("Stop the game and finish the current action before changing the pack version."));
     if (instance->settings()->get("AwakePackLinkRequired").toBool())
         return fail("updateInstancePack", tr("Link the installed pack release in Edit instance > Versions before updating."));
@@ -675,7 +676,7 @@ QVariantMap Bridge::linkInstancePack(const QString& requestId, const QString& id
 {
     auto* instance = APPLICATION->instances()->getInstanceById(id);
     if (!m_active || m_actionPending || m_modalActive || APPLICATION->instances()->isRemoving() || m_modCatalog->busy(id) ||
-        requestId.isEmpty() || requestId.size() > 64 || !instance || instance->isRunning() ||
+        requestId.isEmpty() || requestId.size() > 64 || !instance || instance->isManagerLinked() || instance->isRunning() ||
         (instance->isManagedPack() && !instance->settings()->get("AwakePackLinkRequired").toBool()))
         return {{"ok", false}, {"error", tr("Stop the game and select an unlinked instance before linking a pack.")}};
     QString error;

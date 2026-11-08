@@ -16,7 +16,7 @@ add_library(AwakeCore STATIC
     ${INTEGRATION}/Protocol.cpp ${INTEGRATION}/InstanceDiscovery.cpp
     ${INTEGRATION}/IntegrationServer.cpp ${INTEGRATION}/ProfileAccess.cpp
     ${INTEGRATION}/OperationStore.cpp ${INTEGRATION}/DurableIO.cpp
-    ${INTEGRATION}/InstanceAuthority.cpp ${INTEGRATION}/PhysicalInstanceLease.cpp
+    ${INTEGRATION}/InstanceAuthority.cpp ${INTEGRATION}/PhysicalInstanceLease.cpp ${INTEGRATION}/ManagerWorkspaceLink.cpp
     ${INTEGRATION}/GameProcessGroup.cpp ${INTEGRATION}/TransactionEngine.cpp)
 target_compile_features(AwakeCore PUBLIC cxx_std_23)
 target_include_directories(AwakeCore PUBLIC "${AWAKE_SOURCE_ROOT}/launcher")

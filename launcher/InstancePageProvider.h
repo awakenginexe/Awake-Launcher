@@ -28,6 +28,7 @@ class InstancePageProvider : protected QObject, public BasePageProvider {
     {
         QList<BasePage*> values;
         values.append(new LogPage(inst));
+        if (inst->isManagerLinked()) return values;
         values.append(new VersionPage(inst));
         values.append(ManagedPackPage::createPage(inst));
         auto modsPage = new ModFolderPage(inst, inst->loaderModList());

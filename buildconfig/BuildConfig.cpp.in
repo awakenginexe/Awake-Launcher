@@ -129,7 +129,7 @@ Config::Config()
 
 QString Config::versionString() const
 {
-    return QString("%1.%2.%3").arg(VERSION_MAJOR).arg(VERSION_MINOR).arg(VERSION_PATCH);
+    return QStringLiteral("@Launcher_VERSION_NAME@");
 }
 
 QString Config::printableVersionString() const

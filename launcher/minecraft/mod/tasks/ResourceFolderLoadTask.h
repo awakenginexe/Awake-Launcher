@@ -58,7 +58,8 @@ class ResourceFolderLoadTask : public Task {
                            const QDir& indexDir,
                            bool isIndexed,
                            bool cleanOrphan,
-                           std::function<Resource*(const QFileInfo&)> createFunction);
+                           std::function<Resource*(const QFileInfo&)> createFunction,
+                           bool readOnly = false);
 
     bool canAbort() const override { return true; }
     bool abort() override
@@ -76,6 +77,7 @@ class ResourceFolderLoadTask : public Task {
     QDir m_resource_dir, m_index_dir;
     bool m_is_indexed;
     bool m_clean_orphan;
+    bool m_readOnly;
     std::function<Resource*(const QFileInfo&)> m_create_func;
     ResultPtr m_result;
 

@@ -41,6 +41,11 @@
  */
 
 #include "Application.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/ManagerWorkspaceLink.h"
+#include "awake/integration/InstanceOperationScope.h"
+#include "awake/integration/PhysicalInstanceLease.h"
+#endif
 #include <QElapsedTimer>
 #include "awake/integration/Coordinator.h"
 #include "BuildConfig.h"
@@ -343,6 +348,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "o", "offline" }, "Launch offline, with given player name (only valid in combination with --launch)", "offline" },
           { "alive", "Write a small '" + g_liveCheckFile + "' file after the launcher starts" },
           { "show-window", "Show the main launcher window (useful in combination with --launch)" },
+          { "link-manager-workspace", "Link and select an existing Awake Modpack Manager workspace without copying files", "directory" },
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" } });
     // Has to be positional for some OS to handle that properly
@@ -354,6 +360,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     parser.process(arguments());
 
     m_instanceIdToLaunch = parser.value("launch");
+    m_managerWorkspaceToLink = parser.value("link-manager-workspace");
     m_serverToJoin = parser.value("server");
     m_worldToJoin = parser.value("world");
     m_profileToUse = parser.value("profile");
@@ -491,6 +498,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 ApplicationMessage activate;
                 activate.command = "activate";
                 sentMessage = m_peerInstance->sendMessage(activate.serialize(), timeout);
+                if (!m_managerWorkspaceToLink.isEmpty()) {
+                    ApplicationMessage link;
+                    link.command = "link-manager-workspace";
+                    link.args["path"] = m_managerWorkspaceToLink;
+                    sentMessage = m_peerInstance->sendMessage(link.serialize(), timeout);
+                }
 
                 if (!m_urlsToImport.isEmpty()) {
                     for (const auto& url : m_urlsToImport) {
@@ -1479,6 +1492,11 @@ void Application::performMainStartupAction()
         qDebug() << "<> Main window shown.";
     }
 
+    if (!m_managerWorkspaceToLink.isEmpty()) {
+        linkManagerWorkspace(m_managerWorkspaceToLink);
+        m_managerWorkspaceToLink.clear();
+    }
+
     // initialize the updater
     if (updaterEnabled()) {
         qDebug() << "Initializing updater";
@@ -1576,6 +1594,8 @@ void Application::messageReceived(const QByteArray& message)
 
     if (command == "activate") {
         showMainWindow();
+    } else if (command == "link-manager-workspace") {
+        linkManagerWorkspace(received.args["path"]);
     } else if (command == "import") {
         QString url = received.args["url"];
         if (url.isEmpty()) {
@@ -1656,6 +1676,17 @@ bool Application::openJsonEditor(const QString& filename)
     return DesktopServices::run(m_settings->get("JsonEditor").toString(), { file });
 }
 
+bool Application::linkManagerWorkspace(const QString& path)
+{
+    auto* window = showMainWindow();
+    QString error;
+    if (!instances()->linkManagerWorkspace(path, &error)) {
+        CustomMessageBox::selectable(window, tr("Cannot link workspace"), error, QMessageBox::Warning)->exec();
+        return false;
+    }
+    return true;
+}
+
 bool Application::launch(MinecraftInstance* instance,
                          LaunchMode mode,
                          MinecraftTarget::Ptr targetToJoin,
@@ -1665,6 +1696,20 @@ bool Application::launch(MinecraftInstance* instance,
     if (m_updateRunning) {
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
     } else if (instance->canLaunch()) {
+#ifdef Q_OS_WIN
+        std::shared_ptr<Awake::Integration::PhysicalInstanceLease> lease;
+        if (instance->isManagerLinked()) {
+            QString error;
+            const auto root = instance->instanceRoot();
+            lease = Awake::Integration::acquireManagerWorkspace(root, instance->managerPhysicalId(), &error);
+            if (!lease || !lease->pinDirectory(".minecraft/mods", &error)) {
+                CustomMessageBox::selectable(m_mainWindow, tr("Workspace unavailable"),
+                    tr("Finish operations in Awake Modpack Manager and close any game using this workspace, then try again.\n\n") + error, QMessageBox::Warning)->exec();
+                return false;
+            }
+        }
+        Awake::Integration::InstanceOperationScope scope(lease);
+#endif
         QMutexLocker locker(&m_instanceExtrasMutex);
         auto& extras = m_instanceExtras[instance->id()];
         auto* window = extras.window;

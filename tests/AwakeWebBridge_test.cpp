@@ -9,6 +9,9 @@
 #include "awake/integration/InstanceDiscovery.h"
 #include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/InstanceOperationScope.h"
+#include "awake/integration/ProfileAccess.h"
+#include "awake/integration/PhysicalInstanceLease.h"
+#include "awake/integration/ManagerWorkspaceLink.h"
 #endif
 #include <QCloseEvent>
 #include <QDir>
@@ -599,6 +602,63 @@ version="fixture-version"
         const auto capeResponse = finished.first().at(1).toMap();
         QVERIFY2(capeResponse.value("ok").toBool(), qPrintable(capeResponse.value("error").toString()));
         QVERIFY(capeResponse.value("capes").toList().first().toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
+    }
+    void managerWorkspaceLinksUseTheOriginalDirectoryAndKeepItsMetadata()
+    {
+        using namespace Awake::Integration;
+        QTemporaryDir profile; QVERIFY(profile.isValid());
+        const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const auto root = profile.path() + "/workspaces/" + id;
+        QVERIFY(createPrivateStorageDirectory(profile.path() + "/workspaces"));
+        QVERIFY(createPrivateStorageDirectory(root));
+        QVERIFY(createPrivateStorageDirectory(profile.path() + "/catalog"));
+        const auto physical = physicalIdentityV2(root);
+        QVERIFY(InstanceAuthority::enroll(root, physical, profile.path() + "/ownership", physicalIdentityV2(profile.path()), id));
+        const QByteArray config("InstanceType=OneSix\nname=Manager link fixture\nuuid=" + id.toUtf8() + "\n");
+        const QByteArray pack(R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.20.1"},{"uid":"net.minecraftforge","version":"47.4.0"}]})");
+        QVERIFY(DurableIO::write(root + "/instance.cfg", config));
+        QVERIFY(DurableIO::write(root + "/mmc-pack.json", pack));
+        auto* instances = APPLICATION->instances(); QString error;
+        QVERIFY(!instances->linkManagerWorkspace(root, &error)); // creation not yet published
+        QJsonObject body{{"format", 1}, {"workspaceId", id}, {"physicalId", physical}};
+        auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+        QVERIFY(DurableIO::write(profile.path() + "/catalog/" + id + ".json", QJsonDocument(QJsonObject{{"body", body}, {"sha256", digest}}).toJson()));
+        QVERIFY2(instances->linkManagerWorkspace(root, &error), qPrintable(error));
+        auto* instance = instances->getInstanceById(id); QVERIFY(instance);
+        QCOMPARE(QFileInfo(instance->instanceRoot()).canonicalFilePath(), QFileInfo(root).canonicalFilePath());
+        QVERIFY(instance->isManagerLinked()); QVERIFY(!instance->canEdit()); QVERIFY(!instance->canExport());
+        instance->settings()->set("name", "Local launch preference");
+        QVERIFY(instance->getPackProfile()->reload(Net::Mode::Offline));
+        instance->saveNow();
+        QCOMPARE(DurableIO::hash(root + "/instance.cfg"), QString::fromLatin1(QCryptographicHash::hash(config, QCryptographicHash::Sha256).toHex()));
+        QCOMPARE(DurableIO::hash(root + "/mmc-pack.json"), QString::fromLatin1(QCryptographicHash::hash(pack, QCryptographicHash::Sha256).toHex()));
+        QVERIFY(!instances->removeInstance(id, &error));
+        auto lease = PhysicalInstanceLease::acquire(root, physical, profile.path() + "/ownership", &error);
+        QVERIFY(lease);
+        QVERIFY(!instances->linkManagerWorkspace(root, &error));
+        QVERIFY(DurableIO::write(root + "/.awake-integration/recovery.json", "{}"));
+        lease.reset();
+        QVERIFY(!acquireManagerWorkspace(root, physical, &error));
+        QVERIFY(DurableIO::remove(root + "/.awake-integration/recovery.json"));
+        QVERIFY(instances->linkManagerWorkspace(root, &error));
+        {
+            auto launchLease = acquireManagerWorkspace(root, physical, &error); QVERIFY(launchLease);
+            InstanceOperationScope scope(launchLease);
+            instance->loaderModList();
+            instance->coreModList();
+            instance->nilModList();
+        }
+        QVERIFY2(acquireManagerWorkspace(root, physical, &error), qPrintable(error));
+        InstanceList restarted(APPLICATION->settings(), instances->instanceDirs());
+        restarted.loadList();
+        QVERIFY(restarted.getInstanceById(id));
+        QCOMPARE(restarted.getInstanceById(id)->instanceRoot(), instance->instanceRoot());
+        InstanceList parentDiscovered(APPLICATION->settings(), {profile.path() + "/workspaces"});
+        parentDiscovered.loadList();
+        QVERIFY(parentDiscovered.getInstanceById(id));
+        QVERIFY(parentDiscovered.getInstanceById(id)->isManagerLinked());
+        QVERIFY(QFile::remove(QDir::current().filePath("manager-links/" + id + ".json")));
+        instances->loadList();
     }
     void externallyOwnedInstancesAreNotLoadedForNativeMutation()
     {

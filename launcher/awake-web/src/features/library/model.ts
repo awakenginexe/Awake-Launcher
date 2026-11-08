@@ -8,6 +8,7 @@ export type SortMode = 'Name' | 'LastLaunch' | 'TotalTimePlayed';
 export type Action =
   | 'create'
   | 'import'
+  | 'linkManagerWorkspace'
   | 'edit'
   | 'folder'
   | 'launch'
@@ -87,6 +88,7 @@ export interface LauncherSettings {
 }
 
 export interface Instance {
+  managerLinked?: boolean;
   id: string; name: string; group: string; minecraftVersion: string; loader: string; loaderVersion: string;
   iconUrl: string; pinned: boolean; canLaunch: boolean; running: boolean; broken: boolean;
   lastLaunch: number; lastTimePlayed: number | null; totalTimePlayed: number;
@@ -152,7 +154,7 @@ export function parseSnapshot(value: unknown): Snapshot {
     const instance = fields as unknown as Instance;
     if (!instance.id || ids.has(instance.id)) return fail();
     ids.add(instance.id);
-    return { ...instance, lastTimePlayed: instance.lastTimePlayed ?? null, iconUrl: isLocalImage(instance.iconUrl) ? instance.iconUrl : '' };
+    return { ...instance, managerLinked: fields.managerLinked === true, lastTimePlayed: instance.lastTimePlayed ?? null, iconUrl: isLocalImage(instance.iconUrl) ? instance.iconUrl : '' };
   });
 
   const accounts: AccountItem[] = Array.isArray(data.accounts)
