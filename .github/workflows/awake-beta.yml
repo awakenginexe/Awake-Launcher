@@ -117,7 +117,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Build and check affected suites
         run: |
-          cmake --build --preset windows_msvc --config Release --target AwakeLauncher NewLaunch NewLaunchLegacy JavaCheck Task ResourceFolderModel AwakeWebPolicy AwakeWebBridge --parallel 4
+          cmake --build --preset windows_msvc --config Release --target AwakeLauncher AwakeLauncher_filelink NewLaunch NewLaunchLegacy JavaCheck Task ResourceFolderModel AwakeWebPolicy AwakeWebBridge --parallel 4
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $env:PATH = "$pwd/build/vcpkg_installed/x64-windows/bin;$env:PATH"
           ../release-tools/scripts/run-private-tests.ps1 -BuildRoot "$pwd/build"
@@ -156,8 +156,11 @@ jobs:
           if (!(Test-Path $nsis)) { choco install nsis --yes --no-progress; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
           ../release-tools/scripts/package-windows-setup.ps1 -PackageDir install -Version $env:RELEASE_TAG.Substring(1) -OutputDir dist -MakeNsis $nsis
           ./scripts/test-windows-setup.ps1 -Installer "dist/Awake-Launcher-$env:RELEASE_TAG-Windows-x64-Setup.exe" -PackageDir install -TestDir "$env:RUNNER_TEMP/Awake-beta-setup-test"
-          $version = & install/awakelauncher.exe --version
-          if ($LASTEXITCODE -or !($version -join "`n").Contains($env:SOURCE_COMMIT) -or !($version -join "`n").Contains($env:RELEASE_TAG.Substring(1))) { throw 'Runtime source/version mismatch.' }
+          $versionLog = Join-Path $env:RUNNER_TEMP 'Awake-beta-version.txt'
+          $versionError = Join-Path $env:RUNNER_TEMP 'Awake-beta-version-error.txt'
+          $process = Start-Process -FilePath (Resolve-Path install/awakelauncher.exe).Path -ArgumentList '--version' -RedirectStandardOutput $versionLog -RedirectStandardError $versionError -PassThru -Wait -WindowStyle Hidden
+          $version = Get-Content -LiteralPath $versionLog -Raw
+          if ($process.ExitCode -or !$version.Contains($env:SOURCE_COMMIT) -or !$version.Contains($env:RELEASE_TAG.Substring(1))) { throw 'Runtime source/version mismatch.' }
           $config = Get-Content build/buildconfig/BuildConfig.cpp -Raw
           if ($config -notmatch 'FLAME_API_KEY\s*=\s*"[^"]+";') { throw 'Compiled CurseForge configuration is empty.' }
           New-Item install/portable.txt -ItemType File | Out-Null
