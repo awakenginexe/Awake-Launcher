@@ -98,7 +98,7 @@ def main():
     source_name = f'awake-core-source-{commit[:12]}.zip'
     source_zip = output / source_name
     provenance = dict(sourceRepository='https://github.com/awakenginexe/Awake-Launcher', sourceCommit=commit,
-                      sourceBranch='feat/native-core-manager-030', implementationVersion='0.4.0',
+                      sourceBranch='feat/native-core-manager-040', implementationVersion='0.4.0',
                       protocol={'major': 2, 'minor': 0}, extension='manager.v0.2.1', platform='windows-x64',
                       publicRelease=False, executableSha256=digest(exe), reproducibleBuildVerified=False)
     with tempfile.TemporaryDirectory(prefix='awake-source-') as scratch:
