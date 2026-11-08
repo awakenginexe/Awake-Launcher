@@ -28,6 +28,7 @@ jobs:
         working-directory: source
     env:
       VCPKG_MAX_CONCURRENCY: 4
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.awake-vcpkg-binaries
       RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +62,15 @@ jobs:
           $result = Invoke-RestMethod 'https://api.curseforge.com/v1/mods/search?gameId=432&searchFilter=jei&pageSize=1' -Headers @{ 'x-api-key' = $env:AWAKE_CURSEFORGE_API_KEY }
           if (!$result.data.Count) { throw 'Authorized CurseForge search returned no results.' }
           'Authorized CurseForge search passed; no credentials logged.'
+      - uses: actions/cache/restore@v4
+        id: dependency-cache
+        with:
+          path: |
+            source/cmake/vcpkg/downloads
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: awake-beta-vcpkg-${{ runner.os }}-${{ hashFiles('source/vcpkg*.json', 'source/cmake/vcpkg-triplets/**', 'source/cmake/vcpkg-ports/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            awake-beta-vcpkg-${{ runner.os }}-${{ hashFiles('source/vcpkg*.json', 'source/cmake/vcpkg-triplets/**', 'source/cmake/vcpkg-ports/**') }}-
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: amd64
@@ -76,16 +86,6 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: source/launcher/awake-web/package-lock.json
-      - name: Install Qt
-        run: |
-          python -m pip install 'git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e'
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          $config = Join-Path $env:RUNNER_TEMP 'aqt.ini'
-          @('[aqt]', 'concurrency = 1') | Set-Content $config -Encoding ascii
-          python -m aqt -c $config install-qt windows desktop 6.11.2 win64_msvc2022_64 --external "$env:ProgramFiles/7-Zip/7z.exe" -O "$env:RUNNER_TEMP/Qt" -m qtnetworkauth qtimageformats qtwebengine qtwebchannel qtpositioning qttasktree
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          "CMAKE_PREFIX_PATH=$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64" >> $env:GITHUB_ENV
-          "$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64/bin" >> $env:GITHUB_PATH
       - name: Fetch pinned build tools through the GitHub API
         env:
           GH_TOKEN: ${{ github.token }}
@@ -104,10 +104,35 @@ jobs:
             $tool = $tool[0]
             $url = [uri]$tool.url
             $repo = ($url.AbsolutePath.TrimStart('/') -split '/')[0..1] -join '/'
-            gh release download "v$($tool.version)" --repo $repo --pattern ([IO.Path]::GetFileName($url.AbsolutePath)) --output "cmake/vcpkg/downloads/$($tool.archive)" --clobber
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-            if ((Get-FileHash "cmake/vcpkg/downloads/$($tool.archive)" -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw "Pinned $name archive verification failed." }
+            $archive = "cmake/vcpkg/downloads/$($tool.archive)"
+            if (!(Test-Path -LiteralPath $archive) -or (Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) {
+              gh release download "v$($tool.version)" --repo $repo --pattern ([IO.Path]::GetFileName($url.AbsolutePath)) --output $archive --clobber
+              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            }
+            if ((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw "Pinned $name archive verification failed." }
           }
+      - name: Download dependencies before installing Qt
+        timeout-minutes: 5
+        run: |
+          ../release-tools/scripts/test-vcpkg-github-archive.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pwsh = (Get-Command pwsh.exe).Source
+          $script = (Resolve-Path ../release-tools/scripts/download-vcpkg-github-archive.ps1).Path
+          $env:X_VCPKG_ASSET_SOURCES = "x-script,`"$pwsh`" -NoProfile -NonInteractive -File `"$script`" {url} {sha512} {dst}"
+          "X_VCPKG_ASSET_SOURCES=$env:X_VCPKG_ASSET_SOURCES" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+          ./cmake/vcpkg/vcpkg.exe install --triplet x64-windows --only-downloads "--x-install-root=$pwd/build/vcpkg_installed"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Install Qt
+        run: |
+          python -m pip install 'git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $config = Join-Path $env:RUNNER_TEMP 'aqt.ini'
+          @('[aqt]', 'concurrency = 1') | Set-Content $config -Encoding ascii
+          python -m aqt -c $config install-qt windows desktop 6.11.2 win64_msvc2022_64 --external "$env:ProgramFiles/7-Zip/7z.exe" -O "$env:RUNNER_TEMP/Qt" -m qtnetworkauth qtimageformats qtwebengine qtwebchannel qtpositioning qttasktree
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "CMAKE_PREFIX_PATH=$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64" >> $env:GITHUB_ENV
+          "$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64/bin" >> $env:GITHUB_PATH
       - name: Configure with release services
         env:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
@@ -115,6 +140,13 @@ jobs:
         run: |
           cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/cache/save@v4
+        if: ${{ !cancelled() && steps.dependency-cache.outcome == 'success' }}
+        with:
+          path: |
+            source/cmake/vcpkg/downloads
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
       - name: Build and check affected suites
         run: |
           cmake --build --preset windows_msvc --config Release --target AwakeLauncher AwakeLauncher_filelink NewLaunch NewLaunchLegacy JavaCheck Task ResourceFolderModel AwakeWebPolicy AwakeWebBridge --parallel 4
