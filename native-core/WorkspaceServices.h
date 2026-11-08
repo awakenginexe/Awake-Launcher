@@ -19,6 +19,9 @@ public:
     QJsonObject inspectImport(const QJsonObject& request);
     void prepareImport(const QString& id, const QJsonObject& request);
     void apply(const QString& id, const QJsonObject& request);
+    void remove(const QString& id, const QJsonObject& request);
+    QJsonObject rename(const QJsonObject& request);
+    void sweepDeleted();
     void recover(const QString& id);
     void startupRecovery();
     QJsonObject list(const QJsonObject& params);
@@ -42,6 +45,7 @@ private:
     QString root(const QJsonObject& record) const;
     std::shared_ptr<Awake::Integration::PhysicalInstanceLease> acquire(const QJsonObject& record) const;
     QJsonArray scan(const QJsonObject& record) const;
+    void finishDelete(const QString& workspaceId);
     QJsonObject policies(const QJsonObject& record) const;
 };
 }

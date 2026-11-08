@@ -1,0 +1,110 @@
+name: Native Core package
+
+# Builds the Modpack Manager helper from this exact commit with the recorded toolchain, packages it
+# with its corresponding source, and commits the delivery next to the source. The Manager pins that
+# commit. Nothing is released or tagged here.
+on:
+  push:
+    branches: ['feat/native-core-manager-*']
+    paths:
+      - 'native-core/**'
+      - '!native-core/redistribution/**'
+      - 'launcher/awake/integration/**'
+      - 'docs/modpack-manager/core.schema.json'
+      - '.github/workflows/native-core-package.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-core-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Recorded inputs from the previous delivery
+        working-directory: src
+        run: |
+          python native-core/redistribution/b06c9a804503/join_source.py D:/prior.zip
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -I -c "import zipfile; zipfile.ZipFile('D:/prior.zip').extractall('D:/b')"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $m = Get-Content native-core/source-dependencies.json -Raw | ConvertFrom-Json
+          git init D:/vcpkg
+          git -C D:/vcpkg config core.autocrlf false
+          git -C D:/vcpkg remote add origin https://github.com/microsoft/vcpkg.git
+          git -C D:/vcpkg fetch -q --depth 1 origin $m.vcpkgCommit
+          git -C D:/vcpkg checkout -q FETCH_HEAD
+          # package_release.py looks ports up by their registry tree.
+          New-Item -ItemType Directory D:/registry | Out-Null
+          foreach ($dep in $m.dependencies) { Copy-Item "D:/b/ports/$($dep.name)" "D:/registry/$($dep.portTree)" -Recurse }
+          foreach ($port in $m.buildPorts.PSObject.Properties) { Copy-Item "D:/b/ports/$($port.Name)" "D:/registry/$($port.Value)" -Recurse }
+      - name: Install Qt
+        run: |
+          python -m pip install 'git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          @('[aqt]', 'concurrency = 1') | Set-Content "$env:RUNNER_TEMP/aqt.ini" -Encoding ascii
+          python -m aqt -c "$env:RUNNER_TEMP/aqt.ini" install-qt windows desktop 6.11.2 win64_msvc2022_64 --external "$env:ProgramFiles/7-Zip/7z.exe" -O D:/qt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build dependencies from the recorded ports
+        working-directory: D:/b
+        run: |
+          & D:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force D:/vcpkg/downloads | Out-Null
+          Copy-Item D:/b/dependencies/* D:/vcpkg/downloads -Force
+          & D:/vcpkg/vcpkg.exe install --triplet x64-windows --overlay-ports=ports --overlay-triplets=triplets --disable-metrics
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build and test the helper
+        working-directory: src
+        run: |
+          cmake -S native-core -B D:/core -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=D:/qt/6.11.2/msvc2022_64;D:/b/vcpkg_installed/x64-windows" -DBUILD_TESTING=ON
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build D:/core --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:PATH = "D:/qt/6.11.2/msvc2022_64/bin;$env:PATH"
+          # The ownership suites need a non-administrator profile; they are run on developer machines.
+          ctest --test-dir D:/core --output-on-failure --timeout 900 -R '^(PackArchiveTest|CurseForgeServiceTest|LoaderServiceTest)$'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package and commit the delivery
+        working-directory: src
+        run: |
+          $commit = git rev-parse HEAD
+          $short = $commit.Substring(0,12)
+          ./native-core/deploy.ps1 -Executable D:/core/awake-core-host.exe -QtBin D:/qt/6.11.2/msvc2022_64/bin -DependencyPrefix D:/b/vcpkg_installed/x64-windows -Destination D:/pkg/core-host/windows-x64
+          $m = Get-Content native-core/source-dependencies.json -Raw | ConvertFrom-Json
+          python native-core/package_release.py --helper-dir D:/pkg/core-host/windows-x64 --build-dir D:/core --qt-prefix D:/qt/6.11.2/msvc2022_64 --qt-source "D:/b/dependencies/$($m.qt.archive)" --vcpkg-root D:/vcpkg --registry-ports D:/registry --downloads D:/b/dependencies --dependency-prefix D:/b/vcpkg_installed/x64-windows --triplet D:/b/triplets/x64-windows.cmake --tool-source "D:/b/dependencies/vcpkg-tool-$($m.vcpkgTool.commit).tar.gz" --output D:/out --source-commit $commit
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python native-core/publish_redistribution.py --package-output D:/out --destination "native-core/redistribution/$short"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "native-core/redistribution/$short"
+          git commit -m "chore(native-core): deliver helper built from $short [skip ci]"
+          git push origin "HEAD:$env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-Content "native-core/redistribution/$short/delivery.json" | Write-Output
+      - name: Publish the failing log tail
+        if: failure()
+        run: |
+          foreach ($f in Get-ChildItem D:/vcpkg/buildtrees -Recurse -Include *-err.log,*-out.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 3) {
+            $text = (Get-Content $f.FullName -Tail 12) -join ' | '
+            "::error title=$($f.Name)::$($text.Substring(0,[Math]::Min(900,$text.Length)))"
+          }

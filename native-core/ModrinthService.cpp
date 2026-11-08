@@ -16,6 +16,7 @@
 #include <QNetworkRequest>
 #include <QScopeGuard>
 #include <QTimer>
+#include <QUrlQuery>
 #include <QMutex>
 #include <QThread>
 #include <QRegularExpression>
@@ -42,11 +43,12 @@ ModrinthService::ModrinthService(std::shared_ptr<std::atomic_bool> cancel, Fetch
     : m_cancel(std::move(cancel)), m_fixture(std::move(fixture)) {}
 void ModrinthService::checkCancelled() const
 { if (m_cancel && m_cancel->load()) throw ServiceError{"CANCELLED", "The operation was cancelled."}; }
-QByteArray ModrinthService::transfer(const QUrl& url, qint64 limit, const QString& path)
+QByteArray ModrinthService::transfer(const QUrl& url, qint64 limit, const QString& path, const QByteArray& post)
 {
     checkCancelled();
     if (url.scheme() != "https" || !url.userInfo().isEmpty() || url.port(-1) != -1 || url.hasFragment() ||
-        !QStringList{"api.modrinth.com", "cdn.modrinth.com", "meta.fabricmc.net", "piston-meta.mojang.com", "meta.prismlauncher.org"}.contains(url.host()))
+        !(QStringList{"api.modrinth.com", "cdn.modrinth.com", "meta.fabricmc.net", "piston-meta.mojang.com", "meta.prismlauncher.org"}.contains(url.host()) ||
+          (m_packAuthoritative && QStringList{"github.com", "raw.githubusercontent.com", "gitlab.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "edge.forgecdn.net", "mediafilez.forgecdn.net", "files.feed-the-beast.com", "cdn.feed-the-beast.com"}.contains(url.host()))))
         throw ServiceError{"PROVIDER_RESTRICTED", "Provider URL is outside the supported HTTPS services."};
     QFile output(path);
     if (!path.isEmpty() && !output.open(QIODevice::WriteOnly | QIODevice::NewOnly)) throw ServiceError{"IO_ERROR", "Private download target is unavailable."};
@@ -70,11 +72,12 @@ QByteArray ModrinthService::transfer(const QUrl& url, qint64 limit, const QStrin
     }
     QNetworkAccessManager network;
     QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "Awake-Core/0.1 (+https://github.com/awakenginexe/Awake-Launcher)");
+    request.setRawHeader("User-Agent", "Awake-Core/0.3 (+https://github.com/awakenginexe/Awake-Launcher)");
     request.setRawHeader("Accept", path.isEmpty() ? "application/json" : "application/octet-stream");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(30000);
-    auto* reply = network.get(request);
+    if (!post.isEmpty()) request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto* reply = post.isEmpty() ? network.get(request) : network.post(request, post);
     QEventLoop loop; QTimer poll, timeout; poll.setInterval(50); timeout.setSingleShot(true); timeout.start(180000);
     QByteArray bytes; qint64 received = 0; bool ioFailed = false, tooLarge = false, timedOut = false;
     const auto consume = [&] {
@@ -89,6 +92,12 @@ QByteArray ModrinthService::transfer(const QUrl& url, qint64 limit, const QStrin
     QObject::connect(&timeout, &QTimer::timeout, &loop, [&] { timedOut = true; reply->abort(); });
     poll.start(); loop.exec(); consume(); checkCancelled();
     const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (m_packAuthoritative && QList<int>{301, 302, 303, 307, 308}.contains(status) && m_redirects < 4) {
+        const auto next = url.resolved(reply->header(QNetworkRequest::LocationHeader).toUrl());
+        output.close(); if (!path.isEmpty()) QFile::remove(path);
+        ++m_redirects; auto restore = qScopeGuard([&] { --m_redirects; });
+        auto bytes = transfer(next, limit, path); success = true; return bytes;
+    }
     if (status == 429) throw ServiceError{"RATE_LIMITED", "Modrinth rate limit reached; retry later.", true};
     if (status == 403 || status == 451) throw ServiceError{"PROVIDER_RESTRICTED", "Provider denied this request."};
     if (ioFailed) throw ServiceError{"IO_ERROR", "Download staging write failed."};
@@ -98,8 +107,31 @@ QByteArray ModrinthService::transfer(const QUrl& url, qint64 limit, const QStrin
     if (!path.isEmpty() && !output.flush()) throw ServiceError{"IO_ERROR", "Staging flush failed."};
     success = true; return bytes;
 }
+QHash<QString, QJsonObject> ModrinthService::primeByHashes(const QStringList& sha512)
+{
+    QHash<QString, QJsonObject> out;
+    for (int start = 0; start < sha512.size(); start += 500) {
+        checkCancelled();
+        QJsonDocument body(QJsonObject{{"hashes", QJsonArray::fromStringList(sha512.mid(start, 500))}, {"algorithm", "sha512"}});
+        QJsonParseError error; const auto doc = QJsonDocument::fromJson(transfer(QUrl(QString(api) + "/version_files"), jsonLimit, {}, body.toJson(QJsonDocument::Compact)), &error);
+        if (error.error != QJsonParseError::NoError || !doc.isObject()) bad("Provider returned invalid JSON.");
+        const auto rows = doc.object();
+        for (auto it = rows.begin(); it != rows.end(); ++it) { out[it.key()] = it.value().toObject(); m_primed[QString(api) + "/version/" + it.value().toObject()["id"].toString()] = QJsonDocument(it.value().toObject()); }
+    }
+    return out;
+}
+void ModrinthService::primeProjects(const QStringList& ids)
+{
+    for (int start = 0; start < ids.size(); start += 200) {
+        checkCancelled(); QUrl url(QString(api) + "/projects"); QUrlQuery query;
+        query.addQueryItem("ids", QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(ids.mid(start, 200))).toJson(QJsonDocument::Compact))); url.setQuery(query);
+        const auto rows = json(url).array();
+        for (const auto& row : rows) m_primed[QString(api) + "/project/" + row.toObject()["id"].toString()] = QJsonDocument(row.toObject());
+    }
+}
 QJsonDocument ModrinthService::json(const QUrl& url)
 {
+    if (const auto it = m_primed.constFind(url.toString()); it != m_primed.constEnd()) return *it;
     QJsonParseError error; const auto doc = QJsonDocument::fromJson(transfer(url, jsonLimit), &error);
     if (error.error != QJsonParseError::NoError || doc.isNull()) bad("Provider returned invalid JSON.");
     return doc;
@@ -173,7 +205,7 @@ QJsonObject ModrinthService::search(const QJsonObject& params)
         if (!Modrinth::loadIndexedPack(pack, value.toObject())) bad("Modrinth project metadata is invalid.");
         const auto object = value.toObject();
         projects.append(QJsonObject{{"projectId", pack.addonId.toString()}, {"slug", pack.slug}, {"title", pack.name}, {"description", pack.description},
-            {"iconUrl", pack.logoUrl.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(pack.logoUrl)}, {"gameVersions", object["versions"].toArray()},
+            {"iconUrl", pack.logoUrl.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(pack.logoUrl)}, {"gameVersions", [&] { const auto all = object["versions"].toArray(); QJsonArray newest; for (qsizetype i = qMax(qsizetype(0), all.size() - 512); i < all.size(); ++i) newest.append(all[i]); return newest; }()},
             {"loaders", QJsonArray::fromStringList([&] { QStringList list; for (const auto& c : object["categories"].toArray())
                 if (QStringList{"fabric", "forge", "neoforge", "quilt"}.contains(c.toString())) list.append(c.toString()); return list; }())}});
     }
@@ -184,9 +216,8 @@ ResolvedVersion ModrinthService::parseVersion(const QJsonObject& raw, const QStr
 {
     QString bridge;
     if (!compatible(raw, minecraft, loader)) {
-        if (!allowBridge || !bridgeable(raw, minecraft, loader))
-            throw ServiceError{"DEPENDENCY_CONFLICT", "Selected version does not support this Minecraft version and loader."};
-        bridge = "sinytra-connector";
+        if (allowBridge && bridgeable(raw, minecraft, loader)) bridge = "sinytra-connector";
+        else if (!m_packAuthoritative) throw ServiceError{"DEPENDENCY_CONFLICT", "Selected version does not support this Minecraft version and loader."};
     }
     auto native = Modrinth::loadIndexedPackVersion(raw);
     if (!native || native->fileName.isEmpty()) bad("Modrinth version metadata is invalid.");

@@ -800,7 +800,8 @@
         "kind": {
           "enum": [
             "workspace-create",
-            "modpack-change"
+            "modpack-change",
+            "workspace-delete"
           ]
         },
         "state": {
@@ -1049,6 +1050,15 @@
           "type": "boolean"
         },
         "loaders.connector.v1": {
+          "type": "boolean"
+        },
+        "workspaces.delete": {
+          "type": "boolean"
+        },
+        "workspaces.rename": {
+          "type": "boolean"
+        },
+        "imports.packAuthoritative.v1": {
           "type": "boolean"
         }
       },
@@ -3164,6 +3174,20 @@
             "$ref": "#/$defs/dependencyResolution"
           },
           "maxItems": 256
+        },
+        "packAuthoritative": {
+          "type": "boolean"
+        },
+        "removeInventoryIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "maxItems": 10000
+        },
+        "allowLoaderUpdate": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -3746,6 +3770,60 @@
         "requestedBy"
       ],
       "additionalProperties": false
+    },
+    "workspaces.delete.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "physicalId"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.delete.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "workspaces.rename.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "physicalId",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.rename.result": {
+      "type": "object",
+      "properties": {
+        "workspace": {
+          "$ref": "#/$defs/workspace"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "additionalProperties": false
     }
   },
   "x-methods": {
@@ -3992,6 +4070,26 @@
       },
       "capability": "outbox.list",
       "extension": "manager.v0.2"
+    },
+    "workspaces.delete": {
+      "params": {
+        "$ref": "#/$defs/workspaces.delete.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.delete.result"
+      },
+      "capability": "workspaces.delete",
+      "extension": "manager.v0.2.1"
+    },
+    "workspaces.rename": {
+      "params": {
+        "$ref": "#/$defs/workspaces.rename.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.rename.result"
+      },
+      "capability": "workspaces.rename",
+      "extension": "manager.v0.2.1"
     }
   }
 }

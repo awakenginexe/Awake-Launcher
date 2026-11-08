@@ -12,6 +12,7 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QScopeGuard>
+#include <QSet>
 #include <QTimer>
 #include <QUrlQuery>
 #include <algorithm>
@@ -42,6 +43,11 @@ QUrl endpoint(const QString& path, const QUrlQuery& query = {}) {
 bool artifactHost(const QString& host) {
     return host == "edge.forgecdn.net" || host == "mediafilez.forgecdn.net";
 }
+// Project logos are served from the media CDN, never from the artifact hosts; they are only displayed.
+bool safeLogo(const QUrl& url) {
+    return url.isValid() && url.scheme() == "https" && url.userInfo().isEmpty() && url.port(-1) == -1 && !url.hasFragment()
+        && (url.host() == "media.forgecdn.net" || artifactHost(url.host()));
+}
 bool safeUrl(const QUrl& url, bool apiRequest) {
     return url.isValid() && url.scheme() == "https" && url.userInfo().isEmpty() && url.port(-1) == -1 && !url.hasFragment()
         && (apiRequest ? url.host() == "api.curseforge.com" : artifactHost(url.host()));
@@ -63,7 +69,7 @@ bool CurseForgeService::available() const {
 void CurseForgeService::checkCancelled() const {
     if (m_cancel && m_cancel->load()) throw ServiceError{"CANCELLED", "The operation was cancelled."};
 }
-QByteArray CurseForgeService::transfer(const QUrl& url, qint64 limit, const QString& path) {
+QByteArray CurseForgeService::transfer(const QUrl& url, qint64 limit, const QString& path, const QByteArray& post) {
     checkCancelled();
     if (!available()) throw ServiceError{"PROVIDER_UNAVAILABLE", "CurseForge requires an authorized local API key."};
     const bool apiRequest = url.host() == "api.curseforge.com";
@@ -79,12 +85,13 @@ QByteArray CurseForgeService::transfer(const QUrl& url, qint64 limit, const QStr
         success = true; return path.isEmpty() ? bytes : QByteArray{};
     }
     QNetworkAccessManager network; QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "Awake-Core/0.2 (+https://github.com/awakenginexe/Awake-Launcher)");
+    request.setRawHeader("User-Agent", "Awake-Core/0.3 (+https://github.com/awakenginexe/Awake-Launcher)");
     request.setRawHeader("Accept", apiRequest ? "application/json" : "application/octet-stream");
     if (apiRequest) request.setRawHeader("x-api-key", qgetenv("AWAKE_CORE_CURSEFORGE_API_KEY"));
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(30000);
-    auto* reply = network.get(request); QEventLoop loop; QTimer poll, timeout;
+    if (!post.isEmpty()) request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto* reply = post.isEmpty() ? network.get(request) : network.post(request, post); QEventLoop loop; QTimer poll, timeout;
     poll.setInterval(50); timeout.setSingleShot(true); timeout.start(180000);
     QByteArray bytes; qint64 received = 0; bool ioFailed = false, tooLarge = false, timedOut = false;
     const auto consume = [&] {
@@ -110,9 +117,52 @@ QByteArray CurseForgeService::transfer(const QUrl& url, qint64 limit, const QStr
     success = true; return bytes;
 }
 QJsonObject CurseForgeService::json(const QUrl& url) {
+    if (const auto it = m_primed.constFind(url.toString()); it != m_primed.constEnd()) return *it;
     QJsonParseError error; const auto doc = QJsonDocument::fromJson(transfer(url, jsonLimit), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject()) bad("CurseForge returned invalid JSON.");
     return doc.object();
+}
+QJsonObject CurseForgeService::anyProject(const QString& projectId) {
+    const auto raw = json(endpoint("/mods/" + checkedId(projectId)))["data"].toObject();
+    if (id(raw["id"]) != projectId || raw["gameId"].toInt() != 432 || !raw["name"].isString()) bad("CurseForge project metadata is invalid.");
+    return raw;
+}
+QList<CurseForgeService::PackEntry> CurseForgeService::resolvePack(const QJsonArray& projects) {
+    // Batched reads are only an optimization: anything they miss is read one at a time below.
+    if (!m_fixture) try {
+        const auto ids = [&](const char* key) { QJsonArray all; for (const auto& value : projects) all.append(value.toObject()[key].toString().toLongLong()); return all; };
+        const auto batch = [&](const QString& path, const char* field, const QJsonArray& all, const QString& prefix) {
+            for (int start = 0; start < all.size(); start += 500) {
+                checkCancelled(); QJsonArray chunk; for (int i = start; i < qMin(start + 500, int(all.size())); ++i) chunk.append(all[i]);
+                QJsonParseError error; const auto doc = QJsonDocument::fromJson(transfer(endpoint(path), jsonLimit, {}, QJsonDocument(QJsonObject{{field, chunk}}).toJson(QJsonDocument::Compact)), &error);
+                if (error.error != QJsonParseError::NoError || !doc.isObject()) bad("CurseForge returned invalid JSON.");
+                for (const auto& row : doc.object()["data"].toArray()) {
+                    const auto object = row.toObject();
+                    const auto key = path == "/mods" ? endpoint("/mods/" + id(object["id"])) : endpoint("/mods/" + id(object["modId"]) + "/files/" + id(object["id"]));
+                    m_primed[key.toString()] = QJsonObject{{"data", object}};
+                }
+            }
+        };
+        batch("/mods", "modIds", ids("projectId"), {}); batch("/mods/files", "fileIds", ids("versionId"), {});
+    } catch (const ServiceError& error) { if (error.code == "CANCELLED") throw; }
+    QList<PackEntry> out; QSet<QString> seen;
+    for (const auto& value : projects) {
+        checkCancelled(); const auto entry = value.toObject(); PackEntry row; row.projectId = checkedId(entry["projectId"].toString()); row.fileId = checkedId(entry["versionId"].toString());
+        if (seen.contains(row.projectId)) continue;
+        seen.insert(row.projectId);
+        const auto project = anyProject(row.projectId); row.name = project["name"].toString().left(256); const int kind = project["classId"].toInt();
+        row.mod = kind == 6; row.folder = kind == 6 ? "mods" : kind == 12 ? "resourcepacks" : kind == 6552 ? "shaderpacks" : kind == 6945 ? "datapacks" : QString{};
+        const auto file = json(endpoint("/mods/" + row.projectId + "/files/" + row.fileId))["data"].toObject();
+        row.fileName = file["fileName"].toString(); const QUrl url(file["downloadUrl"].toString());
+        row.blocked = project["allowModDistribution"] == false || file["isAvailable"] == false || !safeUrl(url, false) || row.folder.isEmpty();
+        QString sha1; for (const auto& hash : file["hashes"].toArray()) if (hash.toObject()["algo"].toInt() == 1) sha1 = hash.toObject()["value"].toString().toLower();
+        if (!row.blocked && !row.mod) {
+            if (sha1.isEmpty() || row.fileName.isEmpty() || QFileInfo(row.fileName).fileName() != row.fileName) row.blocked = true;
+            else row.artifact = {{"fileName", row.fileName}, {"size", QString::number(qint64(file["fileLength"].toDouble()))}, {"sha1", sha1}, {"url", url.toString()}};
+        }
+        out.append(row);
+    }
+    return out;
 }
 QJsonObject CurseForgeService::projectObject(const QString& projectId) {
     const auto raw = json(endpoint("/mods/" + checkedId(projectId)))["data"].toObject();
@@ -128,7 +178,7 @@ ModPlatform::IndexedPack CurseForgeService::project(const QString& projectId) {
     const auto website = QUrl(raw["links"].toObject()["websiteUrl"].toString());
     if (website.scheme() == "https" && website.userInfo().isEmpty() && website.port(-1) == -1 && !website.host().isEmpty()) pack.websiteUrl = website.toString();
     const auto icon = QUrl(raw["logo"].toObject()["thumbnailUrl"].toString());
-    if (safeUrl(icon, false)) pack.logoUrl = icon.toString();
+    if (safeLogo(icon)) pack.logoUrl = icon.toString();
     return pack;
 }
 QJsonObject CurseForgeService::search(const QJsonObject& params) {
@@ -138,6 +188,8 @@ QJsonObject CurseForgeService::search(const QJsonObject& params) {
     QUrlQuery query; query.addQueryItem("gameId", "432"); query.addQueryItem("classId", "6");
     query.addQueryItem("searchFilter", params["query"].toString()); query.addQueryItem("gameVersion", params["minecraftVersion"].toString());
     query.addQueryItem("modLoaderType", QString::number(loaderNumber(params["loader"].toString())));
+    // Without an explicit order CurseForge returns effectively arbitrary rows; popularity is what its own site leads with.
+    query.addQueryItem("sortField", "2"); query.addQueryItem("sortOrder", "desc");
     query.addQueryItem("index", QString::number(offset)); query.addQueryItem("pageSize", QString::number(count));
     const auto raw = json(endpoint("/mods/search", query)); validatePage(raw, offset, count); QJsonArray projects;
     for (const auto& value : raw["data"].toArray()) {
@@ -145,7 +197,7 @@ QJsonObject CurseForgeService::search(const QJsonObject& params) {
         if (obj["gameId"].toInt() != 432 || obj["classId"].toInt() != 6 || !obj["name"].isString() || !obj["slug"].isString()) bad("CurseForge search entry is invalid.");
         const auto icon = QUrl(obj["logo"].toObject()["thumbnailUrl"].toString());
         projects.append(QJsonObject{{"provider", "curseforge"}, {"projectId", projectId}, {"slug", obj["slug"]}, {"title", obj["name"]},
-            {"description", obj["summary"].toString()}, {"iconUrl", safeUrl(icon, false) ? QJsonValue(icon.toString()) : QJsonValue(QJsonValue::Null)},
+            {"description", obj["summary"].toString()}, {"iconUrl", safeLogo(icon) ? QJsonValue(icon.toString()) : QJsonValue(QJsonValue::Null)},
             {"gameVersions", QJsonArray{params["minecraftVersion"]}}, {"loaders", QJsonArray{params["loader"]}}});
     }
     const int total = raw["pagination"].toObject()["totalCount"].toInt(); const int next = offset + projects.size();
@@ -172,7 +224,7 @@ ResolvedVersion CurseForgeService::parseVersion(const QJsonObject& raw, const QS
         if (QStringList{"forge", "fabric", "quilt", "neoforge"}.contains(lower)) loaders.append(lower);
         else if (s.contains('.')) games.append(s);
     }
-    if (!gameFound || !loaderFound) throw ServiceError{"DEPENDENCY_CONFLICT", "CurseForge file does not support this Minecraft version and loader."};
+    if ((!gameFound || !loaderFound) && !m_packAuthoritative) throw ServiceError{"DEPENDENCY_CONFLICT", "CurseForge file does not support this Minecraft version and loader."};
     const auto size = raw["fileLength"].toDouble(-1);
     if (!raw["fileLength"].isDouble() || size <= 0 || size > artifactLimit || size != qint64(size)) bad("CurseForge artifact size is invalid.");
     QString sha1;

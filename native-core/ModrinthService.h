@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include <QHash>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QDateTime>
 #include <QUrl>
@@ -38,10 +40,22 @@ public:
     ResolvedVersion versionByHash(const QString& sha512, const QString& minecraft, const QString& loader, bool allowBridge = false);
     void download(const QJsonObject& artifact, const QString& destination);
     void checkCancelled() const;
+    // A published pack is taken as written: its files need not carry this workspace's provider tags,
+    // and its documented download hosts (with their redirects) are allowed. The hashes stay mandatory.
+    void setPackAuthoritative(bool value) { m_packAuthoritative = value; }
+    std::shared_ptr<std::atomic_bool> cancelToken() const { return m_cancel; }
+    // Test fixtures are not thread-safe: parallel downloads are for the real network only.
+    bool hasFixture() const { return bool(m_fixture); }
+    // Batched reads for large packs. Returns version objects by SHA-512; later single reads reuse them.
+    QHash<QString, QJsonObject> primeByHashes(const QStringList& sha512);
+    void primeProjects(const QStringList& ids);
 private:
     std::shared_ptr<std::atomic_bool> m_cancel;
     Fetch m_fixture;
-    QByteArray transfer(const QUrl& url, qint64 limit, const QString& file = {});
+    bool m_packAuthoritative = false;
+    int m_redirects = 0;
+    QHash<QString, QJsonDocument> m_primed;
+    QByteArray transfer(const QUrl& url, qint64 limit, const QString& file = {}, const QByteArray& post = {});
     QJsonDocument json(const QUrl& url);
     ResolvedVersion parseVersion(const QJsonObject& object, const QString& minecraft, const QString& loader, const QString& artifactSha512 = {}, bool allowBridge = false);
 };

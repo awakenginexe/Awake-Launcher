@@ -231,6 +231,21 @@ private slots:
         QCOMPARE(row["policy"].toObject()["excluded"],QJsonValue(false));
         QVERIFY_THROWS_EXCEPTION(ServiceError,f.prepare(QJsonArray{QJsonObject{{"action","policy"},{"inventoryId",inventoryId},{"pinnedVersion",QJsonValue(QJsonValue::Null)},{"excluded",false}}}));
     }
+    void deletionRemovesFilesAndCatalogAndRenameIsDurable()
+    {
+        Fixture f; f.apply(f.prepare(QJsonArray{QJsonObject{{"action","install"},{"projectId","p0"},{"versionId","p0-v1"}}}));
+        const auto renamed = f.services.rename({{"physicalId", f.workspace["physicalId"]}, {"name", "Renamed"}})["workspace"].toObject();
+        QCOMPARE(renamed["name"].toString(), QString("Renamed"));
+        QCOMPARE(f.services.list({{"limit", 10}})["workspaces"].toArray().first().toObject()["name"].toString(), QString("Renamed"));
+        const auto root = f.profile + "/workspaces/" + f.workspace["workspaceId"].toString();
+        QVERIFY(QFileInfo::exists(root + "/.minecraft/mods"));
+        const QJsonObject params{{"idempotencyKey", "delete"}, {"physicalId", f.workspace["physicalId"]}};
+        const auto id = f.begin("workspaces.delete", params); f.services.remove(id, params);
+        const auto done = f.services.operation(id);
+        QCOMPARE(done["state"].toString(), QString("completed")); QCOMPARE(done["kind"].toString(), QString("workspace-delete"));
+        QVERIFY(!QFileInfo::exists(root)); QVERIFY(!QFileInfo::exists(f.profile + "/deleted/" + f.workspace["workspaceId"].toString()));
+        QCOMPARE(f.services.list({{"limit", 10}})["workspaces"].toArray().size(), 0);
+    }
     void policyPinsAreReviewedAndCanBeCleared()
     {
         Fixture f; const auto installed=f.prepare(QJsonArray{QJsonObject{{"action","install"},{"projectId","p0"},{"versionId","p0-v1"}}}); f.apply(installed);

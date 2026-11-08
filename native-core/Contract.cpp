@@ -81,7 +81,10 @@ QJsonObject Contract::capabilities(bool writes, bool extensions, bool evidence) 
     for (const auto* capability : {"providers.project", "outbox.list", "outbox.read", "outbox.configs.v1"}) result[capability] = true;
     result["providers.curseforge.v1"] = CurseForgeService().available();
     result["inbox.discard.v1"] = writes; result["inbox.discard"] = writes;
-    if (evidence) { result["dependencies.resolutions.v1"] = writes; result["loaders.connector.v1"] = writes; }
+    if (evidence) {
+        result["dependencies.resolutions.v1"] = writes; result["loaders.connector.v1"] = writes;
+        result["workspaces.delete"] = writes; result["workspaces.rename"] = writes; result["imports.packAuthoritative.v1"] = writes;
+    }
     return result;
 }
 }

@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "DurableIO.h"
+#include <QHash>
+#include <QMutex>
+#include <atomic>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
@@ -284,6 +287,13 @@ bool copy(const QString& source, const QString& destination, QString* error)
         return false;
     }, error);
 }
+namespace {
+struct CachedHash { DWORD volume, indexHigh, indexLow, sizeHigh, sizeLow, writeHigh, writeLow; QString value; };
+std::atomic_bool hashCacheEnabled{false};
+QMutex hashCacheLock;
+QHash<QString, CachedHash> hashCache;
+}
+void setHashCacheEnabled(bool enabled) { hashCacheEnabled.store(enabled); }
 QString hash(const QString& path, QString* error, QCryptographicHash::Algorithm algorithm)
 {
     const auto name = native(path);
@@ -292,11 +302,29 @@ QString hash(const QString& path, QString* error, QCryptographicHash::Algorithm 
     const auto handle = read(path, error);
     if (handle == INVALID_HANDLE_VALUE) return {};
     auto close = qScopeGuard([&] { CloseHandle(handle); });
+    BY_HANDLE_FILE_INFORMATION info{};
+    const bool cacheable = hashCacheEnabled.load() && GetFileInformationByHandle(handle, &info);
+    const auto key = name + QLatin1Char('|') + QString::number(int(algorithm));
+    if (cacheable) {
+        QMutexLocker locker(&hashCacheLock);
+        const auto it = hashCache.constFind(key);
+        if (it != hashCache.constEnd() && it->volume == info.dwVolumeSerialNumber && it->indexHigh == info.nFileIndexHigh && it->indexLow == info.nFileIndexLow &&
+            it->sizeHigh == info.nFileSizeHigh && it->sizeLow == info.nFileSizeLow && it->writeHigh == info.ftLastWriteTime.dwHighDateTime && it->writeLow == info.ftLastWriteTime.dwLowDateTime)
+            return it->value;
+    }
     QCryptographicHash digest(algorithm);
     QByteArray buffer(1024 * 1024, Qt::Uninitialized);
     DWORD count = 0;
     while (ReadFile(handle, buffer.data(), DWORD(buffer.size()), &count, nullptr)) {
-        if (!count) return QString::fromLatin1(digest.result().toHex());
+        if (!count) {
+            const auto value = QString::fromLatin1(digest.result().toHex());
+            if (cacheable) {
+                QMutexLocker locker(&hashCacheLock);
+                if (hashCache.size() >= 200000) hashCache.clear();
+                hashCache.insert(key, {info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow, info.nFileSizeHigh, info.nFileSizeLow, info.ftLastWriteTime.dwHighDateTime, info.ftLastWriteTime.dwLowDateTime, value});
+            }
+            return value;
+        }
         digest.addData(QByteArrayView(buffer.constData(), count));
     }
     fail(error, "File hash read failed");

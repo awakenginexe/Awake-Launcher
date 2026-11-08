@@ -98,7 +98,7 @@ def main():
     source_name = f'awake-core-source-{commit[:12]}.zip'
     source_zip = output / source_name
     provenance = dict(sourceRepository='https://github.com/awakenginexe/Awake-Launcher', sourceCommit=commit,
-                      sourceBranch='feat/native-core-manager-020', implementationVersion='0.2.1',
+                      sourceBranch='feat/native-core-manager-030', implementationVersion='0.3.0',
                       protocol={'major': 2, 'minor': 0}, extension='manager.v0.2.1', platform='windows-x64',
                       publicRelease=False, executableSha256=digest(exe), reproducibleBuildVerified=False)
     with tempfile.TemporaryDirectory(prefix='awake-source-') as scratch:
@@ -162,7 +162,7 @@ def main():
         shutil.copyfile(root / 'native-core/REDISTRIBUTION.md', helper / 'REDISTRIBUTION.md')
         shutil.copyfile(root / 'native-core/REDISTRIBUTION.md', bundle / 'BUILD-AND-REDISTRIBUTE.md')
         shutil.copyfile(root / 'native-core/source-dependencies.json', bundle / 'source-dependencies.json')
-        dependency_manifest = dict(name='awake-native-core-dependencies', **{'version-string': '0.2.1'}, dependencies=[
+        dependency_manifest = dict(name='awake-native-core-dependencies', **{'version-string': '0.3.0'}, dependencies=[
             {'name':'libarchive', 'default-features':False, 'features':['bzip2','lz4','lzma','lzo','zstd']}, 'tomlplusplus', 'zlib'])
         (bundle / 'vcpkg.json').write_bytes(json_bytes(dependency_manifest))
         (bundle / 'SOURCE.json').write_bytes(json_bytes(provenance))
@@ -176,7 +176,7 @@ def main():
     (helper / 'SOURCE.json').write_bytes(json_bytes(provenance))
     package_files = sorted(path for path in helper.rglob('*') if path.is_file() and path.name != 'SHA256SUMS')
     (helper / 'SHA256SUMS').write_text(''.join(f'{digest(path)}  {path.relative_to(helper).as_posix()}\n' for path in package_files), encoding='utf-8', newline='\n')
-    package_zip = output / 'awake-core-manager-v0.2.1-windows-x64.zip'
+    package_zip = output / 'awake-core-manager-v0.3.0-windows-x64.zip'
     with zipfile.ZipFile(package_zip, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(path for path in helper.rglob('*') if path.is_file()):
             archive.write(path, 'core-host/windows-x64/' + path.relative_to(helper).as_posix())

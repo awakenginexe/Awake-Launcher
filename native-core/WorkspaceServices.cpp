@@ -172,7 +172,15 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
     QJsonArray result;
     for (const auto& file : QDir(m_profile + "/catalog").entryInfoList({"*.json"}, QDir::Files | QDir::Hidden | QDir::System, QDir::Name)) {
         const auto record = readRecord(file.absoluteFilePath());
-        workspaceRecord(record["physicalId"].toString()); auto lease = acquire(record); result.append(workspaceView(record));
+        workspaceRecord(record["physicalId"].toString());
+        // A project being changed or played stays listed; only its content revision is unknown until it is free.
+        try { auto lease = acquire(record); result.append(workspaceView(record)); }
+        catch (const ServiceError& error) {
+            if (error.code != "BUSY") throw;
+            QJsonObject busy; for (const auto* key : {"workspaceId", "physicalId", "name", "minecraftVersion", "loader"}) busy[key] = record[key];
+            busy["instanceRevision"] = sha(encode({{"busy", record["workspaceId"]}})); busy["ownership"] = "manager-owned";
+            busy["recoveryRequired"] = QFileInfo::exists(root(record) + "/.awake-integration/recovery.json"); result.append(busy);
+        }
     }
     return paged("workspaces", result, params);
 }
@@ -185,6 +193,51 @@ QJsonObject WorkspaceServices::inventory(const QJsonObject& params)
     auto result = paged("items", scan(record), params);
     if (engine.revision() != before) throw ServiceError{"STALE_INSTANCE", "Inventory changed while reading."};
     result["instanceRevision"] = before; return result;
+}
+QJsonObject WorkspaceServices::rename(const QJsonObject& request)
+{
+    auto record = workspaceRecord(request["physicalId"].toString()); auto lease = acquire(record);
+    const auto name = request["name"].toString().trimmed();
+    if (name.isEmpty() || name.size() > 80) throw ServiceError{"INVALID_REQUEST", "Project names must have 1 to 80 characters."};
+    if (QFileInfo::exists(root(record) + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Workspace recovery must finish first."};
+    // The catalog name is authoritative for the Manager; instance.cfg is what Awake Launcher shows for a linked workspace.
+    QFile file(root(record) + "/instance.cfg");
+    if (!file.open(QIODevice::ReadOnly)) throw ServiceError{"IO_ERROR", "Instance metadata cannot be read."};
+    auto lines = QString::fromUtf8(file.readAll()).split('\n'); file.close(); bool updated = false;
+    for (auto& line : lines) if (line.trimmed().startsWith("name=")) { line = "name=" + QString(name).replace('\n', ' ').replace('\r', ' ') + (line.endsWith('\r') ? "\r" : ""); updated = true; }
+    if (!updated) lines.prepend("name=" + name);
+    put(root(record) + "/instance.cfg", lines.join('\n').toUtf8());
+    record["name"] = name;
+    writeRecord(m_profile + "/catalog/" + record["workspaceId"].toString() + ".json", record);
+    return {{"workspace", workspaceView(record)}};
+}
+void WorkspaceServices::finishDelete(const QString& workspaceId)
+{
+    // Removing an already moved tree is safe to retry after a crash or a locked file.
+    const auto path = m_profile + "/deleted/" + workspaceId;
+    if (QFileInfo::exists(path)) QDir(path).removeRecursively();
+}
+void WorkspaceServices::sweepDeleted()
+{
+    for (const auto& entry : QDir(m_profile + "/deleted").entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System))
+        if (uuid(entry.fileName())) finishDelete(entry.fileName());
+}
+void WorkspaceServices::remove(const QString& id, const QJsonObject& request)
+{
+    requireResult(m_store.transition(id, "resolving"));
+    const auto record = workspaceRecord(request["physicalId"].toString()); auto lease = acquire(record);
+    const auto workspaceId = record["workspaceId"].toString(), from = root(record), to = m_profile + "/deleted/" + workspaceId;
+    if (QFileInfo::exists(from + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Workspace recovery must finish before it can be deleted."};
+    directory(m_profile + "/deleted");
+    writeRecord(operationDirectory(id) + "/delete.json", record);
+    // The rename is the commit point. It fails, changing nothing, while another program has files open.
+    if (!QDir().rename(from, to)) throw ServiceError{"BUSY", "Another program is using this project's files. Close it (and Minecraft) and try again.", true};
+    requireResult(m_store.note(id, {{"phase", "deleting"}, {"completed", "0"}, {"total", "1"}, {"unit", "steps"}}));
+    if (!QFile::remove(m_profile + "/catalog/" + workspaceId + ".json")) throw ServiceError{"IO_ERROR", "The project was removed but its catalog entry could not be."};
+    lease.reset();
+    finishDelete(workspaceId);
+    requireResult(m_store.transition(id, "verifying"));
+    requireResult(m_store.transition(id, "completed", {{"verified", true}}));
 }
 void WorkspaceServices::create(const QString& id, const QJsonObject& request)
 {
@@ -294,7 +347,7 @@ QJsonObject WorkspaceServices::operation(const QString& id) const
 {
     const auto response = m_store.get(id); requireResult(response); const auto stored = response["result"].toObject(); QJsonObject result;
     for (const auto* key : {"operationId", "state", "terminal", "createdAt", "updatedAt", "sequence", "progress", "error"}) if (stored.contains(key)) result[key] = stored[key];
-    result["kind"] = stored["method"] == "workspaces.create" ? "workspace-create" : "modpack-change";
+    result["kind"] = stored["method"] == "workspaces.create" ? "workspace-create" : stored["method"] == "workspaces.delete" ? "workspace-delete" : "modpack-change";
     result["cancellationRequested"] = stored["cancellationRequested"].toBool();
     const auto internal = stored["result"].toObject(); QJsonObject completion;
     for (const auto* key : {"workspace", "planDigest", "instanceRevision", "expectedInstanceRevision", "fileCount", "verified"})

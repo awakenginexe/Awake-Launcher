@@ -26,7 +26,7 @@ int main(int argc, char** argv)
     qunsetenv("AWAKE_CORE_CURSEFORGE_AUTHORIZED"); qunsetenv("AWAKE_CORE_CURSEFORGE_API_KEY");
     assert(!CurseForgeService().available());
     QJsonObject current = file();
-    bool restrictedProject = false, badPage = false; int filePages = 0;
+    bool restrictedProject = false, badPage = false; int filePages = 0; QString searchQuery;
     CurseForgeService service({}, [&](const QUrl& url, qint64) {
         if (url.host() != "api.curseforge.com") return QByteArray("abc");
         if (url.path().endsWith("/files/42")) return QJsonDocument(QJsonObject{{"data", current}}).toJson();
@@ -35,13 +35,18 @@ int main(int argc, char** argv)
             auto entry = current; if (index != 0) entry["id"] = 43;
             return QJsonDocument(QJsonObject{{"data", QJsonArray{entry}}, {"pagination", QJsonObject{{"index", badPage ? 999 : index}, {"pageSize", 50}, {"resultCount", 1}, {"totalCount", 2}}}}).toJson();
         }
-        const QJsonObject project{{"id", 12}, {"gameId", 432}, {"classId", 6}, {"name", "Example"}, {"slug", "example"}, {"summary", "desc"}, {"allowModDistribution", !restrictedProject}};
+        const QJsonObject project{{"id", 12}, {"gameId", 432}, {"classId", 6}, {"name", "Example"}, {"slug", "example"}, {"summary", "desc"}, {"allowModDistribution", !restrictedProject}, {"logo", QJsonObject{{"thumbnailUrl", "https://media.forgecdn.net/avatars/thumbnails/1/2/64/64/x.png"}}}};
+        if (url.path().endsWith("/search")) searchQuery = url.query();
         if (url.path().endsWith("/search")) return QJsonDocument(QJsonObject{{"data", QJsonArray{project}}, {"pagination", QJsonObject{{"index", 0}, {"pageSize", 50}, {"resultCount", 1}, {"totalCount", 1}}}}).toJson();
         return QJsonDocument(QJsonObject{{"data", project}}).toJson();
     });
     assert(service.available());
     auto p = QJsonObject{{"projectId", "12"}, {"minecraftVersion", "1.20.1"}, {"loader", "forge"}, {"offset", 0}, {"limit", 50}};
-    assert(service.search(p)["projects"].toArray().size() == 1);
+    const auto found = service.search(p)["projects"].toArray();
+    assert(found.size() == 1);
+    // Logos live on the media CDN; results are requested most popular first.
+    assert(found[0].toObject()["iconUrl"] == "https://media.forgecdn.net/avatars/thumbnails/1/2/64/64/x.png");
+    assert(searchQuery.contains("sortField=2") && searchQuery.contains("sortOrder=desc"));
     assert(service.project("12").addonId.toString() == "12");
     const auto details=service.lookup("12");
     assert(details["provider"] == "curseforge" && details["projectId"] == "12" && details["title"] == "Example");

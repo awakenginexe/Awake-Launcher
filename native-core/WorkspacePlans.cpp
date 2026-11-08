@@ -10,7 +10,11 @@
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMutex>
+#include <QRunnable>
 #include <QSet>
+#include <QThreadPool>
+#include <atomic>
 #include <optional>
 namespace Awake::Core {
 using namespace Awake::Integration;
@@ -37,6 +41,8 @@ QJsonObject page(const QString& key, const QJsonArray& all, const QJsonObject& p
 void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, const QJsonArray& overrides, const QJsonArray& importWarnings)
 {
     requireResult(m_store.transition(id, "resolving"));
+    const bool packAuthoritative = request["packAuthoritative"].toBool();
+    m_provider.setPackAuthoritative(packAuthoritative); m_curseforge.setPackAuthoritative(packAuthoritative);
     const auto record = workspaceRecord(request["physicalId"].toString()), loader = record["loader"].toObject();
     const auto game = record["minecraftVersion"].toString(), loaderId = loader["id"].toString(), directory = operationDirectory(id), instanceRoot = root(record);
     TransactionEngine engine(m_store, instanceRoot, mods);
@@ -138,7 +144,7 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
         choose(split.first == "curseforge" ? m_curseforge.version(split.second, versionId, game, loaderId) : m_provider.version(versionId, game, loaderId),
             split.first == "curseforge" ? m_curseforge.project(split.second) : m_provider.project(split.second));
     }
-    for (int cursor = 0; cursor < queue.size(); ++cursor) {
+    for (int cursor = 0; cursor < queue.size() && !packAuthoritative; ++cursor) {
         const auto project = queue[cursor]; const auto provider = providerId(selected[project].wire); const bool bridged = !selected[project].bridge.isEmpty();
         for (const auto& value : selected[project].wire["dependencies"].toArray()) {
             m_provider.checkCancelled(); const auto dep = value.toObject(); const auto type = dep["type"].toString();
@@ -213,7 +219,7 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
         pending[key].requests.append({requester, pinned});
     };
     const auto enabled = [&](const QString& key) { return desired.contains(key) && desired.value(key).toObject()["enabled"].toBool(true); };
-    for (auto it = desired.begin(); it != desired.end(); ++it) {
+    for (auto it = desired.begin(); it != desired.end() && !packAuthoritative; ++it) {
         const auto entry = it.value().toObject(); if (!entry["enabled"].toBool(true)) continue;
         const auto version = entry["version"].toObject(); const auto provider = providerId(version);
         const bool bridged = !entry["loaderBridge"].toString().isEmpty(); const auto persisted = entry["dependencyResolutions"].toObject();
@@ -449,6 +455,32 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
     }
     if (!selected.isEmpty()) requireResult(m_store.transition(id, "downloading"));
     int downloaded = 0;
+    // Fetch into the verified evidence store in parallel; the sequential staging below copies from it.
+    struct Fetch { QString provider; QJsonObject artifact; QString path; };
+    QList<Fetch> fetches;
+    for (auto it = selected.begin(); it != selected.end(); ++it) {
+        const auto old = byProject.value(it.key()); const auto wire = it.value().wire;
+        if (!old.isEmpty() && old["versionId"] == wire["versionId"]) continue;
+        const auto artifact = wire["files"].toArray().first().toObject(); const auto name = artifact["sha512"].toString().isEmpty() ? artifact["sha1"].toString() : artifact["sha512"].toString();
+        if (!name.isEmpty() && !QFileInfo::exists(directory + "/evidence/" + name)) fetches.append({providerId(wire), artifact, directory + "/evidence/" + name});
+    }
+    if (fetches.size() > 1 && !m_provider.hasFixture()) {
+        privateDirectory(directory + "/evidence");
+        QThreadPool pool; pool.setMaxThreadCount(8);
+        auto cancel = m_provider.cancelToken(); QMutex lock; std::optional<ServiceError> failure; std::atomic_int finished{0};
+        for (const auto& fetch : fetches) {
+            pool.start(QRunnable::create([&, fetch] {
+                { QMutexLocker guard(&lock); if (failure) return; }
+                try {
+                    if (fetch.provider == "curseforge") CurseForgeService(cancel).download(fetch.artifact, fetch.path);
+                    else ModrinthService(cancel).download(fetch.artifact, fetch.path);
+                    ++finished;
+                } catch (const ServiceError& error) { QMutexLocker guard(&lock); if (!failure) failure = error; }
+            }));
+        }
+        while (!pool.waitForDone(250)) requireResult(m_store.note(id, {{"phase", "downloading"}, {"completed", QString::number(finished.load())}, {"total", QString::number(fetches.size())}, {"unit", "files"}}));
+        if (failure) throw *failure;
+    }
     for (auto it = selected.begin(); it != selected.end(); ++it) {
         m_provider.checkCancelled(); const auto project = it.key(); auto entry = desired.value(project).toObject(); const auto old = byProject.value(project);
         const auto wire = it.value().wire;
@@ -516,6 +548,24 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
     }
     if (!trackedOverrides.isEmpty()) finalPolicies["overrides"] = trackedOverrides;
 
+    // A pack update may move to a newer build of the same loader; the workspace metadata moves with it.
+    if (request.contains("newLoaderVersion")) {
+        QFile pack(instanceRoot + "/mmc-pack.json");
+        if (!pack.open(QIODevice::ReadOnly)) throw ServiceError{"IO_ERROR", "Instance metadata cannot be read."};
+        auto root = QJsonDocument::fromJson(pack.readAll()).object(); pack.close();
+        const QMap<QString, QString> uids{{"forge", "net.minecraftforge"}, {"neoforge", "net.neoforged"}, {"fabric", "net.fabricmc.fabric-loader"}, {"quilt", "org.quiltmc.quilt-loader"}};
+        auto components = root["components"].toArray(); bool updated = false;
+        for (int i = 0; i < components.size(); ++i) {
+            auto component = components[i].toObject();
+            if (component["uid"] == uids.value(loaderId)) { component["version"] = request["newLoaderVersion"]; components[i] = component; updated = true; }
+        }
+        if (!updated) throw ServiceError{"POLICY_CONFLICT", "This project's loader could not be found in its metadata."};
+        root["components"] = components;
+        QString error; if (!DurableIO::write(directory + "/staging/mmc-pack", QJsonDocument(root).toJson(QJsonDocument::Compact), &error)) throw ServiceError{"IO_ERROR", error};
+        stage("mmc-pack.json", "mmc-pack");
+        auto updatedRecord = record; auto updatedLoader = loader; updatedLoader["version"] = request["newLoaderVersion"]; updatedRecord["loader"] = updatedLoader;
+        writeRecord(directory + "/loader-update.json", updatedRecord);
+    }
     if (finalPolicies != originalPolicies) {
         QString error; if (!DurableIO::write(directory + "/staging/policies", QJsonDocument(finalPolicies).toJson(QJsonDocument::Compact), &error)) throw ServiceError{"IO_ERROR", error};
         stage(".awake-integration/policies.json", "policies");
@@ -533,6 +583,7 @@ void WorkspaceServices::apply(const QString& id, const QJsonObject& request)
     // No native model is loaded for these roots; parse/hash all native metadata before durable completion.
     const auto rows = scan(record);
     for (const auto& value : rows) if (value.toObject()["metadataState"] == "modified") throw ServiceError{"RECOVERY_REQUIRED", "Applied metadata did not verify."};
+    if (QFileInfo::exists(operationDirectory(id) + "/loader-update.json")) writeRecord(m_profile + "/catalog/" + record["workspaceId"].toString() + ".json", readRecord(operationDirectory(id) + "/loader-update.json"));
     requireResult(engine.complete(id, lease));
 }
 QJsonObject WorkspaceServices::updates(const QJsonObject& params)
@@ -562,6 +613,7 @@ void WorkspaceServices::recover(const QString& id)
 {
     const auto saved = context(id); const auto request = saved["request"].toObject();
     if (saved["method"] == "workspaces.create") throw ServiceError{"RECOVERY_REQUIRED", "Interrupted workspace initialization requires inspection; no partial files were removed."};
+    if (saved["method"] == "workspaces.delete") throw ServiceError{"RECOVERY_REQUIRED", "Workspace deletion did not finish; delete it again."};
     const auto record = workspaceRecord(request["physicalId"].toString()); auto lease = acquire(record);
     TransactionEngine engine(m_store, root(record), mods); requireResult(engine.recover(id, lease));
 }
@@ -575,6 +627,18 @@ void WorkspaceServices::startupRecovery()
         }
         try {
             const auto saved = context(id); const auto request = saved["request"].toObject();
+            if (saved["method"] == "workspaces.delete") {
+                if (status["terminal"].toBool()) continue;
+                const auto path = operationDirectory(id) + "/delete.json";
+                if (QFileInfo::exists(path)) {
+                    const auto record = readRecord(path); const auto workspaceId = record["workspaceId"].toString();
+                    if (!QFileInfo::exists(root(record)) && QFileInfo::exists(m_profile + "/deleted/" + workspaceId)) {
+                        QFile::remove(m_profile + "/catalog/" + workspaceId + ".json"); finishDelete(workspaceId);
+                        requireResult(m_store.transition(id, "completed", {{"verified", true}})); continue;
+                    }
+                }
+                requireResult(m_store.transition(id, "failed", {}, {{"code", "IO_ERROR"}, {"message", "The Manager closed before this project was deleted. Nothing was removed; delete it again."}, {"retryable", false}})); continue;
+            }
             if (saved["method"] == "workspaces.create") {
                 if (status["terminal"].toBool()) continue;
                 const auto path = operationDirectory(id) + "/created.json";

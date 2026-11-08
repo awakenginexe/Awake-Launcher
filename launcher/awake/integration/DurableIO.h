@@ -17,5 +17,7 @@ bool restoreAccess(const QString& path, const FileState& expected, QString* erro
 bool write(const QString& path, const QByteArray& bytes, QString* error = nullptr);
 bool copy(const QString& source, const QString& destination, QString* error = nullptr);
 QString hash(const QString& path, QString* error = nullptr, QCryptographicHash::Algorithm algorithm = QCryptographicHash::Sha256);
+// Reuse hashes of files whose NTFS identity, size and write time are unchanged. Off by default.
+void setHashCacheEnabled(bool enabled);
 bool remove(const QString& path, QString* error = nullptr);
 }  // namespace Awake::Integration::DurableIO

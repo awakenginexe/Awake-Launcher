@@ -82,7 +82,8 @@ bool allowedPath(const QString& path, const QString& mods)
     if (!path.startsWith(mods + '/')) return false;
     const auto rest = path.mid(mods.size() + 1);
     if (rest.startsWith(".index/")) return leaf(rest.mid(7)) && rest.endsWith(".pw.toml");
-    return leaf(rest) && rest != ".index";
+    // Forge also loads mods from versioned subfolders (mods/1.12.2/...); each part was checked above.
+    return rest.contains('/') ? !rest.startsWith(".index/") : leaf(rest) && rest != ".index";
 }
 bool overridePaths(const QString& root, const QString& policy, const QString& mods, QSet<QString>& paths, QString* error)
 {
