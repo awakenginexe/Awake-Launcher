@@ -51,8 +51,12 @@ Page custom AwakeDataPage AwakeDataPageLeave
 !insertmacro MUI_LANGUAGE "TradChinese"
 !include "awake_install_languages.nsh"
 
-VIProductVersion "${AWAKE_VERSION}.0"
+!ifndef AWAKE_VERSION_NUMERIC
+!define AWAKE_VERSION_NUMERIC "${AWAKE_VERSION}.0"
+!endif
+VIProductVersion "${AWAKE_VERSION_NUMERIC}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "Awake Launcher"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "${AWAKE_VERSION}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "Awake Launcher Windows x64 Setup"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "${AWAKE_VERSION}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Awake Launcher Contributors"
