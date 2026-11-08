@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 param([Parameter(Mandatory)][string]$BuildRoot, [switch]$ProbeOnly, [switch]$Worker)
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot/prepare-private-test-storage.ps1" -BuildRoot $BuildRoot
 $pwsh = (Get-Command pwsh.exe).Source
 if ($Worker) {
     try {
+        . "$PSScriptRoot/prepare-private-test-storage.ps1" -BuildRoot $BuildRoot
         $env:AWAKE_CI_CHILD_PROBE = Join-Path $env:TEMP "child-owner-$([guid]::NewGuid()).txt"
         $owner = & $pwsh -NoProfile -NonInteractive -Command '[IO.File]::WriteAllText($env:AWAKE_CI_CHILD_PROBE,"fixture"); (Get-Acl -LiteralPath $env:AWAKE_CI_CHILD_PROBE).GetOwner([Security.Principal.SecurityIdentifier]).Value'
         $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -20,17 +20,40 @@ if ($Worker) {
     }
     return
 }
+$state = Join-Path $env:RUNNER_TEMP 'AwakePrivateTests'
+$credentialFile = Join-Path $state 'credential.xml'
+if (!(Test-Path -LiteralPath $credentialFile)) {
+    if (Get-LocalUser -Name AwakeBetaTests -ErrorAction SilentlyContinue) { throw 'Disposable test account already exists without its credential record.' }
+    New-Item -ItemType Directory -Path $state -Force | Out-Null
+    $acl = [Security.AccessControl.DirectorySecurity]::new()
+    $runnerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $acl.SetOwner($runnerSid)
+    $acl.SetAccessRuleProtection($true,$false)
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($runnerSid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'))
+    Set-Acl -LiteralPath $state -AclObject $acl
+    $password = ConvertTo-SecureString ([guid]::NewGuid().ToString('N')+'aA1!') -AsPlainText -Force
+    $user = New-LocalUser -Name AwakeBetaTests -Password $password
+    Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $user.Name
+    [pscredential]::new("$env:COMPUTERNAME\AwakeBetaTests",$password) | Export-Clixml -LiteralPath $credentialFile
+}
+$credential = Import-Clixml -LiteralPath $credentialFile
+$testSid = (Get-LocalUser -Name AwakeBetaTests).SID
+foreach ($directory in @($BuildRoot, (Split-Path $PSScriptRoot -Parent), $env:CMAKE_PREFIX_PATH) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }) {
+    $acl = Get-Acl -LiteralPath $directory
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($testSid,'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow'))
+    Set-Acl -LiteralPath $directory -AclObject $acl
+}
+. "$PSScriptRoot/prepare-private-test-storage.ps1" -BuildRoot $BuildRoot -OwnerSid $testSid.Value
 $name = "standard-user-$([guid]::NewGuid())"
 $env:AWAKE_CI_RESULT = Join-Path $env:TEMP "$name.json"
 $env:AWAKE_CI_LOG = Join-Path $env:TEMP "$name.log"
 $env:AWAKE_CI_PROBE_ONLY = if ($ProbeOnly) { '1' } else { '0' }
-# Use Windows' Basic User token so file ownership matches a normal desktop session, including child processes.
-$command = '"{0}" -NoProfile -NonInteractive -File "{1}" -BuildRoot "{2}" -Worker' -f $pwsh,$PSCommandPath,([IO.Path]::GetFullPath($BuildRoot))
-& "$env:WINDIR/System32/runas.exe" /trustlevel:0x20000 $command
-if ($LASTEXITCODE) { throw "Basic User process could not start: $LASTEXITCODE" }
+# The disposable runner account has no Administrators membership; product ownership checks remain enabled.
+$arguments = '-NoProfile -NonInteractive -File "{0}" -BuildRoot "{1}" -Worker' -f $PSCommandPath,([IO.Path]::GetFullPath($BuildRoot))
+$process = Start-Process -FilePath $pwsh -ArgumentList $arguments -Credential $credential -LoadUserProfile -WorkingDirectory ([IO.Path]::GetFullPath($BuildRoot)) -PassThru -WindowStyle Hidden
 $deadline = [DateTime]::UtcNow.AddSeconds($(if ($ProbeOnly) { 20 } else { 180 }))
 while (!(Test-Path -LiteralPath $env:AWAKE_CI_RESULT) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
-if (!(Test-Path -LiteralPath $env:AWAKE_CI_RESULT)) { throw 'Basic User test process did not return a result.' }
+if (!(Test-Path -LiteralPath $env:AWAKE_CI_RESULT)) { throw "Standard-user test process did not return a result (exited: $($process.HasExited))." }
 $result = Get-Content -LiteralPath $env:AWAKE_CI_RESULT -Raw | ConvertFrom-Json
 if (Test-Path -LiteralPath $env:AWAKE_CI_LOG) { Get-Content -LiteralPath $env:AWAKE_CI_LOG }
 if (!$result.passed) { throw $result.error }
