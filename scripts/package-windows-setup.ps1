@@ -5,7 +5,8 @@ param(
     [string]$MakeNsis = 'makensis'
 )
 $ErrorActionPreference = 'Stop'
-if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be MAJOR.MINOR.PATCH.' }
+if ($Version -notmatch '^(?<numeric>\d+\.\d+\.\d+)(?:-(?:alpha|beta|rc)\.\d+)?$') { throw 'Version must be MAJOR.MINOR.PATCH with an optional alpha, beta or rc number.' }
+$numericVersion = "$($Matches.numeric).0"
 $packageRoot = (Resolve-Path -LiteralPath $PackageDir).Path
 if (Test-Path -LiteralPath (Join-Path $packageRoot 'portable.txt')) { throw 'Setup payload must not contain portable.txt.' }
 foreach ($required in @('awakelauncher.exe','QtWebEngineProcess.exe','Qt6WebEngineCore.dll','resources/icudtl.dat','resources/qtwebengine_resources.pak','translations/qtwebengine_locales/en-US.pak')) {
@@ -25,7 +26,7 @@ $lines += @(Get-ChildItem -LiteralPath $packageRoot -Recurse -Directory | Sort-O
 $lines | Set-Content -LiteralPath $deleteList -Encoding utf8
 $setup = Join-Path $outputRoot "Awake-Launcher-v$Version-Windows-x64-Setup.exe"
 $repoRoot = Split-Path $PSScriptRoot -Parent
-& $MakeNsis /WX /INPUTCHARSET UTF8 "/DAWAKE_VERSION=$Version" "/DAWAKE_PACKAGE=$packageRoot" "/DAWAKE_OUTPUT=$setup" "/DAWAKE_ICON=$repoRoot/program_info/awakelauncher.ico" "/DAWAKE_DELETE_MANIFEST=$deleteList" "$repoRoot/program_info/awake_install.nsi"
+& $MakeNsis /WX /INPUTCHARSET UTF8 "/DAWAKE_VERSION=$Version" "/DAWAKE_VERSION_NUMERIC=$numericVersion" "/DAWAKE_PACKAGE=$packageRoot" "/DAWAKE_OUTPUT=$setup" "/DAWAKE_ICON=$repoRoot/program_info/awakelauncher.ico" "/DAWAKE_DELETE_MANIFEST=$deleteList" "$repoRoot/program_info/awake_install.nsi"
 if ($LASTEXITCODE) { throw "NSIS failed with exit code $LASTEXITCODE" }
 if (!(Test-Path -LiteralPath $setup)) { throw 'NSIS did not create the setup installer.' }
 $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()

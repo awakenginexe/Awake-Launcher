@@ -1,0 +1,220 @@
+name: Awake Windows beta packages
+run-name: Beta installer and portable ZIP (${{ inputs.release_tag || github.ref_name }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing immutable beta tag to build
+        required: true
+        default: v3.1.0-beta.2
+  push:
+    tags: ['v*.*.*-beta.*', 'v*.*.*-rc.*', 'v*.*.*-alpha.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awake-beta-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: source
+    env:
+      VCPKG_MAX_CONCURRENCY: 4
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.awake-vcpkg-binaries
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: release-tools
+      - name: Validate beta tag
+        working-directory: release-tools
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+-(alpha|beta|rc)\.\d+$') { throw 'An existing prerelease tag is required.' }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          path: source
+          submodules: recursive
+      - name: Verify standard-user test storage before building
+        run: ../release-tools/scripts/run-private-tests.ps1 -BuildRoot "$pwd/build" -ProbeOnly
+      - name: Validate release source and authorized services
+        env:
+          AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
+          AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
+        run: |
+          # This tag's BuildConfig drops its commit ID when the checkout has no branch ref.
+          git switch --create stable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $commit = git rev-parse HEAD
+          "SOURCE_COMMIT=$commit" >> $env:GITHUB_ENV
+          $cmake = Get-Content CMakeLists.txt -Raw
+          $parts = foreach ($part in 'MAJOR','MINOR','PATCH') { [regex]::Match($cmake, "set\(Launcher_VERSION_$part\s+(\d+)\)").Groups[1].Value }
+          $suffix = [regex]::Match($cmake, 'set\(Launcher_VERSION_NAME\s+"[^"\r\n]*-(alpha|beta|rc)\.(\d+)"\)').Groups
+          if ($env:RELEASE_TAG -ne "v$($parts -join '.')-$($suffix[1].Value).$($suffix[2].Value)") { throw 'Tag and application version differ.' }
+          if ([string]::IsNullOrWhiteSpace($env:AWAKE_CURSEFORGE_API_KEY)) { throw 'AWAKE_CURSEFORGE_API_KEY is missing.' }
+          $id = [guid]::Empty
+          if (![guid]::TryParse($env:AWAKE_MSA_CLIENT_ID, [ref]$id) -or $id -eq [guid]::Empty) { throw 'AWAKE_MSA_CLIENT_ID is missing or invalid.' }
+          $result = Invoke-RestMethod 'https://api.curseforge.com/v1/mods/search?gameId=432&searchFilter=jei&pageSize=1' -Headers @{ 'x-api-key' = $env:AWAKE_CURSEFORGE_API_KEY }
+          if (!$result.data.Count) { throw 'Authorized CurseForge search returned no results.' }
+          'Authorized CurseForge search passed; no credentials logged.'
+      - uses: actions/cache/restore@v4
+        id: dependency-cache
+        with:
+          path: |
+            source/cmake/vcpkg/downloads
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: awake-beta-vcpkg-${{ runner.os }}-${{ hashFiles('source/vcpkg*.json', 'source/cmake/vcpkg-triplets/**', 'source/cmake/vcpkg-ports/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            awake-beta-vcpkg-${{ runner.os }}-${{ hashFiles('source/vcpkg*.json', 'source/cmake/vcpkg-triplets/**', 'source/cmake/vcpkg-ports/**') }}-
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: source/launcher/awake-web/package-lock.json
+      - name: Fetch pinned build tools through the GitHub API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $metadata = Get-Content cmake/vcpkg/scripts/vcpkg-tool-metadata.txt -Raw | ConvertFrom-StringData
+          $tag = $metadata.VCPKG_TOOL_RELEASE_TAG
+          gh release download $tag --repo microsoft/vcpkg-tool --pattern vcpkg.exe --dir cmake/vcpkg --clobber
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $digest = gh api "repos/microsoft/vcpkg-tool/releases/tags/$tag" --jq '.assets[] | select(.name=="vcpkg.exe") | .digest'
+          if ($LASTEXITCODE -or $digest -notmatch '^sha256:[0-9a-f]{64}$' -or (Get-FileHash cmake/vcpkg/vcpkg.exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest.Substring(7)) { throw 'vcpkg executable verification failed.' }
+          $tools = (Get-Content cmake/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools
+          New-Item -ItemType Directory -Path cmake/vcpkg/downloads -Force | Out-Null
+          foreach ($name in 'cmake','ninja') {
+            $tool = @($tools | Where-Object { $_.name -eq $name -and $_.os -eq 'windows' -and $_.arch -in 'amd64','x64' })
+            if ($tool.Count -ne 1) { throw "Expected one pinned Windows x64 $name tool." }
+            $tool = $tool[0]
+            $url = [uri]$tool.url
+            $repo = ($url.AbsolutePath.TrimStart('/') -split '/')[0..1] -join '/'
+            $archive = "cmake/vcpkg/downloads/$($tool.archive)"
+            if (!(Test-Path -LiteralPath $archive) -or (Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) {
+              gh release download "v$($tool.version)" --repo $repo --pattern ([IO.Path]::GetFileName($url.AbsolutePath)) --output $archive --clobber
+              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            }
+            if ((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw "Pinned $name archive verification failed." }
+          }
+      - name: Download dependencies before installing Qt
+        timeout-minutes: 5
+        run: |
+          ../release-tools/scripts/test-vcpkg-github-archive.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pwsh = (Get-Command pwsh.exe).Source
+          $script = (Resolve-Path ../release-tools/scripts/download-vcpkg-github-archive.ps1).Path
+          $env:X_VCPKG_ASSET_SOURCES = "x-script,`"$pwsh`" -NoProfile -NonInteractive -File `"$script`" {url} {sha512} {dst}"
+          "X_VCPKG_ASSET_SOURCES=$env:X_VCPKG_ASSET_SOURCES" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+          ./cmake/vcpkg/vcpkg.exe install --triplet x64-windows --only-downloads "--x-install-root=$pwd/build/vcpkg_installed"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Install Qt
+        run: |
+          python -m pip install 'git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $config = Join-Path $env:RUNNER_TEMP 'aqt.ini'
+          @('[aqt]', 'concurrency = 1') | Set-Content $config -Encoding ascii
+          python -m aqt -c $config install-qt windows desktop 6.11.2 win64_msvc2022_64 --external "$env:ProgramFiles/7-Zip/7z.exe" -O "$env:RUNNER_TEMP/Qt" -m qtnetworkauth qtimageformats qtwebengine qtwebchannel qtpositioning qttasktree
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "CMAKE_PREFIX_PATH=$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64" >> $env:GITHUB_ENV
+          "$env:RUNNER_TEMP/Qt/6.11.2/msvc2022_64/bin" >> $env:GITHUB_PATH
+      - name: Configure with release services
+        env:
+          AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
+          AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
+        run: |
+          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/cache/save@v4
+        if: ${{ !cancelled() && steps.dependency-cache.outcome == 'success' }}
+        with:
+          path: |
+            source/cmake/vcpkg/downloads
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
+      - name: Build and check affected suites
+        run: |
+          cmake --build --preset windows_msvc --config Release --target AwakeLauncher AwakeLauncher_filelink NewLaunch NewLaunchLegacy JavaCheck Task ResourceFolderModel AwakeWebPolicy AwakeWebBridge --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:PATH = "$pwd/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          ../release-tools/scripts/run-private-tests.ps1 -BuildRoot "$pwd/build"
+          npm --prefix launcher/awake-web test
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package installer and portable ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $env:PATH = "$pwd/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          foreach ($component in 'Unspecified','Runtime','bundle') {
+            cmake --install build --config Release --prefix install --component $component
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          Copy-Item "$env:VCToolsRedistDir/x64/Microsoft.VC143.CRT/*.dll" install/
+          # NMEA/GPS is unused; Qt's optional plugin otherwise needs an uninstalled SerialPort module.
+          Remove-Item -LiteralPath install/position/qtposition_nmea.dll -ErrorAction SilentlyContinue
+          gh release download v3.1.0-beta.1 --repo $env:GITHUB_REPOSITORY --pattern 'Awake-Launcher-v3.1.0-beta.1-Windows-x64.zip' --dir prior
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Expand-Archive prior/*.zip prior/unpacked
+          $prior = Get-Item prior/unpacked
+          if (!(Test-Path (Join-Path $prior.FullName 'awakelauncher.exe'))) {
+            $prior = Get-ChildItem prior/unpacked -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'awakelauncher.exe') } | Select-Object -First 1
+          }
+          if (!$prior) { throw 'Previous package does not contain Launcher.' }
+          Copy-Item "$($prior.FullName)/licenses" install/ -Recurse -Force
+          Copy-Item "$($prior.FullName)/SOURCE.json" install/
+          Copy-Item ../release-tools/scripts/beta-start-here.txt install/START-HERE.txt
+          Copy-Item docs/modpack-manager/shared-workspaces.md install/SHARED-WORKSPACES.md
+          $meta = Get-Content install/SOURCE.json -Raw | ConvertFrom-Json
+          $meta.commit = $env:SOURCE_COMMIT
+          $meta.version = $env:RELEASE_TAG.Substring(1)
+          $meta | ConvertTo-Json | Set-Content install/SOURCE.json -Encoding utf8
+          Remove-Item -LiteralPath install/SHA256SUMS -ErrorAction SilentlyContinue
+          $nsis = Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'
+          if (!(Test-Path $nsis)) { choco install nsis --yes --no-progress; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+          ../release-tools/scripts/package-windows-setup.ps1 -PackageDir install -Version $env:RELEASE_TAG.Substring(1) -OutputDir dist -MakeNsis $nsis
+          ./scripts/test-windows-setup.ps1 -Installer "dist/Awake-Launcher-$env:RELEASE_TAG-Windows-x64-Setup.exe" -PackageDir install -TestDir "$env:RUNNER_TEMP/Awake-beta-setup-test"
+          $versionLog = Join-Path $env:RUNNER_TEMP 'Awake-beta-version.txt'
+          $versionError = Join-Path $env:RUNNER_TEMP 'Awake-beta-version-error.txt'
+          $process = Start-Process -FilePath (Resolve-Path install/awakelauncher.exe).Path -ArgumentList '--version' -RedirectStandardOutput $versionLog -RedirectStandardError $versionError -PassThru -Wait -WindowStyle Hidden
+          $version = Get-Content -LiteralPath $versionLog -Raw
+          Write-Output "Runtime version output: $version"
+          if (Test-Path -LiteralPath $versionError) { Get-Content -LiteralPath $versionError }
+          if ($process.ExitCode -or !$version.Contains($env:SOURCE_COMMIT) -or !$version.Contains($env:RELEASE_TAG.Substring(1))) { throw 'Runtime source/version mismatch.' }
+          $config = Get-Content build/buildconfig/BuildConfig.cpp -Raw
+          if ($config -notmatch 'FLAME_API_KEY\s*=\s*"[^"]+";') { throw 'Compiled CurseForge configuration is empty.' }
+          New-Item install/portable.txt -ItemType File | Out-Null
+          $archive = "dist/Awake-Launcher-$env:RELEASE_TAG-Windows-x64.zip"
+          Compress-Archive install/* $archive -CompressionLevel Optimal
+          @{ sourceCommit=$env:SOURCE_COMMIT; workflowCommit=$env:GITHUB_SHA; tag=$env:RELEASE_TAG; curseForge='repository secret configured; authorized search passed'; installerSmoke='passed'; executableSha256=(Get-FileHash install/awakelauncher.exe -Algorithm SHA256).Hash.ToLowerInvariant(); workflowRun="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" } | ConvertTo-Json | Set-Content dist/Awake-Launcher-BUILD-PROVENANCE.json -Encoding utf8
+          foreach ($file in Get-ChildItem dist -File | Where-Object Extension -In '.exe','.zip','.json') {
+            "$((Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($file.Name)" | Set-Content "$($file.FullName).sha256" -Encoding ascii
+          }
+          git diff --exit-code
+          if ($LASTEXITCODE) { throw 'Application source changed during packaging.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Awake-Launcher-${{ env.RELEASE_TAG }}-Windows-x64
+          path: |
+            source/dist/*.exe
+            source/dist/*.zip
+            source/dist/*.sha256
+            source/dist/*BUILD-PROVENANCE.json
+          if-no-files-found: error

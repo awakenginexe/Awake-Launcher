@@ -1,9 +1,12 @@
 name: Awake Windows release
 run-name: Release ${{ github.ref_name }} for Windows
 
+# A pushed vMAJOR.MINOR.PATCH tag builds, tests and publishes. Pushing the release branch runs the
+# same build and checks but never publishes or creates a tag.
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    branches: ['release/3.1.0']
 
 permissions:
   contents: write
@@ -15,21 +18,27 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         shell: pwsh
     env:
       VCPKG_MAX_CONCURRENCY: 4
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.awake-vcpkg-binaries
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Verify standard-user test storage before building
+        run: ./scripts/run-private-tests.ps1 -BuildRoot "$pwd/build" -ProbeOnly
       - name: Validate release configuration
         env:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
           AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
         run: |
+          # BuildConfig drops the commit ID when the checkout has no branch ref, as a tag checkout does.
+          git switch --create stable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           if ([string]::IsNullOrWhiteSpace($env:AWAKE_CURSEFORGE_API_KEY)) {
             throw 'Set the AWAKE_CURSEFORGE_API_KEY repository secret before releasing.'
           }
@@ -37,18 +46,33 @@ jobs:
           if (![guid]::TryParse($env:AWAKE_MSA_CLIENT_ID, [ref]$clientGuid) -or $clientGuid -eq [guid]::Empty) {
             throw 'Set AWAKE_MSA_CLIENT_ID to the approved Application (client) ID before releasing.'
           }
-          if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+$') {
-            throw 'Release tags must use vMAJOR.MINOR.PATCH, such as v0.1.0.'
-          }
+          $result = Invoke-RestMethod 'https://api.curseforge.com/v1/mods/search?gameId=432&searchFilter=jei&pageSize=1' -Headers @{ 'x-api-key' = $env:AWAKE_CURSEFORGE_API_KEY }
+          if (!$result.data.Count) { throw 'Authorized CurseForge search returned no results.' }
           $source = Get-Content CMakeLists.txt -Raw
           $parts = foreach ($part in 'MAJOR', 'MINOR', 'PATCH') {
             $match = [regex]::Match($source, "set\(Launcher_VERSION_$part\s+(\d+)\)")
             if (!$match.Success) { throw "Missing launcher version component: $part" }
             $match.Groups[1].Value
           }
-          if ($env:GITHUB_REF_NAME -ne "v$($parts -join '.')") {
-            throw 'The release tag must match the launcher version in CMakeLists.txt.'
+          if ([regex]::IsMatch($source, 'set\(Launcher_VERSION_NAME\s+"[^"\r\n]*-(alpha|beta|rc)')) { throw 'A stable release cannot carry a prerelease suffix.' }
+          $version = $parts -join '.'
+          $tag = "v$version"
+          if ($env:GITHUB_REF -notin @("refs/tags/$tag", "refs/heads/release/$version")) {
+            throw 'Release ref must match the canonical application version.'
           }
+          if (!(Test-Path "docs/releases/$tag.md")) { throw 'Versioned release notes are required.' }
+          if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw 'Checkout does not match the requested source commit.' }
+          "AWAKE_RELEASE_TAG=$tag" >> $env:GITHUB_ENV
+      - uses: actions/cache/restore@v4
+        id: dependency-cache
+        with:
+          path: |
+            cmake/vcpkg/downloads
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: awake-release-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg*.json', 'cmake/vcpkg-triplets/**', 'cmake/vcpkg-ports/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            awake-release-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg*.json', 'cmake/vcpkg-triplets/**', 'cmake/vcpkg-ports/**') }}-
+            awake-beta-vcpkg-${{ runner.os }}-
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: amd64
@@ -64,6 +88,43 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: launcher/awake-web/package-lock.json
+      - name: Fetch pinned build tools through the GitHub API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $metadata = Get-Content cmake/vcpkg/scripts/vcpkg-tool-metadata.txt -Raw | ConvertFrom-StringData
+          $tag = $metadata.VCPKG_TOOL_RELEASE_TAG
+          gh release download $tag --repo microsoft/vcpkg-tool --pattern vcpkg.exe --dir cmake/vcpkg --clobber
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $digest = gh api "repos/microsoft/vcpkg-tool/releases/tags/$tag" --jq '.assets[] | select(.name=="vcpkg.exe") | .digest'
+          if ($LASTEXITCODE -or $digest -notmatch '^sha256:[0-9a-f]{64}$' -or (Get-FileHash cmake/vcpkg/vcpkg.exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest.Substring(7)) { throw 'vcpkg executable verification failed.' }
+          $tools = (Get-Content cmake/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools
+          New-Item -ItemType Directory -Path cmake/vcpkg/downloads -Force | Out-Null
+          foreach ($name in 'cmake','ninja') {
+            $tool = @($tools | Where-Object { $_.name -eq $name -and $_.os -eq 'windows' -and $_.arch -in 'amd64','x64' })
+            if ($tool.Count -ne 1) { throw "Expected one pinned Windows x64 $name tool." }
+            $tool = $tool[0]
+            $url = [uri]$tool.url
+            $repo = ($url.AbsolutePath.TrimStart('/') -split '/')[0..1] -join '/'
+            $archive = "cmake/vcpkg/downloads/$($tool.archive)"
+            if (!(Test-Path -LiteralPath $archive) -or (Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) {
+              gh release download "v$($tool.version)" --repo $repo --pattern ([IO.Path]::GetFileName($url.AbsolutePath)) --output $archive --clobber
+              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            }
+            if ((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw "Pinned $name archive verification failed." }
+          }
+      - name: Download dependencies before installing Qt
+        timeout-minutes: 5
+        run: |
+          ./scripts/test-vcpkg-github-archive.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pwsh = (Get-Command pwsh.exe).Source
+          $script = (Resolve-Path ./scripts/download-vcpkg-github-archive.ps1).Path
+          $env:X_VCPKG_ASSET_SOURCES = "x-script,`"$pwsh`" -NoProfile -NonInteractive -File `"$script`" {url} {sha512} {dst}"
+          "X_VCPKG_ASSET_SOURCES=$env:X_VCPKG_ASSET_SOURCES" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+          ./cmake/vcpkg/vcpkg.exe install --triplet x64-windows --only-downloads "--x-install-root=$pwd/build/vcpkg_installed"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Install Qt
         run: |
           python -m pip install "git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e"
@@ -81,35 +142,82 @@ jobs:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
           AWAKE_MSA_CLIENT_ID: ${{ secrets.AWAKE_MSA_CLIENT_ID }}
         run: |
-          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
+          cmake --preset windows_msvc -DVCPKG_TARGET_TRIPLET=x64-windows -DLauncher_BUILD_PLATFORM=release -DLauncher_BUILD_ARTIFACT= -DENABLE_LTO=OFF "-DCMAKE_CXX_FLAGS_INIT=/experimental:deterministic /pathmap:$env:GITHUB_WORKSPACE=C:/src/AwakeLauncher" "-DLauncher_CURSEFORGE_API_KEY=$env:AWAKE_CURSEFORGE_API_KEY" "-DLauncher_MSA_CLIENT_ID=$env:AWAKE_MSA_CLIENT_ID"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $flags = (Select-String -Path build/CMakeCache.txt -Pattern '^CMAKE_CXX_FLAGS:STRING=').Line
+          if ($flags -notmatch '/EHsc' -or $flags -notmatch '/experimental:deterministic' -or $flags -notmatch '/pathmap:') { throw 'Release compiler flags must preserve exception support and path mapping.' }
+      - uses: actions/cache/save@v4
+        if: ${{ !cancelled() && steps.dependency-cache.outcome == 'success' }}
+        with:
+          path: |
+            cmake/vcpkg/downloads
+            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
       - name: Build
         run: cmake --build --preset windows_msvc --config Release --parallel 4
+      - name: Verify application version and source identity
+        run: |
+          $expected = $env:AWAKE_RELEASE_TAG.Substring(1)
+          $version = (Get-Item build/Release/awakelauncher.exe).VersionInfo
+          if ($version.FileVersion -ne "$expected.0" -or $version.ProductVersion -ne "$expected.0") { throw 'Executable version strings differ.' }
+          foreach ($prefix in 'File', 'Product') {
+            $numeric = @($version."${prefix}MajorPart", $version."${prefix}MinorPart", $version."${prefix}BuildPart", $version."${prefix}PrivatePart") -join '.'
+            if ($numeric -ne "$expected.0") { throw 'Executable numeric version differs.' }
+          }
+          $info = [Diagnostics.ProcessStartInfo]::new((Resolve-Path build/Release/awakelauncher.exe).Path)
+          $info.UseShellExecute = $false; $info.CreateNoWindow = $true
+          $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
+          $info.ArgumentList.Add('--version')
+          $info.Environment['QT_QPA_PLATFORM'] = 'windows'
+          $info.Environment['PATH'] = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
+          $process = [Diagnostics.Process]::new(); $process.StartInfo = $info
+          if (!$process.Start() -or !$process.WaitForExit(15000)) { throw 'Version check did not finish.' }
+          $output = $process.StandardOutput.ReadToEnd()
+          Write-Output "Runtime version output: $output"
+          if ($process.ExitCode -ne 0 -or $output.Trim().Split("`n")[0].Trim() -ne "AwakeLauncher $expected" -or !$output.Contains($env:GITHUB_SHA)) { throw 'Runtime version or commit differs.' }
+          $process.Dispose()
+          $bytes = [IO.File]::ReadAllBytes((Resolve-Path build/Release/awakelauncher.exe))
+          $ascii = [Text.Encoding]::UTF8.GetString($bytes)
+          $unicode = [Text.Encoding]::Unicode.GetString($bytes)
+          foreach ($path in @($env:GITHUB_WORKSPACE, $env:GITHUB_WORKSPACE.Replace([IO.Path]::DirectorySeparatorChar, [char]'/'), '.codex')) {
+            if ($ascii.IndexOf($path, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or $unicode.IndexOf($path, [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw 'Local development path found in the executable.' }
+          }
       - name: Test
         run: |
           $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
-          ctest --preset windows_msvc --build-config Release
+          # These need a data folder owned by a standard user; hosted runners are administrators.
+          ctest --preset windows_msvc --build-config Release -E '^(Task|ResourceFolderModel|AwakeWebPolicy|AwakeWebBridge|AwakeIntegration|AwakeOperations|AwakeTransactions)$'
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/run-private-tests.ps1 -BuildRoot "$pwd/build"
           npm --prefix launcher/awake-web test
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Upload test failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-diagnostics-${{ github.ref_name }}
+          name: test-diagnostics-${{ github.run_id }}
           path: |
             build/Testing/Temporary/
             build/tests/AwakeWebShell-results.txt
+            build/tests/AwakeIntegration-results.txt
             build/.validation/repaint-*.png
           if-no-files-found: ignore
       - name: Package Windows x64 builds
         run: |
           $env:PATH = "$env:GITHUB_WORKSPACE/build/vcpkg_installed/x64-windows/bin;$env:PATH"
-          cmake --install build --config Release --prefix install
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # Named components: a plain install would also add the Manager's helper, which stable Launcher doesn't ship.
+          foreach ($component in 'Unspecified','Runtime','bundle') {
+            cmake --install build --config Release --prefix install --component $component
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
           $crt = Join-Path $env:VCToolsRedistDir 'x64/Microsoft.VC143.CRT'
           if (!(Test-Path $crt)) { throw 'Microsoft C++ runtime files were not found.' }
           Copy-Item "$crt/*.dll" install/
+          # NMEA/GPS is unused; Qt's optional plugin otherwise needs an uninstalled SerialPort module.
+          Remove-Item -LiteralPath install/position/qtposition_nmea.dll -ErrorAction SilentlyContinue
+          Copy-Item docs/modpack-manager/shared-workspaces.md install/SHARED-WORKSPACES.md
           foreach ($required in @(
-            'awakelauncher.exe', 'QtWebEngineProcess.exe', 'Qt6WebEngineCore.dll',
+            'awakelauncher.exe', 'awakelauncher_filelink.exe', 'QtWebEngineProcess.exe', 'Qt6WebEngineCore.dll',
             'resources/icudtl.dat', 'resources/qtwebengine_resources.pak',
             'translations/qtwebengine_locales/en-US.pak', 'translations/qtwebengine_locales/th.pak',
             'translations/qtwebengine_locales/zh-CN.pak', 'translations/qtwebengine_locales/zh-TW.pak'
@@ -122,42 +230,40 @@ jobs:
             choco install nsis --yes --no-progress
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+          if ((Get-FileHash build/Release/awakelauncher.exe).Hash -ne (Get-FileHash install/awakelauncher.exe).Hash) { throw 'Staged binary differs from the tested build.' }
+          ./scripts/package-release-source.ps1 -Version $env:AWAKE_RELEASE_TAG.Substring(1) -Commit $env:GITHUB_SHA -PackageDir install -OutputDir dist
           ./scripts/test-update-handoff.ps1 -Makensis $nsis
-          ./scripts/package-windows-setup.ps1 -PackageDir install -Version $env:GITHUB_REF_NAME.Substring(1) -OutputDir dist -MakeNsis $nsis
-          ./scripts/test-windows-setup.ps1 -Installer "dist/Awake-Launcher-$env:GITHUB_REF_NAME-Windows-x64-Setup.exe" -PackageDir install -TestDir "$env:RUNNER_TEMP/Awake-Launcher-setup-test"
+          ./scripts/package-windows-setup.ps1 -PackageDir install -Version $env:AWAKE_RELEASE_TAG.Substring(1) -OutputDir dist -MakeNsis $nsis
+          $setup = "dist/Awake-Launcher-$env:AWAKE_RELEASE_TAG-Windows-x64-Setup.exe"
+          $metadata = (Get-Item $setup).VersionInfo
+          $expected = $env:AWAKE_RELEASE_TAG.Substring(1)
+          if (!$metadata.FileVersion.StartsWith($expected) -or !$metadata.ProductVersion.StartsWith($expected) -or $metadata.ProductMajorPart -ne [int]$expected.Split('.')[0]) { throw 'Installer version metadata differs.' }
+          ./scripts/test-windows-setup.ps1 -Installer $setup -PackageDir install -TestDir "$env:RUNNER_TEMP/Awake-Launcher-setup-test"
           cmake --install build --config Release --prefix install --component portable
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          $archive = "dist/Awake-Launcher-$env:GITHUB_REF_NAME-Windows-x64.zip"
+          $archive = "dist/Awake-Launcher-$env:AWAKE_RELEASE_TAG-Windows-x64.zip"
           Compress-Archive -Path install/* -DestinationPath $archive -CompressionLevel Optimal
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $(Split-Path $archive -Leaf)" | Set-Content "$archive.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: Awake-Launcher-${{ github.ref_name }}-Windows-x64
+          name: Awake-Launcher-${{ env.AWAKE_RELEASE_TAG }}-Windows-x64
           path: |
             dist/*.exe
             dist/*.zip
             dist/*.sha256
+            dist/*.txt
           if-no-files-found: error
       - name: Publish GitHub release
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
-          @'
-          ## What's new in 2.0.2
-
-          - **Lighter Skin scrolling:** thumbnails now use cached images instead of separate live canvases, and high-resolution previews have a bounded rendering size to reduce memory and rendering pressure.
-          - **More responsive Console:** loading and refreshing now reads only recent log output instead of rebuilding the entire log. Saved log files are unchanged.
-          - **A steadier instance editor:** background refreshes keep the current page visible, ignore updates for other instances, and discard late replies after you switch pages.
-          - **Skeleton loading throughout the launcher:** replaced generic Working messages with placeholders in startup, catalogs, skins, hardware pickers, and editor pages. Existing content stays visible during refreshes where possible; real progress and errors remain visible.
-
-          ## Which download should I choose?
-
-          - **Setup.exe:** recommended for most users; installs or updates Awake Launcher.
-          - **Windows-x64.zip:** portable version for running from a folder.
-          - **.sha256:** checksums for verifying the downloads.
-          '@ | Set-Content $notes -Encoding utf8
-          $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256' | Select-Object -ExpandProperty FullName)
-          gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $env:GITHUB_REF_NAME" --notes-file $notes
+          $tag = $env:AWAKE_RELEASE_TAG
+          if ((git rev-parse "$tag^{}") -ne $env:GITHUB_SHA) { throw 'Release source identity changed.' }
+          git diff --exit-code HEAD --
+          if ($LASTEXITCODE) { throw 'Tracked source changed during validation.' }
+          $notes = "docs/releases/$tag.md"
+          $assets = @(Get-ChildItem dist -File | Where-Object Extension -In '.exe', '.zip', '.sha256', '.txt' | Select-Object -ExpandProperty FullName)
+          gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Awake Launcher $tag" --notes-file $notes --latest --draft=false --prerelease=false
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

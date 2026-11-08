@@ -1,5 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QBuffer>
+#include <QLocalSocket>
+#include <QElapsedTimer>
+#include <QtEndian>
+#include "awake/integration/Protocol.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/InstanceAuthority.h"
+#include "awake/integration/InstanceOperationScope.h"
+#include "awake/integration/ProfileAccess.h"
+#include "awake/integration/PhysicalInstanceLease.h"
+#include "awake/integration/ManagerWorkspaceLink.h"
+#endif
 #include <QCloseEvent>
 #include <QDir>
 #include <QFile>
@@ -86,9 +99,190 @@
 #endif
 
 using namespace Awake::Web;
+#ifdef Q_OS_WIN
+class IntegrationPlainEventProbe : public QObject {
+   public:
+    bool isolated = false;
+    void customEvent(QEvent*) override { isolated = !Awake::Integration::InstanceOperationScope::current(); }
+};
+class IntegrationTaskEventProbe : public Task {
+   public:
+    QString identity;
+    void executeTask() override { emitSucceeded(); }
+    void customEvent(QEvent*) override
+    {
+        const auto lease = Awake::Integration::InstanceOperationScope::current();
+        identity = lease ? lease->physicalId() : QString{};
+    }
+};
+#endif
 class AwakeWebBridgeTest : public QObject {
     Q_OBJECT
 private slots:
+#ifdef Q_OS_WIN
+    void integrationNestedEventsDoNotBorrowUnrelatedOwnership()
+    {
+        using namespace Awake::Integration;
+        QTemporaryDir temporary;
+        const auto root = temporary.path() + "/instance";
+        QVERIFY(QDir().mkdir(root)); QVERIFY(DurableIO::write(root + "/instance.cfg", "fixture"));
+        const auto id = physicalIdentityV2(root);
+        QVERIFY(InstanceAuthority::enroll(root, id, temporary.path() + "/leases", "event-scope-fixture", QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        auto lease = PhysicalInstanceLease::acquire(root, id, temporary.path() + "/leases"); QVERIFY(lease);
+        InstanceOperationScope scope(lease);
+        IntegrationPlainEventProbe plain;
+        IntegrationTaskEventProbe task;
+        QEvent event(QEvent::User);
+        QCoreApplication::sendEvent(&plain, &event); QVERIFY(plain.isolated);
+        QCOMPARE(InstanceOperationScope::current()->physicalId(), id);
+        QCoreApplication::sendEvent(&task, &event); QCOMPARE(task.identity, id);
+        QCOMPARE(InstanceOperationScope::current()->physicalId(), id);
+    }
+#endif
+    void integrationReadOnlyDiscovery()
+    {
+#ifndef Q_OS_WIN
+        QSKIP("Experimental IPC is Windows-only.");
+#endif
+        using namespace Awake::Integration;
+        QFile file(QDir::current().filePath("integration/v1/endpoint.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto endpoint = QJsonDocument::fromJson(file.readAll()).object();
+        QLocalSocket socket;
+        socket.connectToServer(endpoint["serverName"].toString());
+        QVERIFY(socket.waitForConnected());
+        const auto call = [&socket](const QString& method, const QJsonObject& params = QJsonObject{}) {
+            socket.write(frame({{"protocol", version()}, {"requestId", "native"}, {"method", method}, {"params", params}}));
+            QByteArray bytes;
+            QElapsedTimer deadline; deadline.start();
+            while (deadline.elapsed() < 5000) {
+                QCoreApplication::processEvents(); bytes += socket.readAll();
+                if (bytes.size() >= 4 && quint32(bytes.size() - 4) >= qFromBigEndian<quint32>(bytes.constData()))
+                    return QJsonDocument::fromJson(bytes.mid(4)).object();
+                QTest::qWait(1);
+            }
+            return QJsonObject{};
+        };
+        const auto greeting = call("hello", {{"versions", QJsonArray{version()}},
+                              {"client", QJsonObject{{"name", "fixture"}, {"version", "dev"}}}});
+        QVERIFY(greeting.contains("result"));
+        const auto infoResponse = call("launcher.info");
+        auto info = infoResponse["result"].toObject();
+        QCOMPARE(info["dataRoot"].toString(), QFileInfo(QDir::currentPath()).canonicalFilePath());
+        QVERIFY(!info["backgroundStartup"].toBool());
+        QCOMPARE(info["launcherState"].toString(), QString("ready"));
+
+        auto* fixture = APPLICATION->instances()->at(0);
+        const auto modsRoot = fixture->modsRoot();
+        QVERIFY(QDir().mkpath(modsRoot + "/.index"));
+        const auto jarPath = modsRoot + "/integration-fixture.jar";
+        const auto metadataPath = modsRoot + "/.index/integration-fixture.pw.toml";
+        auto cleanup = qScopeGuard([&] { QFile::remove(jarPath); QFile::remove(metadataPath); });
+        QFile jar(jarPath);
+        QVERIFY(jar.open(QIODevice::WriteOnly)); jar.write("fixture"); jar.close();
+        QFile metadata(metadataPath);
+        QVERIFY(metadata.open(QIODevice::WriteOnly));
+        metadata.write(R"(name="Indexed fixture"
+filename="integration-fixture.jar"
+side="both"
+x-prismlauncher-version-number="1.0"
+[download]
+mode="url"
+url="https://user:never-export-this@example.invalid/mod.jar"
+hash-format="sha512"
+hash="fixture-hash"
+[update.modrinth]
+mod-id="fixture-project"
+version="fixture-version"
+)");
+        metadata.close();
+
+        const auto listResponse = call("instances.list");
+        const auto list = listResponse["result"].toObject();
+        QCOMPARE(list["total"].toInt(), APPLICATION->instances()->count());
+        QVERIFY(!list["instanceRevision"].toString().isEmpty());
+        QVERIFY(!list["instances"].toArray().isEmpty());
+
+        QString id;
+        for (const auto& entry : list["instances"].toArray())
+            if (entry.toObject()["instanceId"].toString() == fixture->id()) id = entry.toObject()["physicalId"].toString();
+        QVERIFY(!id.isEmpty());
+        const auto inventoryResponse = call("mods.list", {{"physicalId", id}});
+        QVERIFY(inventoryResponse.contains("result"));
+        bool indexed = false;
+        for (const auto& item : inventoryResponse["result"].toObject()["items"].toArray()) {
+            const auto row = item.toObject();
+            if (row["fileName"].toString() != "integration-fixture.jar") continue;
+            indexed = true;
+            QCOMPARE(row["metadataState"].toString(), QString("indexed"));
+            QCOMPARE(row["metadata"].toObject()["projectId"].toString(), QString("fixture-project"));
+            QCOMPARE(row["metadata"].toObject()["versionId"].toString(), QString("fixture-version"));
+        }
+        QVERIFY(indexed);
+        QVERIFY(!QJsonDocument(inventoryResponse).toJson().contains("never-export-this"));
+        QFile schemaFile(QFINDTESTDATA("../docs/modpack-manager/requests.schema.json"));
+        QVERIFY(schemaFile.open(QIODevice::ReadOnly));
+        const auto definitions = QJsonDocument::fromJson(schemaFile.readAll()).object()["$defs"].toObject();
+        const auto declaresFields = [&definitions](const QString& name, const QJsonObject& payload) {
+            const auto definition = definitions[name].toObject();
+            const auto properties = definition["properties"].toObject();
+            for (auto it = payload.begin(); it != payload.end(); ++it)
+                if (!properties.contains(it.key())) return false;
+            for (const auto& required : definition["required"].toArray())
+                if (!payload.contains(required.toString())) return false;
+            return true;
+        };
+        QVERIFY(declaresFields("helloResult", greeting["result"].toObject()));
+        QVERIFY(declaresFields("launcherInfoResult", info));
+        QVERIFY(declaresFields("instanceListResult", list));
+        QVERIFY(declaresFields("inventoryResult", inventoryResponse["result"].toObject()));
+        for (const auto& entry : list["instances"].toArray())
+            QVERIFY(declaresFields("instance", entry.toObject()));
+        for (const auto& item : inventoryResponse["result"].toObject()["items"].toArray()) {
+            QVERIFY(declaresFields("inventoryItem", item.toObject()));
+            if (item.toObject()["metadataState"].toString() == "indexed")
+                QVERIFY(declaresFields("indexedMetadata", item.toObject()["metadata"].toObject()));
+        }
+        const auto contractOutput = qEnvironmentVariable("AWAKE_INTEGRATION_CONTRACT_OUTPUT");
+        if (!contractOutput.isEmpty()) {
+            QFile capture(contractOutput);
+            QVERIFY(capture.open(QIODevice::WriteOnly));
+            const auto bytes = QJsonDocument(QJsonObject{{"hello", greeting}, {"info", infoResponse},
+                {"instances", listResponse}, {"inventory", inventoryResponse}}).toJson();
+            QCOMPARE(capture.write(bytes), bytes.size());
+        }
+
+        auto restoreRunning = qScopeGuard([fixture] { fixture->setRunning(false); });
+        fixture->setRunning(true);
+        const auto active = call("instances.list")["result"].toObject()["instances"].toArray();
+        for (const auto& entry : active) {
+            const auto row = entry.toObject();
+            if (row["physicalId"].toString() != id) continue;
+            QCOMPARE(row["nativeActivity"].toString(), QString("launch_active"));
+            QCOMPARE(row["gameState"].toString(), QString("unknown"));
+        }
+        fixture->setRunning(false);
+        QVERIFY(metadata.open(QIODevice::ReadOnly));
+        auto invalidIndex = metadata.readAll();
+        metadata.close();
+        invalidIndex.replace("fixture-project", "");
+        QVERIFY(metadata.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(metadata.write(invalidIndex), invalidIndex.size());
+        metadata.close();
+        const auto invalidInventory = call("mods.list", {{"physicalId", id}})["result"].toObject()["items"].toArray();
+        for (const auto& item : invalidInventory) {
+            const auto row = item.toObject();
+            if (row["fileName"].toString() != "integration-fixture.jar") continue;
+            QCOMPARE(row["metadataState"].toString(), QString("unindexed"));
+            QVERIFY(row["metadata"].isNull());
+        }
+
+        QCOMPARE(call("mods.list", {{"physicalId", id}, {"path", "arbitrary"}})["error"].toObject()["code"].toString(),
+                 QString("INVALID_REQUEST"));
+        QCOMPARE(call("instances.list", {{"offset", 1}})["error"].toObject()["code"].toString(), QString("INVALID_REQUEST"));
+        QCOMPARE(call("transactions.apply")["error"].toObject()["code"].toString(), QString("UNSUPPORTED_CAPABILITY"));
+    }
+
     void editorConsoleTailIsBounded()
     {
         LogModel log;
@@ -408,6 +602,89 @@ private slots:
         const auto capeResponse = finished.first().at(1).toMap();
         QVERIFY2(capeResponse.value("ok").toBool(), qPrintable(capeResponse.value("error").toString()));
         QVERIFY(capeResponse.value("capes").toList().first().toMap().value("textureUrl").toString().startsWith("awake://ui/images/"));
+    }
+    void managerWorkspaceLinksUseTheOriginalDirectoryAndKeepItsMetadata()
+    {
+        using namespace Awake::Integration;
+        QTemporaryDir profile; QVERIFY(profile.isValid());
+        const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const auto root = profile.path() + "/workspaces/" + id;
+        QVERIFY(createPrivateStorageDirectory(profile.path() + "/workspaces"));
+        QVERIFY(createPrivateStorageDirectory(root));
+        QVERIFY(createPrivateStorageDirectory(profile.path() + "/catalog"));
+        const auto physical = physicalIdentityV2(root);
+        QVERIFY(InstanceAuthority::enroll(root, physical, profile.path() + "/ownership", physicalIdentityV2(profile.path()), id));
+        const QByteArray config("InstanceType=OneSix\nname=Manager link fixture\nuuid=" + id.toUtf8() + "\n");
+        const QByteArray pack(R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.20.1"},{"uid":"net.minecraftforge","version":"47.4.0"}]})");
+        QVERIFY(DurableIO::write(root + "/instance.cfg", config));
+        QVERIFY(DurableIO::write(root + "/mmc-pack.json", pack));
+        auto* instances = APPLICATION->instances(); QString error;
+        QVERIFY(!instances->linkManagerWorkspace(root, &error)); // creation not yet published
+        QJsonObject body{{"format", 1}, {"workspaceId", id}, {"physicalId", physical}};
+        auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+        QVERIFY(DurableIO::write(profile.path() + "/catalog/" + id + ".json", QJsonDocument(QJsonObject{{"body", body}, {"sha256", digest}}).toJson()));
+        QVERIFY2(instances->linkManagerWorkspace(root, &error), qPrintable(error));
+        auto* instance = instances->getInstanceById(id); QVERIFY(instance);
+        QCOMPARE(QFileInfo(instance->instanceRoot()).canonicalFilePath(), QFileInfo(root).canonicalFilePath());
+        QVERIFY(instance->isManagerLinked()); QVERIFY(!instance->canEdit()); QVERIFY(!instance->canExport());
+        instance->settings()->set("name", "Local launch preference");
+        QVERIFY(instance->getPackProfile()->reload(Net::Mode::Offline));
+        instance->saveNow();
+        QCOMPARE(DurableIO::hash(root + "/instance.cfg"), QString::fromLatin1(QCryptographicHash::hash(config, QCryptographicHash::Sha256).toHex()));
+        QCOMPARE(DurableIO::hash(root + "/mmc-pack.json"), QString::fromLatin1(QCryptographicHash::hash(pack, QCryptographicHash::Sha256).toHex()));
+        QVERIFY(!instances->removeInstance(id, &error));
+        auto lease = PhysicalInstanceLease::acquire(root, physical, profile.path() + "/ownership", &error);
+        QVERIFY(lease);
+        QVERIFY(!instances->linkManagerWorkspace(root, &error));
+        QVERIFY(DurableIO::write(root + "/.awake-integration/recovery.json", "{}"));
+        lease.reset();
+        QVERIFY(!acquireManagerWorkspace(root, physical, &error));
+        QVERIFY(DurableIO::remove(root + "/.awake-integration/recovery.json"));
+        QVERIFY(instances->linkManagerWorkspace(root, &error));
+        {
+            auto launchLease = acquireManagerWorkspace(root, physical, &error); QVERIFY(launchLease);
+            InstanceOperationScope scope(launchLease);
+            instance->loaderModList();
+            instance->coreModList();
+            instance->nilModList();
+        }
+        QVERIFY2(acquireManagerWorkspace(root, physical, &error), qPrintable(error));
+        InstanceList restarted(APPLICATION->settings(), instances->instanceDirs());
+        restarted.loadList();
+        QVERIFY(restarted.getInstanceById(id));
+        QCOMPARE(restarted.getInstanceById(id)->instanceRoot(), instance->instanceRoot());
+        InstanceList parentDiscovered(APPLICATION->settings(), {profile.path() + "/workspaces"});
+        parentDiscovered.loadList();
+        QVERIFY(parentDiscovered.getInstanceById(id));
+        QVERIFY(parentDiscovered.getInstanceById(id)->isManagerLinked());
+        QVERIFY(QFile::remove(QDir::current().filePath("manager-links/" + id + ".json")));
+        instances->loadList();
+    }
+    void externallyOwnedInstancesAreNotLoadedForNativeMutation()
+    {
+        auto* instances = APPLICATION->instances();
+        const QString id = "core-owned-fixture";
+        const auto root = instances->primaryDir() + '/' + id;
+        QVERIFY(QDir().mkpath(root + "/.awake-integration"));
+        const QByteArray original("InstanceType=OneSix\nname=Owned fixture\n");
+        QFile config(root + "/instance.cfg"); QVERIFY(config.open(QIODevice::WriteOnly)); config.write(original); config.close();
+        QFile marker(root + "/.awake-integration/ownership.json"); QVERIFY(marker.open(QIODevice::WriteOnly)); marker.write("ownership fixture"); marker.close();
+        instances->loadList();
+        QVERIFY(!instances->getInstanceById(id));
+        QVERIFY(config.open(QIODevice::ReadOnly)); QCOMPARE(config.readAll(), original); config.close();
+        QVERIFY(QDir(root).removeRecursively());
+    }
+    void missingLocalOwnershipMarkerCannotRestoreNativeWriteAccess()
+    {
+        auto* instances = APPLICATION->instances();
+        QTemporaryDir fixture(instances->primaryDir() + "/lost-ownership-XXXXXX"); QVERIFY(fixture.isValid());
+        const auto root = fixture.path(), id = QFileInfo(root).fileName();
+        QFile config(root + "/instance.cfg"); QVERIFY(config.open(QIODevice::WriteOnly)); config.write("InstanceType=OneSix\nname=Owned fixture\n"); config.close();
+        QVERIFY(Awake::Integration::InstanceAuthority::enroll(root, Awake::Integration::physicalIdentityV2(root), root + "/registry", "native-guard-fixture", QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        QVERIFY(Awake::Integration::DurableIO::remove(root + "/.awake-integration/ownership.json"));
+        QVERIFY(QDir().rmdir(root + "/.awake-integration"));
+        instances->loadList();
+        QVERIFY(!instances->getInstanceById(id));
     }
     void deletingInstanceReturnsToTheEventLoopAndPublishesStatus()
     {
@@ -1796,7 +2073,8 @@ int main(int argc, char** argv)
         }
     }
     qputenv("AWAKE_FRONTEND", "widgets");
-    auto directory = data.path().toUtf8();
+    auto directory = (qEnvironmentVariableIsSet("AWAKE_TEST_RELATIVE_DATA_DIR") ?
+        QDir(original).relativeFilePath(data.path()) : data.path()).toUtf8();
     char dataOption[] = "-d";
     char* appArgs[] = {argv[0], dataOption, directory.data(), nullptr};
     int appArgc = 3;

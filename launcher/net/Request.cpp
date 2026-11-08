@@ -65,6 +65,9 @@
 #include "net/FileSink.h"
 #include "net/Logging.h"
 #include "tasks/Task.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceOperationScope.h"
+#endif
 
 #include "MMCTime.h"
 #include "StringUtils.h"
@@ -120,6 +123,12 @@ void Request::addValidator(Validator* v)
 
 void Request::executeTask()
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
+    if (!isRunning()) return;
+    m_resultState = State::Running;
+    m_failReason.clear();
     setStatus(tr("Requesting %1").arg(StringUtils::truncateUrlHumanFriendly(m_url, 80)));
 
     if (m_network == nullptr) {
@@ -131,15 +140,10 @@ void Request::executeTask()
         return;
 #endif
     }
-    if (getState() == Task::State::AbortedByUser) {
-        qCWarning(m_logCat) << getUid().toString() << "Attempt to start an aborted Request:" << m_url.toString();
-        emitAborted();
-        return;
-    }
-
     QNetworkRequest request(m_url);
     auto result = m_sink->init(request);
     if (!result) {
+        m_sink->abort();
         emitFailed(result.error());
         return;
     }
@@ -218,9 +222,13 @@ void Request::onProgress(qint64 bytesReceived, qint64 bytesTotal)
 
 void Request::downloadError(QNetworkReply::NetworkError error)
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
+    if (!isRunning()) return;
     if (error == QNetworkReply::OperationCanceledError) {
         qCCritical(m_logCat) << getUid().toString() << "Aborted" << m_url.toString();
-        m_state = State::Failed;
+        m_resultState = State::Failed;
     } else if (replyStatusCode() == 429 /* HTTP Too Many Requests*/ && m_options.testFlag(Option::AutoRetry)) {
         qCDebug(m_logCat) << getUid().toString() << "Rate Limited!";
         auto delay = static_cast<int64_t>(10 * std::pow(2, m_retryCount));
@@ -246,7 +254,7 @@ void Request::downloadError(QNetworkReply::NetworkError error)
     } else {
         if (m_options.testFlag(Option::AcceptLocalFiles)) {
             if (m_sink->hasLocalData()) {
-                m_state = State::Succeeded;
+                m_resultState = State::Succeeded;
                 return;
             }
         }
@@ -258,7 +266,7 @@ void Request::downloadError(QNetworkReply::NetworkError error)
         if (m_errorResponse.size() > 0 && !m_options.testFlag(Option::Sensitive)) {
             qCCritical(m_logCat) << getUid().toString() << "Response from server:" << m_errorResponse;
         }
-        m_state = State::Failed;
+        m_resultState = State::Failed;
     }
 }
 
@@ -340,7 +348,7 @@ void Request::handleAutoRetry(int64_t delay)
     m_retryCount++;
     if (delay > 60 || m_retryCount > 4) {
         /* 1 minute is too long to wait for retry, fail for now */
-        m_state = State::Failed;
+        m_sink->abort();
         auto retryAfter = QDateTime::currentDateTime().addSecs(delay);
         emitFailed(tr("Request Rate Limited for %n second(s): Retry After %1", "seconds", static_cast<int>(delay))
                        .arg(retryAfter.toLocalTime().toString(QLocale::system().dateTimeFormat(QLocale::ShortFormat))));
@@ -356,6 +364,15 @@ void Request::handleAutoRetry(int64_t delay)
 
 void Request::downloadFinished()
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
+    if (!isRunning()) { m_sink->abort(); return; }
+    if (m_resultState == State::AbortedByUser) {
+        m_sink->abort();
+        emitAborted();
+        return;
+    }
     // currently waiting for retry
     if (m_retryTimer.isActive()) {
         return;
@@ -368,29 +385,19 @@ void Request::downloadFinished()
     }
 
     // if the download failed before this point ...
-    if (m_state == State::Succeeded)  // pretend to succeed so we continue processing :)
+    if (m_resultState == State::Succeeded)
     {
         qCDebug(m_logCat) << getUid().toString() << "Request failed but we are allowed to proceed:" << m_url.toString();
         m_sink->abort();
-        emit succeeded();
-        emit finished();
+        emitSucceeded();
         return;
     }
-    if (m_state == State::Failed) {
+    if (m_resultState == State::Failed) {
         if (m_options.testFlag(Option::Sensitive) && replyStatusCode() >= 400)
             (void)m_sink->write(m_reply->readAll());
         qCDebug(m_logCat) << getUid().toString() << "Request failed in previous step:" << m_url.toString();
         m_sink->abort();
-        m_failReason = m_reply->errorString();
-        emit failed(m_reply->errorString());
-        emit finished();
-        return;
-    }
-    if (m_state == State::AbortedByUser) {
-        qCDebug(m_logCat) << getUid().toString() << "Request aborted in previous step:" << m_url.toString();
-        m_sink->abort();
-        emit aborted();
-        emit finished();
+        emitFailed(m_failReason.isEmpty() ? m_reply->errorString() : m_failReason);
         return;
     }
 
@@ -422,14 +429,18 @@ void Request::downloadFinished()
 
 void Request::downloadReadyRead()
 {
-    if (m_state == State::Running || (m_state == State::Failed && m_options.testFlag(Option::Sensitive) && replyStatusCode() >= 400)) {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
+    if (!isRunning()) return;
+    if (m_resultState == State::Running || (m_resultState == State::Failed && m_options.testFlag(Option::Sensitive) && replyStatusCode() >= 400)) {
         auto data = m_reply->readAll();
         auto result = m_sink->write(data);
         if (replyStatusCode() >= 400) {
             m_errorResponse.append(data);
         }
         if (!result) {
-            m_state = Task::State::Failed;
+            m_resultState = State::Failed;
             m_failReason = result.error();
             qCCritical(m_logCat) << getUid().toString() << "Failed to process response chunk:" << m_failReason;
         }
@@ -441,15 +452,18 @@ void Request::downloadReadyRead()
 
 auto Request::abort() -> bool
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
     m_retryTimer.stop();
-    m_state = State::AbortedByUser;
+    if (cancelBeforeStart() || !isRunning()) return true;
+    m_resultState = State::AbortedByUser;
+    m_sink->abort();
     if (m_reply && !m_reply->isFinished()) {
         disconnect(m_reply.get(), &QNetworkReply::errorOccurred, nullptr, nullptr);
         m_reply->abort();
-    } else {
-        emit aborted();
-        emit finished();
     }
+    if (isRunning()) emitAborted();
     return true;
 }
 
@@ -503,6 +517,7 @@ QNetworkReply* Request::getReply(QNetworkRequest& request)
                 }
                 auto body = data();
                 if (!body) {
+                    m_sink->abort();
                     emitFailed(body.error());
                     return nullptr;
                 }
@@ -513,6 +528,7 @@ QNetworkReply* Request::getReply(QNetworkRequest& request)
             } else if constexpr (std::is_same_v<T, DeviceFactory>) {
                 auto payload = data();
                 if (!payload) {
+                    m_sink->abort();
                     emitFailed(payload.error());
                     return nullptr;
                 }
@@ -524,6 +540,7 @@ QNetworkReply* Request::getReply(QNetworkRequest& request)
             } else if constexpr (std::is_same_v<T, MultiPartFactory>) {
                 auto payload = data();
                 if (!payload) {
+                    m_sink->abort();
                     emitFailed(payload.error());
                     return nullptr;
                 }

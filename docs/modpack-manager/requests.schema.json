@@ -1,0 +1,718 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Implemented request parameters and result payloads",
+  "description": "Request validation for protocol 1.0. Reserved operation state is documentary only; no operation RPC is enabled.",
+  "allOf": [
+    {
+      "$ref": "wire.schema.json#/$defs/request"
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "hello"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/helloParams"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "launcher.info"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "instances.list"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/listParams"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "mods.list"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/inventoryParams"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "helloParams": {
+      "type": "object",
+      "properties": {
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "major": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "minor": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "major",
+              "minor"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "versions",
+        "client"
+      ],
+      "additionalProperties": false
+    },
+    "listParams": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "default": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 200
+        },
+        "instanceRevision": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "then": {
+            "required": [
+              "instanceRevision"
+            ],
+            "properties": {
+              "instanceRevision": {
+                "minLength": 1
+              }
+            }
+          },
+          "if": {
+            "required": [
+              "offset"
+            ],
+            "properties": {
+              "offset": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "inventoryParams": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "default": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 200
+        },
+        "instanceRevision": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "physicalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "physicalId"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "then": {
+            "required": [
+              "instanceRevision"
+            ],
+            "properties": {
+              "instanceRevision": {
+                "minLength": 1
+              }
+            }
+          },
+          "if": {
+            "required": [
+              "offset"
+            ],
+            "properties": {
+              "offset": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "helloResult": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "$ref": "wire.schema.json#/$defs/protocol"
+        },
+        "installationId": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "frameBytes": {
+              "const": 1048576
+            },
+            "clients": {
+              "const": 8
+            },
+            "pageItems": {
+              "const": 500
+            }
+          },
+          "required": [
+            "frameBytes",
+            "clients",
+            "pageItems"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "protocol",
+        "installationId",
+        "profileId",
+        "sessionId",
+        "capabilities",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "instance": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "type": "string"
+        },
+        "uuid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "physicalId": {
+          "type": "string"
+        },
+        "canonicalPath": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "loaded": {
+          "type": "boolean"
+        },
+        "nativeRunning": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "gameState": {
+          "const": "unknown"
+        },
+        "gamePhysicalId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modsPhysicalId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identityStatus": {
+          "enum": [
+            "verified",
+            "conflict"
+          ]
+        },
+        "nativeActivity": {
+          "enum": [
+            "idle",
+            "launch_preparing",
+            "launch_active",
+            "deleting",
+            "unknown",
+            null
+          ]
+        }
+      },
+      "required": [
+        "instanceId",
+        "uuid",
+        "physicalId",
+        "canonicalPath",
+        "name",
+        "loaded",
+        "nativeRunning",
+        "gameState",
+        "gamePhysicalId",
+        "modsPhysicalId",
+        "identityStatus",
+        "nativeActivity"
+      ],
+      "additionalProperties": false
+    },
+    "inventoryItem": {
+      "type": "object",
+      "properties": {
+        "fileName": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "modifiedMs": {
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "kind": {
+          "enum": [
+            "jar",
+            "directory",
+            "other"
+          ]
+        },
+        "linked": {
+          "type": "boolean"
+        },
+        "metadataState": {
+          "enum": [
+            "indexed",
+            "unindexed",
+            "conflict"
+          ]
+        },
+        "metadata": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/indexedMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "fileName",
+        "enabled",
+        "size",
+        "modifiedMs",
+        "kind",
+        "linked",
+        "metadataState",
+        "metadata"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "metadataState": {
+                "const": "indexed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "$ref": "#/$defs/indexedMetadata"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "metadata": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "warning": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "operation": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "resolving",
+            "downloading",
+            "prepared",
+            "acquiring",
+            "revalidating",
+            "backing_up",
+            "applying",
+            "verifying",
+            "rolling_back",
+            "completed",
+            "cancelled",
+            "failed",
+            "rolled_back",
+            "recovery_required"
+          ]
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "planDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "instanceRevision": {
+          "type": "string"
+        },
+        "result": {
+          "type": "object"
+        },
+        "error": {
+          "$ref": "wire.schema.json#/$defs/error"
+        }
+      },
+      "required": [
+        "operationId",
+        "state",
+        "terminal"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": ["completed", "cancelled", "failed", "rolled_back"]
+              }
+            }
+          },
+          "then": {
+            "properties": {"terminal": {"const": true}}
+          },
+          "else": {
+            "properties": {"terminal": {"const": false}}
+          }
+        }
+      ],
+      "additionalProperties": false,
+      "x-status": "reserved-unsupported"
+    },
+    "indexedMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "updateLocked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "provider",
+        "projectId",
+        "versionId",
+        "version",
+        "updateLocked"
+      ],
+      "additionalProperties": false
+    },
+    "launcherInfoResult": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "$ref": "wire.schema.json#/$defs/protocol"
+        },
+        "installationId": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "serverName": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "string",
+          "pattern": "^[0-9]+(?![\\s\\S])"
+        },
+        "installRoot": {
+          "type": "string"
+        },
+        "dataRoot": {
+          "type": "string"
+        },
+        "executable": {
+          "type": "string"
+        },
+        "portable": {
+          "type": "boolean"
+        },
+        "backgroundStartup": {
+          "const": false
+        },
+        "launcherState": {
+          "const": "ready"
+        },
+        "instanceRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "protocol",
+        "installationId",
+        "profileId",
+        "sessionId",
+        "serverName",
+        "pid",
+        "installRoot",
+        "dataRoot",
+        "executable",
+        "portable",
+        "backgroundStartup",
+        "launcherState",
+        "instanceRoots"
+      ],
+      "additionalProperties": false
+    },
+    "instanceListResult": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nextOffset": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "revisionKind": {
+          "const": "observation"
+        },
+        "instances": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/instance"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/warning"
+          }
+        }
+      },
+      "required": [
+        "total",
+        "nextOffset",
+        "instanceRevision",
+        "revisionKind",
+        "instances",
+        "warnings"
+      ],
+      "additionalProperties": false
+    },
+    "inventoryResult": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nextOffset": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "revisionKind": {
+          "const": "observation"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/inventoryItem"
+          }
+        }
+      },
+      "required": [
+        "total",
+        "nextOffset",
+        "instanceRevision",
+        "revisionKind",
+        "items"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

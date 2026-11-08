@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+#include <QJsonObject>
+#include <QString>
+namespace Awake::Integration {
+inline constexpr quint32 MaxFrameBytes = 1024 * 1024;
+struct Request {
+    QString id, method, error;
+    QJsonObject params;
+    bool managerExtensions = false;
+    // The single accepted hello extension (e.g. "manager.v0.2" or "manager.v0.2.1"); empty when none.
+    QString managerExtension;
+};
+QJsonObject version();
+QJsonObject failure(const QString& code, const QString& message, bool retryable = false);
+Request parseRequest(const QByteArray& bytes, int major = 1, int minor = 0);
+QByteArray frame(const QJsonObject& body);
+QJsonObject capabilities();
+}  // namespace Awake::Integration

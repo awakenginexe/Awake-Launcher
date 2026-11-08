@@ -39,29 +39,15 @@
 #include <expected>
 
 #include <cmath>
-#include "FileSystem.h"
 
 namespace {
 bool isBinaryJson(const QByteArray& data)
 {
     decltype(QJsonDocument::BinaryFormatTag) tag = QJsonDocument::BinaryFormatTag;
-    return memcmp(data.constData(), &tag, sizeof(QJsonDocument::BinaryFormatTag)) == 0;
+    return data.size() >= sizeof(tag) && memcmp(data.constData(), &tag, sizeof(tag)) == 0;
 }
 }  // namespace
 namespace Json {
-Result<> write(const QJsonDocument& doc, const QString& filename)
-{
-    return FS::write(filename, doc.toJson());
-}
-Result<> write(const QJsonObject& object, const QString& filename)
-{
-    return write(QJsonDocument(object), filename);
-}
-Result<> write(const QJsonArray& array, const QString& filename)
-{
-    return write(QJsonDocument(array), filename);
-}
-
 QByteArray toText(const QJsonObject& obj)
 {
     return QJsonDocument(obj).toJson(QJsonDocument::Compact);
@@ -84,12 +70,6 @@ Result<QJsonDocument> requireDocument(const QByteArray& data, const QString& wha
     }
     return doc;
 }
-Result<QJsonDocument> requireDocument(const QString& filename, const QString& what)
-{
-    return FS::read(filename)
-        .transform_error([what](const auto& v) { return what + ": Error reading file: " + v; })
-        .and_then([what](const auto& v) { return requireDocument(v, what); });
-}
 Result<QJsonObject> requireObject(const QJsonDocument& doc, const QString& what)
 {
     if (!doc.isObject()) {
@@ -100,10 +80,6 @@ Result<QJsonObject> requireObject(const QJsonDocument& doc, const QString& what)
 Result<QJsonObject> requireObject(const QByteArray& data, const QString& what)
 {
     return requireDocument(data, what).and_then([what](const auto& v) { return requireObject(v, what); });
-}
-Result<QJsonObject> requireObject(const QString& filename, const QString& what)
-{
-    return requireDocument(filename, what).and_then([what](const auto& v) { return requireObject(v, what); });
 }
 Result<QJsonArray> requireArray(const QJsonDocument& doc, const QString& what)
 {

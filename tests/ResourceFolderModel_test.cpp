@@ -42,6 +42,7 @@
 
 #include <minecraft/mod/ModFolderModel.h>
 #include <minecraft/mod/ResourceFolderModel.h>
+#include <minecraft/mod/tasks/ResourceFolderLoadTask.h>
 
 #define EXEC_UPDATE_TASK(EXEC, VERIFY)                                                  \
     QEventLoop loop;                                                                    \
@@ -65,6 +66,20 @@ class ResourceFolderModelTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void readOnlyScanPreservesConflictingEnabledAndDisabledFiles()
+    {
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        for (const auto& name : {"mod.jar", "mod.jar.disabled"}) {
+            QFile file(directory.filePath(name)); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("fixture");
+        }
+        ResourceFolderLoadTask task(QDir(directory.path()), QDir(directory.filePath(".index")), false, true,
+            [](const QFileInfo& file) { return new Resource(file); }, true);
+        task.start();
+        QVERIFY(task.wasSuccessful());
+        QVERIFY(QFileInfo::exists(directory.filePath("mod.jar")));
+        QVERIFY(QFileInfo::exists(directory.filePath("mod.jar.disabled")));
+        QVERIFY(!QFileInfo::exists(directory.filePath("mod.jar.duplicate")));
+    }
     // test for GH-1178 - install a folder with files to a mod list
     void test_1178()
     {

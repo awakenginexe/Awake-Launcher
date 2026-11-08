@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #pragma once
+#include "ModrinthMetadata.h"
 
 #include "BuildConfig.h"
 #include "modplatform/ModIndex.h"
@@ -53,7 +54,7 @@ class ModrinthAPI final : public ResourceAPI {
    public:
     auto getSortingMethods() const -> QList<ResourceAPI::SortingMethod> override;
 
-    static auto getAuthorURL(const QString& name) -> QString { return "https://modrinth.com/user/" + name; };
+    static auto getAuthorURL(const QString& name) -> QString { return Modrinth::authorUrl(name); };
 
     static auto getModLoaderStrings(const ModPlatform::ModLoaderTypes types) -> QStringList
     {
@@ -99,17 +100,7 @@ class ModrinthAPI final : public ResourceAPI {
 
     static QString mapMCVersionFromModrinth(QString v)
     {
-        static const QString s_preString = " Pre-Release ";
-        bool pre = false;
-        if (v.contains("-pre")) {
-            pre = true;
-            v.replace("-pre", s_preString);
-        }
-        v.replace("-", " ");
-        if (pre) {
-            v.replace(" Pre Release ", s_preString);
-        }
-        return v;
+        return Modrinth::minecraftVersion(std::move(v));
     }
     static ModPlatform::ResourceType getResourceType(const QString& param);
 
@@ -161,18 +152,8 @@ class ModrinthAPI final : public ResourceAPI {
             }
         }
 
-        QStringList getArguments;
-        getArguments.append(QString("offset=%1").arg(args.offset));
-        getArguments.append(QString("limit=25"));
-        if (args.search.has_value()) {
-            getArguments.append(QString("query=%1").arg(args.search.value()));
-        }
-        if (args.sorting.has_value()) {
-            getArguments.append(QString("index=%1").arg(args.sorting.value().name));
-        }
-        getArguments.append(QString("facets=%1").arg(createFacets(args)));
-
-        return BuildConfig.MODRINTH_PROD_URL + "/search?" + getArguments.join('&');
+        return Modrinth::searchUrl(BuildConfig.MODRINTH_PROD_URL, args.search.value_or(""), createFacets(args), args.offset, 25,
+            args.sorting.has_value() ? args.sorting->name : "relevance").toString(QUrl::FullyEncoded);
     };
 
     auto getInfoURL(const QString& id) const -> std::optional<QString> override
@@ -187,17 +168,10 @@ class ModrinthAPI final : public ResourceAPI {
 
     auto getVersionsURL(const VersionSearchArgs& args) const -> std::optional<QString> override
     {
-        QStringList getArguments;
-        if (args.mcVersions.has_value()) {
-            getArguments.append(QString("game_versions=[%1]").arg(getGameVersionsString(args.mcVersions.value())));
-        }
-        if (args.loaders.has_value()) {
-            getArguments.append(QString("loaders=[\"%1\"]").arg(getModLoaderStrings(args.loaders.value()).join("\",\"")));
-        }
-        getArguments.append(QString("include_changelog=%1").arg(args.includeChangelog ? "true" : "false"));
-
-        return QString("%1/project/%2/version%3%4")
-            .arg(BuildConfig.MODRINTH_PROD_URL, args.pack->addonId.toString(), getArguments.isEmpty() ? "" : "?", getArguments.join('&'));
+        QStringList games;
+        if (args.mcVersions) for (const auto& game : *args.mcVersions) games.append(mapMCVersionToModrinth(game));
+        return Modrinth::versionsUrl(BuildConfig.MODRINTH_PROD_URL, args.pack->addonId.toString(), games,
+            args.loaders ? getModLoaderStrings(*args.loaders) : QStringList{}, args.includeChangelog).toString(QUrl::FullyEncoded);
     };
 
     static QString getGameVersionsArray(const std::vector<Version>& mcVersions)

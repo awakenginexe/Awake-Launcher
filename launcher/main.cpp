@@ -46,6 +46,7 @@
 
 #if defined Q_OS_WIN32
 #include "console/WindowsConsole.h"
+#include "awake/integration/GameProcessGroup.h"
 extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000000;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0;
@@ -54,6 +55,10 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0;
 
 int main(int argc, char* argv[])
 {
+#if defined Q_OS_WIN32
+    const auto keeper = Awake::Integration::GameProcessGroup::runKeeper(argc, argv);
+    if (keeper >= 0) return keeper;
+#endif
 #ifdef AWAKE_WEB_ENABLED
     Awake::Web::initialize();
     Q_INIT_RESOURCE(awake_web);

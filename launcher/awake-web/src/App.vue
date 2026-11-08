@@ -72,6 +72,7 @@ watch(() => [showUpdates.value, state.value.updates.status], async () => {
 });
 const editorSection = ref('overview');
 function openEditor(instance: Instance, section = 'overview') {
+  if (instance.managerLinked && section !== 'log') return;
   closePopovers(); editorSection.value = section; editingInstance.value = instance;
 }
 
@@ -266,6 +267,7 @@ onUnmounted(() => {
         <p v-if="status === 'ready'" class="library-playtime"><span>{{ t('allInstancesPlaytime') }}</span><strong>{{ formatPlaytime(totalPlaytime, state.locale) }}</strong></p>
         <button class="quiet" :disabled="!enabled" @click="openSkins()">{{ t('skins') }}</button>
         <div class="creation-actions"><button :disabled="!enabled" @click="openCreate('custom')">{{ t('create') }}</button><button class="quiet" :disabled="!enabled" @click="openCreate('import')">{{ t('import') }}</button></div>
+        <button class="quiet" :disabled="!enabled" @click="action('linkManagerWorkspace')">{{ t('linkManagerWorkspace') }}</button>
         <div class="account-actions"><button class="quiet account-button" :disabled="!enabled" @click="showAccounts = true"><span>{{ t('accounts') }}</span><span class="account-name">{{ state.accountName || t('accountUnavailable') }}</span></button><button class="settings-button" :disabled="!enabled" :title="t('settings')" :aria-label="t('settings')" @click="openSettings('general')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg></button></div>
       </footer>
     </aside>
@@ -292,14 +294,15 @@ onUnmounted(() => {
               <div><dt>{{ t('lastSession') }}</dt><dd>{{ selected.lastLaunch ? formatPlaytime(selected.lastTimePlayed, state.locale) : '—' }}</dd></div>
               <div><dt>{{ t('instanceTotalPlaytime') }}</dt><dd>{{ formatPlaytime(selected.totalTimePlayed, state.locale) }}</dd></div>
             </dl>
-            <div class="identity-actions"><button class="quiet" :disabled="!enabled" @click="openEditor(selected)">{{ t('edit') }}</button><button class="quiet" :disabled="!enabled" @click="action('folder', selected.id)">{{ t('folder') }}</button></div>
+            <p v-if="selected.managerLinked" class="secondary">{{ t('managerWorkspaceHint') }}</p>
+            <div class="identity-actions"><button class="quiet" :disabled="!enabled || selected.managerLinked" @click="openEditor(selected)">{{ t('edit') }}</button><button class="quiet" :disabled="!enabled" @click="action('folder', selected.id)">{{ t('folder') }}</button></div>
           </div>
         </Transition>
 
         <div class="launch-dock glass">
           <LoadingSkeleton v-if="busy" class="launch-status" :label="t('working')" :rows="1" /><p v-else class="launch-status" role="status">{{ t(selectedStatus) }}</p>
           <button id="play" class="play-button" :disabled="!canPlay" @click="launch()"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="m5 3 11 7-11 7Z" /></svg>{{ t(selected.running ? 'running' : 'play') }}</button>
-          <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button></div></details>
+          <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled || selected.managerLinked" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled || selected.managerLinked" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button></div></details>
         </div>
       </div>
     </section>
@@ -316,16 +319,16 @@ onUnmounted(() => {
       >
         <p class="instance-context-heading" role="presentation">{{ contextMenu.instance.name }}</p>
         <button role="menuitem" :disabled="!enabled || !contextMenu.instance.canLaunch || contextMenu.instance.running || contextMenu.instance.broken" @click="runContextAction('launch', contextMenu.instance)">{{ t('play') }}</button>
-        <button role="menuitem" :disabled="!enabled" @click="runContextAction('edit', contextMenu.instance)">{{ t('edit') }}</button>
+        <button role="menuitem" :disabled="!enabled || contextMenu.instance.managerLinked" @click="runContextAction('edit', contextMenu.instance)">{{ t('edit') }}</button>
         <button role="menuitem" :disabled="!enabled" @click="runContextAction('folder', contextMenu.instance)">{{ t('folder') }}</button>
         <div class="instance-context-separator" role="separator"></div>
         <button role="menuitem" :disabled="!enabled" @click="toggleContextPin(contextMenu.instance)">{{ t(contextMenu.instance.pinned ? 'unpin' : 'pin') }}</button>
         <button role="menuitem" :disabled="!enabled" @click="runContextAction('rename', contextMenu.instance)">{{ t('rename') }}</button>
         <button role="menuitem" :disabled="!enabled" @click="runContextAction('changeGroup', contextMenu.instance)">{{ t('changeGroup') }}</button>
-        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running" @click="runContextAction('copy', contextMenu.instance)">{{ t('copy') }}</button>
-        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.broken" @click="runContextAction('export', contextMenu.instance)">{{ t('export') }}</button>
+        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.managerLinked" @click="runContextAction('copy', contextMenu.instance)">{{ t('copy') }}</button>
+        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.broken || contextMenu.instance.managerLinked" @click="runContextAction('export', contextMenu.instance)">{{ t('export') }}</button>
         <div class="instance-context-separator" role="separator"></div>
-        <button role="menuitem" class="destructive" :disabled="!enabled || contextMenu.instance.running" @click="runContextAction('delete', contextMenu.instance)">{{ t('delete') }}</button>
+        <button role="menuitem" class="destructive" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.managerLinked" @click="runContextAction('delete', contextMenu.instance)">{{ t('delete') }}</button>
         <button role="menuitem" :disabled="!enabled || !contextMenu.instance.running" @click="runContextAction('kill', contextMenu.instance)">{{ t('kill') }}</button>
       </div>
     </div>

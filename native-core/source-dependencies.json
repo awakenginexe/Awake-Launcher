@@ -1,0 +1,116 @@
+{
+  "vcpkgCommit": "908da3a305a0a8028d9602ab241b433652b3df69",
+  "registryBaseline": "2d6a6cf3ac9a7cc93942c3d289a2f9c661a6f4a7",
+  "tripletSha256": "2982a9d36969ff50d6e22320bea5b3f1e7f9621a9b51b446a4c6a4a0e10ce0b5",
+  "qt": {
+    "version": "6.11.2",
+    "commit": "ef55f427f2c8b410d34f8a7681020a3000cf6866",
+    "archive": "qtbase-ef55f427f2c8b410d34f8a7681020a3000cf6866.tar.gz",
+    "sha256": "12b3a9ba00613180caea4da77a1ae6fc1ca054b8822b316ba3a05fb4414fba56",
+    "url": "https://codeload.github.com/qt/qtbase/tar.gz/ef55f427f2c8b410d34f8a7681020a3000cf6866",
+    "binarySha256": {
+      "Qt6Core.dll": "22c113a5644b875b2c85482723cd5d2e6a3a4029169778fcc78adde08ef3b6aa",
+      "Qt6Network.dll": "75ff0896a618f4f5b602f391eb4917a55fd738b2e751d2cf18244a0de3619184",
+      "tls/qcertonlybackend.dll": "ff0f1a60ec60fc23ec74ff5d325ddef05c1ed68fc89466bffc1d874c7c544adb",
+      "tls/qschannelbackend.dll": "761178263b47a5f05e151806bb5854d9e5c9cbc67d08187724d80f9e317471f8",
+      "networkinformation/qnetworklistmanager.dll": "2f7c43bb4ec05e9f23a326ac69e84a6df071cdf7cc0bf87cde98f81958ad9bae"
+    }
+  },
+  "vcpkgTool": {
+    "commit": "bf04c909169fdbb30821c02c6eb01f1cd1295d05",
+    "url": "https://codeload.github.com/microsoft/vcpkg-tool/tar.gz/bf04c909169fdbb30821c02c6eb01f1cd1295d05",
+    "sha256": "ea07bfaa8b8d6b7e489b254baf7d9efd5712135cd2439a1f3c135779fc3f0c53"
+  },
+  "dependencies": [
+    {
+      "name": "libarchive",
+      "version": "3.8.2",
+      "archive": "libarchive-libarchive-v3.8.2.tar.gz",
+      "sha256": "97548897f06ed7f5cd847fc62a67420809dbbd9b45ec13a25d3290fafba046c8",
+      "portTree": "aa11cf7a588bfab1d9c3b555902c09056176183c",
+      "url": "https://github.com/libarchive/libarchive/archive/refs/tags/v3.8.2.tar.gz",
+      "linkage": "direct static"
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.1",
+      "archive": "madler-zlib-v1.3.1.tar.gz",
+      "sha256": "17e88863f3600672ab49182f217281b6fc4d3c762bde361935e436a95214d05c",
+      "portTree": "3f05e04b9aededb96786a911a16193cdb711f0c9",
+      "url": "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz",
+      "linkage": "direct static"
+    },
+    {
+      "name": "bzip2",
+      "version": "1.0.8#6",
+      "archive": "bzip2-1.0.8.tar.gz",
+      "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+      "portTree": "2d029da682847c5ebdc54e4dbea001331a02207e",
+      "url": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz",
+      "linkage": "direct static"
+    },
+    {
+      "name": "liblzma",
+      "version": "5.8.1",
+      "archive": "tukaani-project-xz-v5.8.1.tar.gz",
+      "sha256": "bdbc23fbf9098843357e71e49685724fda2c320c29cb1b25fd90505f14bb0b3d",
+      "portTree": "55eb3803f1d0388aebca8fd293963721bbf0092c",
+      "url": "https://github.com/tukaani-project/xz/archive/refs/tags/v5.8.1.tar.gz",
+      "linkage": "direct static"
+    },
+    {
+      "name": "zstd",
+      "version": "1.5.7",
+      "archive": "facebook-zstd-v1.5.7.tar.gz",
+      "sha256": "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3",
+      "portTree": "31b7320fab13790c6861cb3c2d50dc8f60ca3602",
+      "url": "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+      "linkage": "direct static"
+    },
+    {
+      "name": "lz4",
+      "version": "1.10.0",
+      "archive": "lz4-lz4-v1.10.0.tar.gz",
+      "sha256": "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b",
+      "portTree": "4f01eec10f515a428e914107c5188366380f8dd9",
+      "url": "https://github.com/lz4/lz4/archive/refs/tags/v1.10.0.tar.gz",
+      "linkage": "installed libarchive feature; inclusion unverified"
+    },
+    {
+      "name": "lzo",
+      "version": "2.10#9",
+      "archive": "lzo-2.10.tar.gz",
+      "sha256": "c0f892943208266f9b6543b3ae308fab6284c5c90e627931446fb49b4221a072",
+      "portTree": "fcd8844a4e80d418bf894cf93a0453f067e404de",
+      "url": "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz",
+      "linkage": "installed libarchive feature; inclusion unverified"
+    },
+    {
+      "name": "tomlplusplus",
+      "version": "3.4.0#1",
+      "archive": "marzer-tomlplusplus-v3.4.0.tar.gz",
+      "sha256": "8517f65938a4faae9ccf8ebb36631a38c1cadfb5efa85d9a72e15b9e97d25155",
+      "portTree": "c89c408f778aebf69ac0bbbb3d19db57c97d664c",
+      "url": "https://github.com/marzer/tomlplusplus/archive/refs/tags/v3.4.0.tar.gz",
+      "linkage": "direct static"
+    }
+  ],
+  "buildPorts": {
+    "pkgconf": "0e3bcce12697924fae59f8567477d1a4cc2de04f",
+    "vcpkg-cmake-config": "97a63e4bc1a17422ffe4eff71da53b4b561a7841",
+    "vcpkg-cmake-get-vars": "d6510f888dd526c7828f6b973349e7f30be51254",
+    "vcpkg-cmake": "e74aa1e8f93278a8e71372f1fa08c3df420eb840"
+  },
+  "buildSources": [
+    {
+      "archive": "meson-1.8.2.tar.gz",
+      "sha256": "6b878fb0f6f0318cbd54e13539f89a1a8305791668e8e93ffd59d82722888dac",
+      "url": "https://github.com/mesonbuild/meson/releases/download/1.8.2/meson-1.8.2.tar.gz"
+    },
+    {
+      "archive": "pkgconf-pkgconf-pkgconf-2.5.1.tar.gz",
+      "sha256": "79721badcad1987dead9c3609eb4877ab9b58821c06bdacb824f2c8897c11f2a",
+      "url": "https://github.com/pkgconf/pkgconf/archive/refs/tags/pkgconf-2.5.1.tar.gz"
+    }
+  ]
+}

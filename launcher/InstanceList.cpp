@@ -35,6 +35,14 @@
  */
 
 #include "InstanceList.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceAuthority.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/ManagerWorkspaceLink.h"
+#include "awake/integration/PhysicalInstanceLease.h"
+#include "awake/integration/ProfileAccess.h"
+#include "awake/integration/DurableIO.h"
+#endif
 
 #include <QDebug>
 #include <QDirListing>
@@ -390,6 +398,7 @@ bool InstanceList::isGroupCollapsed(const QString& group)
 bool InstanceList::trashInstance(const InstanceId& id)
 {
     auto* inst = getInstanceById(id);
+    if (inst && inst->isManagerLinked()) return false;
     if (!inst) {
         qWarning() << "Cannot trash instance" << id << ". No such instance is present (deleted externally?).";
         return false;
@@ -485,6 +494,7 @@ bool InstanceList::undoTrashInstance()
 void InstanceList::deleteInstance(const InstanceId& id)
 {
     auto* inst = getInstanceById(id);
+    if (inst && inst->isManagerLinked()) return;
     if (!inst) {
         qWarning() << "Cannot delete instance" << id << ". No such instance is present (deleted externally?).";
         return;
@@ -523,6 +533,7 @@ bool InstanceList::removeInstance(const InstanceId& id, QString* error)
     auto* instance = getInstanceById(id);
     if (isRemoving()) return reject(tr("Finish deleting the current instance first."));
     if (!instance) return reject(tr("This instance no longer exists."));
+    if (instance->isManagerLinked()) return reject(tr("Manage this workspace's files in Awake Modpack Manager."));
     if (instance->isRunning()) return reject(tr("Stop the instance before deleting it."));
     m_removingId = id;
     m_removingName = instance->name();
@@ -615,9 +626,56 @@ QList<InstanceId> InstanceList::discoverInstances()
             qInfo() << "Found instance ID" << id << "in" << rootDir;
         }
     }
+#ifdef Q_OS_WIN
+    m_managerLinks.clear();
+    for (const auto& file : QDir("manager-links").entryInfoList({"*.json"}, QDir::Files)) {
+        QFile record(file.absoluteFilePath());
+        if (!record.open(QIODevice::ReadOnly) || record.size() > 16384) continue;
+        const auto link = QJsonDocument::fromJson(record.readAll()).object();
+        const auto path = link["path"].toString(), id = file.completeBaseName();
+        const auto binding = Awake::Integration::managerWorkspaceBinding(path, link["physicalId"].toString());
+        if (binding.isEmpty() || binding["registrationId"] != id) continue;
+        if (out.contains(id)) {
+            const auto discovered = FS::PathCombine(m_instanceRootDirMap.value(id), id);
+            if (Awake::Integration::physicalIdentityV2(discovered) != link["physicalId"].toString()) continue;
+            out.removeAll(id);
+        }
+        m_managerLinks[id] = link;
+        m_instanceRootDirMap[id] = QFileInfo(path).dir().path();
+        out.append(id);
+    }
+#endif
     m_instanceSet = QSet<QString>(out.begin(), out.end());
     m_instancesProbed = true;
     return out;
+}
+
+bool InstanceList::linkManagerWorkspace(const QString& path, QString* error)
+{
+#ifdef Q_OS_WIN
+    using namespace Awake::Integration;
+    const auto binding = managerWorkspaceBinding(path, {}, error);
+    if (binding.isEmpty()) return false;
+    const auto root = QFileInfo(path).canonicalFilePath(), id = binding["registrationId"].toString();
+    if (auto* existing = getInstanceById(id); existing && existing->instanceRoot() != root) {
+        if (error) *error = tr("Another instance already uses this name. Its files were preserved.");
+        return false;
+    }
+    auto lease = acquireManagerWorkspace(root, binding["physicalId"].toString(), error);
+    if (!lease) return false;
+    const auto directory = QDir::current().filePath("manager-links");
+    if (!createPrivateStorageDirectory(directory)) return false;
+    const QJsonObject link{{"path", root}, {"physicalId", binding["physicalId"]}};
+    if (!DurableIO::write(directory + '/' + id + ".json", QJsonDocument(link).toJson(QJsonDocument::Compact), error)) return false;
+    lease.reset();
+    loadList();
+    if (!getInstanceById(id)) { if (error) *error = tr("The workspace could not be loaded. Open Manager and check its files."); return false; }
+    emit instanceSelectRequest(id);
+    return true;
+#else
+    if (error) *error = tr("Manager workspace linking currently requires Windows.");
+    return false;
+#endif
 }
 
 QString InstanceList::rootDirOf(const InstanceId& id) const
@@ -632,7 +690,11 @@ InstanceList::InstListError InstanceList::loadList()
     std::vector<std::unique_ptr<MinecraftInstance>> newList;
 
     for (auto& id : discoverInstances()) {
-        if (existingIds.contains(id)) {
+        auto* existing = existingIds.contains(id) ? existingIds[id].first : nullptr;
+        const bool sameRoot = existing && QFileInfo(existing->instanceRoot()).canonicalFilePath() == QFileInfo(FS::PathCombine(rootDirOf(id), id)).canonicalFilePath();
+        const bool sameLink = existing && existing->isManagerLinked() == m_managerLinks.contains(id) &&
+            (!existing->isManagerLinked() || existing->managerPhysicalId() == m_managerLinks[id]["physicalId"].toString());
+        if (sameRoot && sameLink) {
             existingIds.remove(id);
             qInfo() << "Should keep and soft-reload" << id;
         } else {
@@ -809,7 +871,26 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     }
 
     auto instanceRoot = FS::PathCombine(rootDirOf(id), id);
+#ifdef Q_OS_WIN
+    const bool managerLinked = m_managerLinks.contains(id);
+    const QDir ownership(FS::PathCombine(instanceRoot, ".awake-integration"));
+    if (!managerLinked && ((ownership.exists() && !ownership.entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot).isEmpty()) ||
+        Awake::Integration::InstanceAuthority::blocksNativeLoad(instanceRoot))) {
+        qWarning() << "Instance requires external ownership/recovery coordination:" << instanceRoot;
+        return nullptr;
+    }
+#endif
     auto instanceSettings = std::make_unique<INISettingsObject>(FS::PathCombine(instanceRoot, "instance.cfg"));
+#ifdef Q_OS_WIN
+    if (managerLinked) {
+        const auto local = QDir::current().filePath("manager-links/" + id + ".cfg");
+        if (QFileInfo::exists(local)) instanceSettings = std::make_unique<INISettingsObject>(local);
+        else {
+            if (!Awake::Integration::DurableIO::copy(instanceRoot + "/instance.cfg", local)) return nullptr;
+            instanceSettings->setFilePath(local);
+        }
+    }
+#endif
 
     instanceSettings->registerSetting("InstanceType", "");
 
@@ -820,6 +901,9 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     }
 
     auto inst = std::make_unique<MinecraftInstance>(m_globalSettings, std::move(instanceSettings), instanceRoot);
+#ifdef Q_OS_WIN
+    if (managerLinked) inst->setManagerLinked(m_managerLinks[id]["physicalId"].toString());
+#endif
     qDebug() << "Loaded instance" << inst->name() << "from" << inst->instanceRoot();
 
     auto shortcut = inst->shortcuts();

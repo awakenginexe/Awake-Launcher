@@ -137,7 +137,7 @@ struct ModCatalog::State {
     bool available(const RequestPtr& request)
     {
         if (request->done) return false;
-        if (!request->instance || request->instance->isDeleting() || request->instance->isRunning() ||
+        if (!request->instance || request->instance->isManagerLinked() || request->instance->isDeleting() || request->instance->isRunning() ||
             identity(request->instance) != request->profile) {
             fail(request, QObject::tr("The instance changed or is running. Stop the game and try again."));
             return false;

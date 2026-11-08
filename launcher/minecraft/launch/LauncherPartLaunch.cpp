@@ -43,6 +43,9 @@
 #include "FileSystem.h"
 #include "launch/LaunchTask.h"
 #include "minecraft/MinecraftInstance.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/GameProcessGroup.h"
+#endif
 
 #if defined(Q_OS_LINUX) && defined(ENABLE_GAMEMODE)
 #include "gamemode_client.h"
@@ -108,6 +111,16 @@ void LauncherPartLaunch::executeTask()
 
     // make detachable - this will keep the process running even if the object is destroyed
     m_process.setDetachable(true);
+#ifdef Q_OS_WIN
+    if (instance->isManagerLinked()) {
+        QString error;
+        auto group = Awake::Integration::GameProcessGroup::create(instanceLease(), &error);
+        if (!group || !group->attach(m_process, &error)) {
+            emitFailed(tr("Could not safely start this Manager workspace: ") + error);
+            return;
+        }
+    }
+#endif
 
     auto classPath = instance->getClassPath();
     classPath.prepend(jarPath);
@@ -166,6 +179,10 @@ void LauncherPartLaunch::executeTask()
 
 void LauncherPartLaunch::on_state(LoggedProcess::State state)
 {
+#ifdef Q_OS_WIN
+    if (state == LoggedProcess::FailedToStart || state == LoggedProcess::Aborted || state == LoggedProcess::Crashed || state == LoggedProcess::Finished)
+        m_process.setCreateProcessArgumentsModifier({});
+#endif
     switch (state) {
         case LoggedProcess::FailedToStart: {
             //: Error message displayed if instace can't start

@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+#include <QJsonObject>
+#include <QString>
+namespace Awake::Integration::InstanceAuthority {
+// Enrollment is a native creation/recovery action, never a caller-selected IPC path.
+bool enroll(const QString& root, const QString& physicalId, const QString& registry, const QString& ownerProfile,
+            const QString& registrationId, QString* error = nullptr);
+void* lock(const QString& physicalId, QString* error = nullptr);
+QJsonObject binding(const QString& physicalId, QString* error = nullptr);
+bool validate(const QString& root, const QString& physicalId, const QString& registry, QString* error = nullptr);
+bool requireGameRecord(const QString& physicalId, QString* error = nullptr);
+bool blocksNativeLoad(const QString& instanceRoot);
+}

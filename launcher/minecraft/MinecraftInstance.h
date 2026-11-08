@@ -65,9 +65,9 @@ class MinecraftInstance : public BaseInstance {
     // FIXME: remove
     QSet<QString> traits() const override;
 
-    bool canEdit() const override { return true; }
+    bool canEdit() const override { return !isManagerLinked(); }
 
-    bool canExport() const override { return true; }
+    bool canExport() const override { return !isManagerLinked(); }
 
     void populateLaunchMenu(QMenu* menu) override;
 

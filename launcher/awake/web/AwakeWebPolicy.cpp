@@ -40,7 +40,7 @@ bool externalUrl(const QUrl& url)
 bool actionAllowed(const QString& action)
 {
     static const QSet<QString> actions{
-        "create", "import", "edit", "folder", "accounts", "settings", "manage", "launch",
+        "create", "import", "linkManagerWorkspace", "edit", "folder", "accounts", "settings", "manage", "launch",
         "rename", "changeGroup", "copy", "export", "delete", "kill", "installPack", "importArchive", "importLocal",
         "launchOptions", "application", "logs", "legacy",
         "addMicrosoft", "addOffline", "removeAccount", "setDefaultAccount", "refreshAccount", "createQuick",
@@ -101,7 +101,7 @@ QVariantMap instanceDto(const InstanceData& i)
 {
     return {{"id", i.id}, {"name", i.name}, {"group", i.group}, {"minecraftVersion", i.minecraftVersion},
             {"loader", i.loader}, {"loaderVersion", i.loaderVersion}, {"iconUrl", i.iconUrl}, {"pinned", i.pinned},
-            {"canLaunch", i.canLaunch}, {"running", i.running}, {"broken", i.broken},
+            {"canLaunch", i.canLaunch}, {"running", i.running}, {"broken", i.broken}, {"managerLinked", i.managerLinked},
             {"lastLaunch", i.lastLaunch}, {"lastTimePlayed", i.lastTimePlayed >= 0 ? QVariant::fromValue(i.lastTimePlayed) : QVariant{}},
             {"totalTimePlayed", i.totalTimePlayed}};
 }

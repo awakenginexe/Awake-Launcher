@@ -37,7 +37,6 @@
 #include "settings/INIFile.h"
 
 #include <AssertHelpers.h>
-#include <FileSystem.h>
 
 #include <QDebug>
 #include <QFile>

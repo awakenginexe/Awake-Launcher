@@ -67,6 +67,7 @@ class QNetworkAccessManager;
 class JavaInstallList;
 class ExternalUpdater;
 namespace Awake { class UpdateChecker; }
+namespace Awake::Integration { class Coordinator; }
 class BaseProfilerFactory;
 class BaseDetachedToolFactory;
 class TranslationsModel;
@@ -116,6 +117,9 @@ class Application : public QApplication {
     ~Application() override;
 
     bool event(QEvent* event) override;
+#ifdef Q_OS_WIN
+    bool notify(QObject* receiver, QEvent* event) override;
+#endif
 
     SettingsObject* settings() const { return m_settings.get(); }
     SettingsObject* playtimeSettings() const { return m_playtimeSettings.get(); }
@@ -200,6 +204,7 @@ class Application : public QApplication {
     static QString updaterBinaryName();
 
     static QUrl normalizeImportUrl(const QString& url);
+    bool linkManagerWorkspace(const QString& path);
 
    signals:
     void awakeUpdateStateChanged();
@@ -259,6 +264,7 @@ class Application : public QApplication {
     std::unique_ptr<SettingsObject> m_settings;
     std::unique_ptr<SettingsObject> m_playtimeSettings;
     std::unique_ptr<InstanceList> m_instances;
+    std::unique_ptr<Awake::Integration::Coordinator> m_integration;
     std::unique_ptr<IconList> m_icons;
     std::unique_ptr<JavaInstallList> m_javalist;
     std::unique_ptr<TranslationsModel> m_translations;
@@ -305,6 +311,7 @@ class Application : public QApplication {
     QString m_detectedOpenALPath;
     QString m_detectedSDLPath;
     QString m_instanceIdToLaunch;
+    QString m_managerWorkspaceToLink;
     QString m_serverToJoin;
     QString m_worldToJoin;
     QString m_profileToUse;

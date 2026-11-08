@@ -1,0 +1,4095 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Awake standalone native helper 2.0",
+  "description": "Select the method-specific result definition using the outstanding request; capabilities are availability, not a promise from this schema.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    },
+    {
+      "$ref": "#/$defs/descriptor"
+    }
+  ],
+  "$defs": {
+    "protocol": {
+      "type": "object",
+      "properties": {
+        "major": {
+          "const": 2
+        },
+        "minor": {
+          "const": 0
+        }
+      },
+      "required": [
+        "major",
+        "minor"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z_]{1,64}$"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "$ref": "#/$defs/conflictDetails",
+          "description": "manager.v0.2.1 only: structured DEPENDENCY_CONFLICT review data."
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    },
+    "loader": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "enum": [
+            "vanilla",
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 96
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        },
+        "minecraftVersion": {
+          "type": "string",
+          "maxLength": 96,
+          "minLength": 1
+        },
+        "loader": {
+          "$ref": "#/$defs/loader"
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "ownership": {
+          "const": "manager-owned"
+        },
+        "recoveryRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "workspaceId",
+        "physicalId",
+        "name",
+        "minecraftVersion",
+        "loader",
+        "instanceRevision",
+        "ownership",
+        "recoveryRequired"
+      ],
+      "additionalProperties": false
+    },
+    "dependency": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "versionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "required",
+            "optional",
+            "incompatible",
+            "embedded",
+            "unknown",
+            "tool",
+            "include"
+          ]
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "versionId",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "maxLength": 255,
+          "minLength": 1
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "sha512": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{128}$"
+        },
+        "sha1": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "fileName",
+        "size",
+        "sha1",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "version": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "versionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "versionNumber": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "releaseType": {
+          "enum": [
+            "release",
+            "beta",
+            "alpha"
+          ]
+        },
+        "gameVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1
+          },
+          "maxItems": 512
+        },
+        "loaders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1
+          },
+          "maxItems": 32
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          },
+          "maxItems": 32,
+          "minItems": 1
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          },
+          "maxItems": 512
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "versionId",
+        "versionNumber",
+        "name",
+        "releaseType",
+        "gameVersions",
+        "loaders",
+        "files",
+        "dependencies"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "curseforge"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          },
+          "then": {},
+          "else": {
+            "properties": {
+              "files": {
+                "items": {
+                  "required": [
+                    "sha512"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "slug": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "iconUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2048,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gameVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1
+          },
+          "maxItems": 512
+        },
+        "loaders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1
+          },
+          "maxItems": 32
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "slug",
+        "title",
+        "description",
+        "iconUrl",
+        "gameVersions",
+        "loaders"
+      ],
+      "additionalProperties": false
+    },
+    "change": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "enum": [
+                "install",
+                "replace"
+              ]
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "versionId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "provider": {
+              "enum": [
+                "modrinth",
+                "curseforge"
+              ]
+            },
+            "artifactSha512": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{128}$"
+            }
+          },
+          "required": [
+            "action",
+            "projectId",
+            "versionId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "enum": [
+                "remove",
+                "enable",
+                "disable"
+              ]
+            },
+            "inventoryId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          "required": [
+            "action",
+            "inventoryId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "const": "policy"
+            },
+            "inventoryId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "pinnedVersion": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "excluded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "action",
+            "inventoryId",
+            "pinnedVersion",
+            "excluded"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "fileChange": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "minLength": 1
+        },
+        "action": {
+          "enum": [
+            "install",
+            "replace",
+            "remove"
+          ]
+        },
+        "beforeSha256": {
+          "type": "string",
+          "pattern": "^(missing|[a-f0-9]{64})$"
+        },
+        "afterSha256": {
+          "type": "string",
+          "pattern": "^(missing|[a-f0-9]{64})$"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "kind": {
+          "enum": [
+            "mod",
+            "override",
+            "bookkeeping"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "action",
+        "beforeSha256",
+        "afterSha256",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "installed": {
+      "type": "object",
+      "properties": {
+        "inventoryId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 255,
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "projectId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "versionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "versionNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metadataState": {
+          "enum": [
+            "verified",
+            "modified",
+            "unknown"
+          ]
+        },
+        "updateLocked": {
+          "type": "boolean",
+          "description": "Aggregate block: nativeLock OR policy.excluded OR policy.pinnedVersion is not null. Retained for legacy clients."
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "pinnedVersion": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "excluded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "pinnedVersion",
+            "excluded"
+          ],
+          "additionalProperties": false
+        },
+        "nativeLock": {
+          "type": "boolean"
+        },
+        "loaderBridge": {
+          "const": "sinytra-connector",
+          "description": "manager.v0.2.1 only: a Fabric mod loaded through Sinytra Connector."
+        }
+      },
+      "required": [
+        "inventoryId",
+        "fileName",
+        "enabled",
+        "size",
+        "sha256",
+        "projectId",
+        "versionId",
+        "versionNumber",
+        "metadataState",
+        "updateLocked"
+      ],
+      "additionalProperties": false
+    },
+    "progress": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1
+        },
+        "completed": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "total": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "enum": [
+            "steps",
+            "files",
+            "bytes"
+          ]
+        }
+      },
+      "required": [
+        "phase",
+        "completed",
+        "total",
+        "unit"
+      ],
+      "additionalProperties": false
+    },
+    "operationResult": {
+      "type": "object",
+      "properties": {
+        "workspace": {
+          "$ref": "#/$defs/workspace"
+        },
+        "planDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "expectedInstanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "accepted": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "resolving",
+            "downloading",
+            "prepared",
+            "acquiring",
+            "revalidating",
+            "backing_up",
+            "applying",
+            "verifying",
+            "rolling_back",
+            "recovery_required",
+            "completed",
+            "failed",
+            "cancelled",
+            "rolled_back"
+          ]
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "replayed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operationId",
+        "state",
+        "terminal",
+        "replayed"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled",
+                  "rolled_back"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "terminal": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "terminal": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "enum": [
+            "workspace-create",
+            "modpack-change",
+            "workspace-delete"
+          ]
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "resolving",
+            "downloading",
+            "prepared",
+            "acquiring",
+            "revalidating",
+            "backing_up",
+            "applying",
+            "verifying",
+            "rolling_back",
+            "recovery_required",
+            "completed",
+            "failed",
+            "cancelled",
+            "rolled_back"
+          ]
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "sequence": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "cancellationRequested": {
+          "type": "boolean"
+        },
+        "progress": {
+          "$ref": "#/$defs/progress"
+        },
+        "result": {
+          "$ref": "#/$defs/operationResult"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "required": [
+        "operationId",
+        "kind",
+        "state",
+        "terminal",
+        "createdAt",
+        "updatedAt",
+        "sequence",
+        "cancellationRequested"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled",
+                  "rolled_back"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "terminal": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "terminal": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "transfer": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "received": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "token",
+        "size",
+        "received",
+        "sha256",
+        "complete"
+      ],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "hello": {
+          "type": "boolean"
+        },
+        "core.info": {
+          "type": "boolean"
+        },
+        "core.shutdown": {
+          "type": "boolean"
+        },
+        "catalog.versions": {
+          "type": "boolean"
+        },
+        "workspaces.create": {
+          "type": "boolean"
+        },
+        "workspaces.list": {
+          "type": "boolean"
+        },
+        "providers.search": {
+          "type": "boolean"
+        },
+        "providers.versions": {
+          "type": "boolean"
+        },
+        "plans.prepare": {
+          "type": "boolean"
+        },
+        "plans.get": {
+          "type": "boolean"
+        },
+        "transactions.apply": {
+          "type": "boolean"
+        },
+        "mods.list": {
+          "type": "boolean"
+        },
+        "updates.check": {
+          "type": "boolean"
+        },
+        "operations.get": {
+          "type": "boolean"
+        },
+        "operations.list": {
+          "type": "boolean"
+        },
+        "operations.cancel": {
+          "type": "boolean"
+        },
+        "events.poll": {
+          "type": "boolean"
+        },
+        "recovery.list": {
+          "type": "boolean"
+        },
+        "recovery.run": {
+          "type": "boolean"
+        },
+        "inbox.begin": {
+          "type": "boolean"
+        },
+        "inbox.write": {
+          "type": "boolean"
+        },
+        "inbox.commit": {
+          "type": "boolean"
+        },
+        "inbox.status": {
+          "type": "boolean"
+        },
+        "outbox.read": {
+          "type": "boolean"
+        },
+        "loaders.forge.v1": {
+          "type": "boolean"
+        },
+        "loaders.neoforge.v1": {
+          "type": "boolean"
+        },
+        "loaders.quilt.v1": {
+          "type": "boolean"
+        },
+        "providers.curseforge.v1": {
+          "type": "boolean"
+        },
+        "policies.v1": {
+          "type": "boolean"
+        },
+        "imports.inspect": {
+          "type": "boolean"
+        },
+        "imports.prepare": {
+          "type": "boolean"
+        },
+        "inbox.discard.v1": {
+          "type": "boolean"
+        },
+        "inbox.discard": {
+          "type": "boolean"
+        },
+        "providers.project": {
+          "type": "boolean"
+        },
+        "outbox.configs.v1": {
+          "type": "boolean"
+        },
+        "outbox.list": {
+          "type": "boolean"
+        },
+        "dependencies.resolutions.v1": {
+          "type": "boolean"
+        },
+        "loaders.connector.v1": {
+          "type": "boolean"
+        },
+        "workspaces.delete": {
+          "type": "boolean"
+        },
+        "workspaces.rename": {
+          "type": "boolean"
+        },
+        "imports.packAuthoritative.v1": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "hello",
+        "core.info",
+        "core.shutdown",
+        "catalog.versions",
+        "workspaces.create",
+        "workspaces.list",
+        "providers.search",
+        "providers.versions",
+        "plans.prepare",
+        "plans.get",
+        "transactions.apply",
+        "mods.list",
+        "updates.check",
+        "operations.get",
+        "operations.list",
+        "operations.cancel",
+        "events.poll",
+        "recovery.list",
+        "recovery.run",
+        "inbox.begin",
+        "inbox.write",
+        "inbox.commit",
+        "inbox.status",
+        "outbox.read"
+      ],
+      "additionalProperties": false
+    },
+    "descriptor": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "role": {
+          "const": "modpack-core"
+        },
+        "serverName": {
+          "type": "string",
+          "pattern": "^awake-core-v2-[a-f0-9-]{36}$"
+        },
+        "pid": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "profileId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "protocol",
+        "role",
+        "serverName",
+        "pid",
+        "profileId",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "method": {
+          "enum": [
+            "hello",
+            "core.info",
+            "core.shutdown",
+            "catalog.versions",
+            "workspaces.create",
+            "workspaces.list",
+            "providers.search",
+            "providers.versions",
+            "plans.prepare",
+            "plans.get",
+            "transactions.apply",
+            "mods.list",
+            "updates.check",
+            "operations.get",
+            "operations.list",
+            "operations.cancel",
+            "events.poll",
+            "recovery.list",
+            "recovery.run",
+            "inbox.begin",
+            "inbox.write",
+            "inbox.commit",
+            "inbox.status",
+            "outbox.read",
+            "imports.inspect",
+            "imports.prepare",
+            "inbox.discard",
+            "providers.project",
+            "outbox.list"
+          ]
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "protocol",
+        "requestId",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "hello"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/hello.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "core.info"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/core.info.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "core.shutdown"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/core.shutdown.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "catalog.versions"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/catalog.versions.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "workspaces.create"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/workspaces.create.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "workspaces.list"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/workspaces.list.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "providers.search"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/providers.search.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "providers.versions"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/providers.versions.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "plans.prepare"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/plans.prepare.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "plans.get"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/plans.get.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "transactions.apply"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/transactions.apply.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "mods.list"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/mods.list.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "updates.check"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/updates.check.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "operations.get"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/operations.get.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "operations.list"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/operations.list.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "operations.cancel"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/operations.cancel.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "events.poll"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/events.poll.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "recovery.list"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/recovery.list.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "recovery.run"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/recovery.run.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "inbox.begin"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/inbox.begin.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "inbox.write"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/inbox.write.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "inbox.commit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/inbox.commit.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "inbox.status"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/inbox.status.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "outbox.read"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/outbox.read.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "imports.inspect"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/imports.inspect.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "imports.prepare"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/imports.prepare.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "inbox.discard"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/inbox.discard.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "providers.project"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/providers.project.params"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "outbox.list"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/outbox.list.params"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "hello.params": {
+      "type": "object",
+      "properties": {
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "major": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "minor": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              }
+            },
+            "required": [
+              "major",
+              "minor"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 16,
+          "minItems": 1
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "maxLength": 64,
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "manager.v0.2",
+              "manager.v0.2.1"
+            ]
+          },
+          "minItems": 0,
+          "maxItems": 1
+        }
+      },
+      "required": [
+        "versions",
+        "client"
+      ],
+      "additionalProperties": false
+    },
+    "hello.result": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "role": {
+          "const": "modpack-core"
+        },
+        "coreVersion": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "storageVersion": {
+          "const": 1
+        },
+        "profileId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "frameBytes": {
+              "const": 1048576
+            },
+            "clients": {
+              "const": 8
+            },
+            "pageItems": {
+              "const": 200
+            }
+          },
+          "required": [
+            "frameBytes",
+            "clients",
+            "pageItems"
+          ],
+          "additionalProperties": false
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "manager.v0.2",
+              "manager.v0.2.1"
+            ]
+          },
+          "maxItems": 1
+        }
+      },
+      "required": [
+        "protocol",
+        "role",
+        "coreVersion",
+        "storageVersion",
+        "profileId",
+        "sessionId",
+        "capabilities",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "core.info.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "core.info.result": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "const": "modpack-core"
+        },
+        "coreVersion": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "profileId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "dataRoot": {
+          "type": "string",
+          "maxLength": 32768,
+          "minLength": 1
+        },
+        "workspaceRoot": {
+          "type": "string",
+          "maxLength": 32768,
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "ready",
+            "recovery_required"
+          ]
+        },
+        "supportedLoaders": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "vanilla",
+              "fabric",
+              "forge",
+              "neoforge",
+              "quilt"
+            ]
+          },
+          "maxItems": 5
+        }
+      },
+      "required": [
+        "role",
+        "coreVersion",
+        "profileId",
+        "dataRoot",
+        "workspaceRoot",
+        "state",
+        "supportedLoaders"
+      ],
+      "additionalProperties": false
+    },
+    "core.shutdown.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "core.shutdown.result": {
+      "type": "object",
+      "properties": {
+        "shuttingDown": {
+          "const": true
+        }
+      },
+      "required": [
+        "shuttingDown"
+      ],
+      "additionalProperties": false
+    },
+    "catalog.versions.params": {
+      "type": "object",
+      "properties": {
+        "minecraftVersion": {
+          "type": "string",
+          "maxLength": 96,
+          "minLength": 1
+        },
+        "loader": {
+          "enum": [
+            "vanilla",
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "catalog.versions.result": {
+      "type": "object",
+      "properties": {
+        "minecraftVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1
+          },
+          "maxItems": 20000
+        },
+        "loaderVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1
+          },
+          "maxItems": 20000
+        }
+      },
+      "required": [
+        "minecraftVersions",
+        "loaderVersions"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.create.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        },
+        "minecraftVersion": {
+          "type": "string",
+          "maxLength": 96,
+          "minLength": 1
+        },
+        "loader": {
+          "$ref": "#/$defs/loader"
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "name",
+        "minecraftVersion",
+        "loader"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.create.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "workspaces.list.params": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "workspaces.list.result": {
+      "type": "object",
+      "properties": {
+        "workspaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/workspace"
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "workspaces",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "providers.search.params": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "minecraftVersion": {
+          "type": "string",
+          "maxLength": 96,
+          "minLength": 1
+        },
+        "loader": {
+          "enum": [
+            "vanilla",
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
+          ]
+        },
+        "query": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "provider",
+        "minecraftVersion",
+        "loader",
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "providers.search.result": {
+      "type": "object",
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/project"
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "projects",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "providers.versions.params": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "minecraftVersion": {
+          "type": "string",
+          "maxLength": 96,
+          "minLength": 1
+        },
+        "loader": {
+          "enum": [
+            "vanilla",
+            "fabric",
+            "forge",
+            "neoforge",
+            "quilt"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "provider",
+        "minecraftVersion",
+        "loader",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "providers.versions.result": {
+      "type": "object",
+      "properties": {
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/version"
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "versions",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "plans.prepare.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/change"
+          },
+          "maxItems": 1024,
+          "minItems": 1
+        },
+        "dependencyResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyResolution"
+          },
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "physicalId",
+        "instanceRevision",
+        "changes"
+      ],
+      "additionalProperties": false
+    },
+    "plans.prepare.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "plans.get.params": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": false
+    },
+    "plans.get.result": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "planDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "expectedInstanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fileChange"
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1
+          },
+          "maxItems": 128
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          },
+          "maxItems": 1024
+        },
+        "dependencyResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewedResolution"
+          },
+          "maxItems": 256,
+          "description": "manager.v0.2.1 only: dependency resolutions accepted for this reviewed plan (bound into planDigest)."
+        }
+      },
+      "required": [
+        "operationId",
+        "planDigest",
+        "instanceRevision",
+        "expectedInstanceRevision",
+        "files",
+        "total",
+        "nextOffset",
+        "warnings",
+        "dependencies"
+      ],
+      "additionalProperties": false
+    },
+    "transactions.apply.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "planDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "operationId",
+        "planDigest",
+        "instanceRevision"
+      ],
+      "additionalProperties": false
+    },
+    "transactions.apply.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "mods.list.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "physicalId"
+      ],
+      "additionalProperties": false
+    },
+    "mods.list.result": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/installed"
+          },
+          "maxItems": 200
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "instanceRevision",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "updates.check.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "physicalId"
+      ],
+      "additionalProperties": false
+    },
+    "updates.check.result": {
+      "type": "object",
+      "properties": {
+        "updates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "installedVersionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "candidate": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/version"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "excluded": {
+                "type": "boolean"
+              },
+              "provider": {
+                "enum": [
+                  "modrinth",
+                  "curseforge"
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "installedVersionId",
+              "candidate",
+              "excluded"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 200
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "updates",
+        "instanceRevision",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "operations.get.params": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": false
+    },
+    "operations.get.result": {
+      "$ref": "#/$defs/operation"
+    },
+    "operations.list.params": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "operations.list.result": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operation"
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operations",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "operations.cancel.params": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": false
+    },
+    "operations.cancel.result": {
+      "type": "object",
+      "properties": {
+        "cancellationRequested": {
+          "type": "boolean"
+        },
+        "cancellable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cancellationRequested",
+        "cancellable"
+      ],
+      "additionalProperties": false
+    },
+    "events.poll.params": {
+      "type": "object",
+      "properties": {
+        "afterSequence": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "events.poll.result": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operation"
+          },
+          "maxItems": 200
+        },
+        "nextSequence": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "operations",
+        "nextSequence",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "recovery.list.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "recovery.list.result": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operation"
+          },
+          "maxItems": 200
+        },
+        "blockedWorkspaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "operations",
+        "blockedWorkspaces"
+      ],
+      "additionalProperties": false
+    },
+    "recovery.run.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "action": {
+          "const": "rollback"
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "operationId",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "recovery.run.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "inbox.begin.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "purpose": {
+          "const": "import"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "purpose",
+        "size",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.begin.result": {
+      "$ref": "#/$defs/transfer"
+    },
+    "inbox.write.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "offset": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "maxLength": 20
+        },
+        "bytesBase64": {
+          "type": "string",
+          "maxLength": 349528
+        }
+      },
+      "required": [
+        "token",
+        "offset",
+        "bytesBase64"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.write.result": {
+      "$ref": "#/$defs/transfer"
+    },
+    "inbox.commit.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.commit.result": {
+      "$ref": "#/$defs/transfer"
+    },
+    "inbox.status.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.status.result": {
+      "$ref": "#/$defs/transfer"
+    },
+    "outbox.read.params": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            }
+          },
+          "required": [
+            "token",
+            "offset",
+            "length"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "physicalId": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "instanceRevision": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            }
+          },
+          "required": [
+            "physicalId",
+            "instanceRevision",
+            "path",
+            "offset",
+            "length"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "outbox.read.result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "bytesBase64": {
+              "type": "string",
+              "maxLength": 349528
+            },
+            "eof": {
+              "type": "boolean"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "token",
+            "offset",
+            "bytesBase64",
+            "eof",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "instanceRevision": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 20
+            },
+            "bytesBase64": {
+              "type": "string",
+              "maxLength": 349528
+            },
+            "eof": {
+              "type": "boolean"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "instanceRevision",
+            "size",
+            "offset",
+            "bytesBase64",
+            "eof",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "protocol": {
+              "$ref": "#/$defs/protocol"
+            },
+            "requestId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "result": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocol": {
+              "$ref": "#/$defs/protocol"
+            },
+            "requestId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "imports.inspect.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "format": {
+          "enum": [
+            "mrpack",
+            "curseforge"
+          ]
+        }
+      },
+      "required": [
+        "token",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "importFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "importProject": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "versionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider",
+        "projectId",
+        "versionId",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "imports.inspect.result": {
+      "type": "object",
+      "properties": {
+        "minecraftVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96
+        },
+        "loader": {
+          "$ref": "#/$defs/loader"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/importFile"
+          },
+          "maxItems": 10000
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/importProject"
+          },
+          "maxItems": 1024
+        },
+        "downloadCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "minecraftVersion",
+        "loader",
+        "files",
+        "projects",
+        "downloadCount",
+        "warnings"
+      ],
+      "additionalProperties": false
+    },
+    "imports.prepare.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "format": {
+          "enum": [
+            "mrpack",
+            "curseforge"
+          ]
+        },
+        "includeOptional": {
+          "type": "boolean"
+        },
+        "dependencyResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyResolution"
+          },
+          "maxItems": 256
+        },
+        "packAuthoritative": {
+          "type": "boolean"
+        },
+        "removeInventoryIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "maxItems": 10000
+        },
+        "allowLoaderUpdate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "physicalId",
+        "instanceRevision",
+        "token",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "imports.prepare.result": {
+      "$ref": "#/$defs/plans.prepare.result"
+    },
+    "imports.inspect": {
+      "params": {
+        "$ref": "#/$defs/imports.inspect.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.inspect.result"
+      }
+    },
+    "imports.prepare": {
+      "params": {
+        "$ref": "#/$defs/imports.prepare.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.prepare.result"
+      }
+    },
+    "inbox.discard.params": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.discard.result": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "discarded": {
+          "const": true
+        }
+      },
+      "required": [
+        "token",
+        "discarded"
+      ],
+      "additionalProperties": false
+    },
+    "inbox.discard": {
+      "params": {
+        "$ref": "#/$defs/inbox.discard.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.discard.result"
+      }
+    },
+    "providers.project.params": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        }
+      },
+      "required": [
+        "provider",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "providers.project.result": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "$ref": "#/$defs/project"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "additionalProperties": false
+    },
+    "outbox.list.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "physicalId",
+        "instanceRevision"
+      ],
+      "additionalProperties": false
+    },
+    "outbox.list.result": {
+      "type": "object",
+      "properties": {
+        "instanceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              "size": {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "maxLength": 20
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "size",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 200
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "nextOffset": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "instanceRevision",
+        "files",
+        "total",
+        "nextOffset"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyEvidence": {
+      "type": "object",
+      "description": "Loader metadata read from the verified JARs (mods.toml, neoforge.mods.toml, fabric.mod.json, quilt.mod.json). satisfied: the declared range accepts the selected dependency version; violated: metadata rejects it (or declares a missing dependency mandatory); not_declared: the requester's loader metadata does not declare this dependency; unknown: metadata was unavailable or not evaluable.",
+      "properties": {
+        "result": {
+          "enum": [
+            "satisfied",
+            "violated",
+            "not_declared",
+            "unknown"
+          ]
+        },
+        "modId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "declaredRange": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mandatory": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selectedModVersion": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "result",
+        "modId",
+        "declaredRange",
+        "mandatory",
+        "selectedModVersion"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyRequest": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "versionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "versionNumber": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 255,
+          "minLength": 1
+        },
+        "requestedVersionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestedVersionNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/dependencyEvidence"
+        }
+      },
+      "required": [
+        "provider",
+        "projectId",
+        "title",
+        "versionId",
+        "versionNumber",
+        "fileName",
+        "requestedVersionId",
+        "requestedVersionNumber",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyConflict": {
+      "type": "object",
+      "description": "version_pin: provider metadata pins another version of a project the plan already selects. missing_dependency: a provider requirement has no version for this Minecraft version and loader. incompatible: both sides of a declared incompatibility would be enabled. loader_bridge: a Fabric-only file needs Sinytra Connector, which is not enabled. resolutions lists the reviewed choices the helper will accept in dependencyResolutions.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "version_pin",
+            "missing_dependency",
+            "incompatible",
+            "loader_bridge"
+          ]
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "selected": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "versionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                },
+                "versionNumber": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "minLength": 1
+                },
+                "fileName": {
+                  "type": "string",
+                  "maxLength": 255,
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "versionId",
+                "versionNumber",
+                "fileName"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyRequest"
+          },
+          "maxItems": 32
+        },
+        "candidates": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "versionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "versionNumber": {
+                "type": "string",
+                "maxLength": 256,
+                "minLength": 1
+              }
+            },
+            "required": [
+              "versionId",
+              "versionNumber"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "resolutions": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "enum": [
+              "use_version",
+              "proceed_without"
+            ]
+          }
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "provider",
+        "projectId",
+        "title",
+        "selected",
+        "requests",
+        "candidates",
+        "resolutions",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "conflictDetails": {
+      "type": "object",
+      "properties": {
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyConflict"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "conflicts",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "dependencyResolution": {
+      "type": "object",
+      "description": "Reviewed answer to a dependencyConflict: versionId keeps/chooses that version of the dependency project (use_version); null installs the requesters without it (proceed_without). The helper re-checks loader metadata and refuses a resolution it contradicts.",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "versionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "versionId"
+      ],
+      "additionalProperties": false
+    },
+    "reviewedResolution": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "provider": {
+          "enum": [
+            "modrinth",
+            "curseforge"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "versionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestedBy": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 256,
+                "minLength": 1
+              },
+              "requestedVersionId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "evidence": {
+                "enum": [
+                  "satisfied",
+                  "not_declared",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "title",
+              "requestedVersionId",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "projectId",
+        "title",
+        "versionId",
+        "requestedBy"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.delete.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "physicalId"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.delete.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "workspaces.rename.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "physicalId",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.rename.result": {
+      "type": "object",
+      "properties": {
+        "workspace": {
+          "$ref": "#/$defs/workspace"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "x-methods": {
+    "hello": {
+      "params": {
+        "$ref": "#/$defs/hello.params"
+      },
+      "result": {
+        "$ref": "#/$defs/hello.result"
+      }
+    },
+    "core.info": {
+      "params": {
+        "$ref": "#/$defs/core.info.params"
+      },
+      "result": {
+        "$ref": "#/$defs/core.info.result"
+      }
+    },
+    "core.shutdown": {
+      "params": {
+        "$ref": "#/$defs/core.shutdown.params"
+      },
+      "result": {
+        "$ref": "#/$defs/core.shutdown.result"
+      }
+    },
+    "catalog.versions": {
+      "params": {
+        "$ref": "#/$defs/catalog.versions.params"
+      },
+      "result": {
+        "$ref": "#/$defs/catalog.versions.result"
+      }
+    },
+    "workspaces.create": {
+      "params": {
+        "$ref": "#/$defs/workspaces.create.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.create.result"
+      }
+    },
+    "workspaces.list": {
+      "params": {
+        "$ref": "#/$defs/workspaces.list.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.list.result"
+      }
+    },
+    "providers.search": {
+      "params": {
+        "$ref": "#/$defs/providers.search.params"
+      },
+      "result": {
+        "$ref": "#/$defs/providers.search.result"
+      }
+    },
+    "providers.versions": {
+      "params": {
+        "$ref": "#/$defs/providers.versions.params"
+      },
+      "result": {
+        "$ref": "#/$defs/providers.versions.result"
+      }
+    },
+    "plans.prepare": {
+      "params": {
+        "$ref": "#/$defs/plans.prepare.params"
+      },
+      "result": {
+        "$ref": "#/$defs/plans.prepare.result"
+      }
+    },
+    "plans.get": {
+      "params": {
+        "$ref": "#/$defs/plans.get.params"
+      },
+      "result": {
+        "$ref": "#/$defs/plans.get.result"
+      }
+    },
+    "transactions.apply": {
+      "params": {
+        "$ref": "#/$defs/transactions.apply.params"
+      },
+      "result": {
+        "$ref": "#/$defs/transactions.apply.result"
+      }
+    },
+    "mods.list": {
+      "params": {
+        "$ref": "#/$defs/mods.list.params"
+      },
+      "result": {
+        "$ref": "#/$defs/mods.list.result"
+      }
+    },
+    "updates.check": {
+      "params": {
+        "$ref": "#/$defs/updates.check.params"
+      },
+      "result": {
+        "$ref": "#/$defs/updates.check.result"
+      }
+    },
+    "operations.get": {
+      "params": {
+        "$ref": "#/$defs/operations.get.params"
+      },
+      "result": {
+        "$ref": "#/$defs/operations.get.result"
+      }
+    },
+    "operations.list": {
+      "params": {
+        "$ref": "#/$defs/operations.list.params"
+      },
+      "result": {
+        "$ref": "#/$defs/operations.list.result"
+      }
+    },
+    "operations.cancel": {
+      "params": {
+        "$ref": "#/$defs/operations.cancel.params"
+      },
+      "result": {
+        "$ref": "#/$defs/operations.cancel.result"
+      }
+    },
+    "events.poll": {
+      "params": {
+        "$ref": "#/$defs/events.poll.params"
+      },
+      "result": {
+        "$ref": "#/$defs/events.poll.result"
+      }
+    },
+    "recovery.list": {
+      "params": {
+        "$ref": "#/$defs/recovery.list.params"
+      },
+      "result": {
+        "$ref": "#/$defs/recovery.list.result"
+      }
+    },
+    "recovery.run": {
+      "params": {
+        "$ref": "#/$defs/recovery.run.params"
+      },
+      "result": {
+        "$ref": "#/$defs/recovery.run.result"
+      }
+    },
+    "inbox.begin": {
+      "params": {
+        "$ref": "#/$defs/inbox.begin.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.begin.result"
+      }
+    },
+    "inbox.write": {
+      "params": {
+        "$ref": "#/$defs/inbox.write.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.write.result"
+      }
+    },
+    "inbox.commit": {
+      "params": {
+        "$ref": "#/$defs/inbox.commit.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.commit.result"
+      }
+    },
+    "inbox.status": {
+      "params": {
+        "$ref": "#/$defs/inbox.status.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.status.result"
+      }
+    },
+    "outbox.read": {
+      "params": {
+        "$ref": "#/$defs/outbox.read.params"
+      },
+      "result": {
+        "$ref": "#/$defs/outbox.read.result"
+      },
+      "capability": "outbox.read",
+      "extension": "manager.v0.2"
+    },
+    "imports.inspect": {
+      "params": {
+        "$ref": "#/$defs/imports.inspect.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.inspect.result"
+      },
+      "capability": "imports.inspect",
+      "extension": "manager.v0.2"
+    },
+    "imports.prepare": {
+      "params": {
+        "$ref": "#/$defs/imports.prepare.params"
+      },
+      "result": {
+        "$ref": "#/$defs/imports.prepare.result"
+      },
+      "capability": "imports.prepare",
+      "extension": "manager.v0.2"
+    },
+    "inbox.discard": {
+      "params": {
+        "$ref": "#/$defs/inbox.discard.params"
+      },
+      "result": {
+        "$ref": "#/$defs/inbox.discard.result"
+      },
+      "capability": "inbox.discard",
+      "extension": "manager.v0.2"
+    },
+    "providers.project": {
+      "params": {
+        "$ref": "#/$defs/providers.project.params"
+      },
+      "result": {
+        "$ref": "#/$defs/providers.project.result"
+      },
+      "capability": "providers.project",
+      "extension": "manager.v0.2"
+    },
+    "outbox.list": {
+      "params": {
+        "$ref": "#/$defs/outbox.list.params"
+      },
+      "result": {
+        "$ref": "#/$defs/outbox.list.result"
+      },
+      "capability": "outbox.list",
+      "extension": "manager.v0.2"
+    },
+    "workspaces.delete": {
+      "params": {
+        "$ref": "#/$defs/workspaces.delete.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.delete.result"
+      },
+      "capability": "workspaces.delete",
+      "extension": "manager.v0.2.1"
+    },
+    "workspaces.rename": {
+      "params": {
+        "$ref": "#/$defs/workspaces.rename.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.rename.result"
+      },
+      "capability": "workspaces.rename",
+      "extension": "manager.v0.2.1"
+    }
+  }
+}

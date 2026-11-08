@@ -41,6 +41,10 @@
 #include <QUuid>
 
 #include "QObjectPtr.h"
+#ifdef Q_OS_WIN
+#include <QMutex>
+namespace Awake::Integration { class PhysicalInstanceLease; }
+#endif
 
 Q_DECLARE_LOGGING_CATEGORY(taskLogC)
 
@@ -99,6 +103,7 @@ class Task : public QObject, public QRunnable {
     bool isRunning() const;
     bool isFinished() const;
     bool wasSuccessful() const;
+    bool cancelBeforeStart();
 
     /*!
      * MultiStep tasks are combinations of multiple tasks into a single logical task.
@@ -132,6 +137,10 @@ class Task : public QObject, public QRunnable {
 
    protected:
     void logWarning(const QString& line);
+#ifdef Q_OS_WIN
+    bool event(QEvent* event) override;
+    std::shared_ptr<Awake::Integration::PhysicalInstanceLease> instanceLease() const;
+#endif
 
    private:
     QString describe();
@@ -218,4 +227,11 @@ class Task : public QObject, public QRunnable {
     // Change using setAbortStatus
     bool m_can_abort = false;
     QUuid m_uid;
+#ifdef Q_OS_WIN
+    QString acquireInstanceLease();
+    void releaseInstanceLease();
+    mutable QMutex m_instanceLeaseMutex;
+    std::shared_ptr<Awake::Integration::PhysicalInstanceLease> m_instanceLease;
+    QString m_instanceRoot, m_instancePhysicalId, m_instanceRegistry;
+#endif
 };

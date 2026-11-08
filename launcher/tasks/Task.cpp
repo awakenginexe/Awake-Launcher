@@ -39,6 +39,11 @@
 #include <QDebug>
 
 #include "AssertHelpers.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceOperationScope.h"
+#include "awake/integration/InstanceDiscovery.h"
+#include <QMutexLocker>
+#endif
 
 Q_LOGGING_CATEGORY(taskLogC, "launcher.task")
 
@@ -46,6 +51,9 @@ Task::Task(bool show_debug) : m_show_debug(show_debug)
 {
     m_uid = QUuid::createUuid();
     setAutoDelete(false);
+#ifdef Q_OS_WIN
+    acquireInstanceLease();
+#endif
 }
 
 Task::~Task()
@@ -112,12 +120,20 @@ void Task::start()
     }
     // NOTE: only fall through to here in end states
     m_state = State::Running;
+#ifdef Q_OS_WIN
+    const auto leaseError = acquireInstanceLease();
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+    if (!leaseError.isEmpty()) { emitFailed(leaseError); return; }
+#endif
     emit started();
     executeTask();
 }
 
 void Task::emitFailed(QString reason)
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
     // Don't fail twice.
     if (ASSERT_NEVER(!isRunning())) {
         qCCritical(taskLogC) << "Task" << describe() << "failed while not running!!!!:" << reason;
@@ -125,6 +141,9 @@ void Task::emitFailed(QString reason)
     }
     m_state = State::Failed;
     m_failReason = reason;
+#ifdef Q_OS_WIN
+    releaseInstanceLease();
+#endif
     qCCritical(taskLogC) << "Task" << describe() << "failed:" << reason;
     emit failed(reason);
     emit finished();
@@ -132,13 +151,19 @@ void Task::emitFailed(QString reason)
 
 void Task::emitAborted()
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
     // Don't abort twice.
-    if (ASSERT_NEVER(!isRunning())) {
+    if (ASSERT_NEVER(!isRunning() && m_state != State::Inactive)) {
         qCCritical(taskLogC) << "Task" << describe() << "aborted while not running!!!!";
         return;
     }
     m_state = State::AbortedByUser;
     m_failReason = tr("Aborted");
+#ifdef Q_OS_WIN
+    releaseInstanceLease();
+#endif
     if (m_show_debug)
         qCDebug(taskLogC) << "Task" << describe() << "aborted.";
     emit aborted();
@@ -147,12 +172,18 @@ void Task::emitAborted()
 
 void Task::emitSucceeded()
 {
+#ifdef Q_OS_WIN
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+#endif
     // Don't succeed twice.
     if (ASSERT_NEVER(!isRunning())) {
         qCCritical(taskLogC) << "Task" << describe() << "succeeded while not running!!!!";
         return;
     }
     m_state = State::Succeeded;
+#ifdef Q_OS_WIN
+    releaseInstanceLease();
+#endif
     if (m_show_debug)
         qCDebug(taskLogC) << "Task" << describe() << "succeeded";
     emit succeeded();
@@ -163,6 +194,42 @@ void Task::propagateStepProgress(TaskStepProgress const& task_progress)
 {
     emit stepProgress(task_progress);
 }
+#ifdef Q_OS_WIN
+std::shared_ptr<Awake::Integration::PhysicalInstanceLease> Task::instanceLease() const
+{
+    QMutexLocker lock(&m_instanceLeaseMutex);
+    return m_instanceLease;
+}
+QString Task::acquireInstanceLease()
+{
+    QMutexLocker lock(&m_instanceLeaseMutex);
+    const auto current = Awake::Integration::InstanceOperationScope::current();
+    if (!m_instanceLease && current && (m_instancePhysicalId.isEmpty() ||
+        (m_instancePhysicalId == current->physicalId() && m_instanceRegistry == current->registryDirectory()))) {
+        m_instanceLease = current;
+        m_instanceRoot = current->root(); m_instancePhysicalId = current->physicalId(); m_instanceRegistry = current->registryDirectory();
+    }
+    if (m_instanceRoot.isEmpty()) return {};
+    if (Awake::Integration::physicalIdentityV2(m_instanceRoot) != m_instancePhysicalId)
+        return tr("The physical instance changed before its native task could start.");
+    if (!m_instanceLease) {
+        QString error;
+        m_instanceLease = Awake::Integration::PhysicalInstanceLease::acquire(m_instanceRoot, m_instancePhysicalId, m_instanceRegistry, &error);
+        if (!m_instanceLease) return error;
+    }
+    return {};
+}
+void Task::releaseInstanceLease()
+{
+    QMutexLocker lock(&m_instanceLeaseMutex);
+    m_instanceLease.reset();
+}
+bool Task::event(QEvent* event)
+{
+    Awake::Integration::InstanceOperationScope scope(instanceLease());
+    return QObject::event(event);
+}
+#endif
 
 QString Task::describe()
 {
@@ -194,6 +261,12 @@ bool Task::isFinished() const
 bool Task::wasSuccessful() const
 {
     return m_state == State::Succeeded;
+}
+bool Task::cancelBeforeStart()
+{
+    if (m_state != State::Inactive) return false;
+    Task::emitAborted();
+    return true;
 }
 
 QString Task::failReason() const

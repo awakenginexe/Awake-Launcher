@@ -41,6 +41,13 @@
  */
 
 #include "Application.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/ManagerWorkspaceLink.h"
+#include "awake/integration/InstanceOperationScope.h"
+#include "awake/integration/PhysicalInstanceLease.h"
+#endif
+#include <QElapsedTimer>
+#include "awake/integration/Coordinator.h"
 #include "BuildConfig.h"
 
 #include "DataMigrationTask.h"
@@ -83,6 +90,9 @@
 #include "awake/AwakeTheme.h"
 
 #include "ApplicationMessage.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/InstanceOperationScope.h"
+#endif
 
 #include <algorithm>
 #include <iostream>
@@ -338,6 +348,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
           { { "o", "offline" }, "Launch offline, with given player name (only valid in combination with --launch)", "offline" },
           { "alive", "Write a small '" + g_liveCheckFile + "' file after the launcher starts" },
           { "show-window", "Show the main launcher window (useful in combination with --launch)" },
+          { "link-manager-workspace", "Link and select an existing Awake Modpack Manager workspace without copying files", "directory" },
           { { "I", "import" }, "Import instance or resource from specified local path or URL", "url" },
           { "show", "Opens the window for the specified instance (by instance ID)", "show" } });
     // Has to be positional for some OS to handle that properly
@@ -349,6 +360,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
     parser.process(arguments());
 
     m_instanceIdToLaunch = parser.value("launch");
+    m_managerWorkspaceToLink = parser.value("link-manager-workspace");
     m_serverToJoin = parser.value("server");
     m_worldToJoin = parser.value("world");
     m_profileToUse = parser.value("profile");
@@ -486,6 +498,12 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
                 ApplicationMessage activate;
                 activate.command = "activate";
                 sentMessage = m_peerInstance->sendMessage(activate.serialize(), timeout);
+                if (!m_managerWorkspaceToLink.isEmpty()) {
+                    ApplicationMessage link;
+                    link.command = "link-manager-workspace";
+                    link.args["path"] = m_managerWorkspaceToLink;
+                    sentMessage = m_peerInstance->sendMessage(link.serialize(), timeout);
+                }
 
                 if (!m_urlsToImport.isEmpty()) {
                     for (const auto& url : m_urlsToImport) {
@@ -1374,6 +1392,15 @@ QString Application::updaterBinaryName()
     return exeName;
 }
 
+#ifdef Q_OS_WIN
+bool Application::notify(QObject* receiver, QEvent* event)
+{
+    if (!Awake::Integration::InstanceOperationScope::current()) return QApplication::notify(receiver, event);
+    // A modal event loop must not lend its task's ownership to unrelated UI or IPC callbacks.
+    Awake::Integration::InstanceOperationScope isolated(nullptr);
+    return QApplication::notify(receiver, event);
+}
+#endif
 bool Application::event(QEvent* event)
 {
 #ifdef Q_OS_MACOS
@@ -1400,7 +1427,24 @@ bool Application::event(QEvent* event)
 
 void Application::performMainStartupAction()
 {
+    const bool traceStartup = qEnvironmentVariableIsSet("AWAKE_STARTUP_TIMING");
+    QElapsedTimer phaseTimer;
+    if (traceStartup) phaseTimer.start();
     m_status = Application::Initialized;
+    m_integration = std::make_unique<Awake::Integration::Coordinator>(m_instances.get(), m_rootPath, QDir::currentPath(), m_portable,
+        [this](MinecraftInstance* instance) {
+            if (instance->isDeleting()) return QString("deleting");
+            if (instance->isRunning()) return QString("launch_active");
+            if (!m_instanceExtrasMutex.tryLock()) return QString("unknown");
+            const auto entry = m_instanceExtras.find(instance->id());
+            const bool preparing = entry != m_instanceExtras.end() && entry->second.controller;
+            m_instanceExtrasMutex.unlock();
+            return QString(preparing ? "launch_preparing" : "idle");
+        });
+    QString integrationError;
+    if (!m_integration->start(&integrationError)) qInfo() << "Modpack Manager integration unavailable:" << integrationError;
+    connect(this, &Application::aboutToQuit, m_integration.get(), &Awake::Integration::Coordinator::stop);
+    if (traceStartup) qInfo() << "Startup phase: integration" << phaseTimer.elapsed() << "ms";
     if (!m_instanceIdToLaunch.isEmpty()) {
         auto* inst = instances()->getInstanceById(m_instanceIdToLaunch);
         if (inst) {
@@ -1442,8 +1486,15 @@ void Application::performMainStartupAction()
     }
     if (!m_mainWindow) {
         // normal main window
+        if (traceStartup) phaseTimer.restart();
         showMainWindow(false);
+        if (traceStartup) qInfo() << "Startup phase: main window" << phaseTimer.elapsed() << "ms";
         qDebug() << "<> Main window shown.";
+    }
+
+    if (!m_managerWorkspaceToLink.isEmpty()) {
+        linkManagerWorkspace(m_managerWorkspaceToLink);
+        m_managerWorkspaceToLink.clear();
     }
 
     // initialize the updater
@@ -1543,6 +1594,8 @@ void Application::messageReceived(const QByteArray& message)
 
     if (command == "activate") {
         showMainWindow();
+    } else if (command == "link-manager-workspace") {
+        linkManagerWorkspace(received.args["path"]);
     } else if (command == "import") {
         QString url = received.args["url"];
         if (url.isEmpty()) {
@@ -1623,6 +1676,17 @@ bool Application::openJsonEditor(const QString& filename)
     return DesktopServices::run(m_settings->get("JsonEditor").toString(), { file });
 }
 
+bool Application::linkManagerWorkspace(const QString& path)
+{
+    auto* window = showMainWindow();
+    QString error;
+    if (!instances()->linkManagerWorkspace(path, &error)) {
+        CustomMessageBox::selectable(window, tr("Cannot link workspace"), error, QMessageBox::Warning)->exec();
+        return false;
+    }
+    return true;
+}
+
 bool Application::launch(MinecraftInstance* instance,
                          LaunchMode mode,
                          MinecraftTarget::Ptr targetToJoin,
@@ -1632,6 +1696,20 @@ bool Application::launch(MinecraftInstance* instance,
     if (m_updateRunning) {
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
     } else if (instance->canLaunch()) {
+#ifdef Q_OS_WIN
+        std::shared_ptr<Awake::Integration::PhysicalInstanceLease> lease;
+        if (instance->isManagerLinked()) {
+            QString error;
+            const auto root = instance->instanceRoot();
+            lease = Awake::Integration::acquireManagerWorkspace(root, instance->managerPhysicalId(), &error);
+            if (!lease || !lease->pinDirectory(".minecraft/mods", &error)) {
+                CustomMessageBox::selectable(m_mainWindow, tr("Workspace unavailable"),
+                    tr("Finish operations in Awake Modpack Manager and close any game using this workspace, then try again.\n\n") + error, QMessageBox::Warning)->exec();
+                return false;
+            }
+        }
+        Awake::Integration::InstanceOperationScope scope(lease);
+#endif
         QMutexLocker locker(&m_instanceExtrasMutex);
         auto& extras = m_instanceExtras[instance->id()];
         auto* window = extras.window;

@@ -106,6 +106,10 @@ if(Launcher_ENABLE_AWAKE_WEB)
     set_tests_properties(AwakeWebBridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 60)
     if(WIN32)
         set_property(TEST AwakeWebBridge APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
+        add_test(NAME AwakeIntegrationRelativeProfile COMMAND AwakeWebBridge integrationReadOnlyDiscovery)
+        set_tests_properties(AwakeIntegrationRelativeProfile PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets;AWAKE_TEST_RELATIVE_DATA_DIR=1;QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts"
+            TIMEOUT 60)
         ecm_add_test(AwakeWebShell_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test Qt6::QuickWidgets TEST_NAME AwakeWebShell)
         set_tests_properties(AwakeWebShell PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows" TIMEOUT 90)
     endif()
@@ -116,3 +120,26 @@ set_tests_properties(CurseForge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscree
 
 ecm_add_test(MicrosoftAuth_test.cpp LINK_LIBRARIES Launcher_logic Qt6::Test TEST_NAME MicrosoftAuth)
 set_tests_properties(MicrosoftAuth PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AWAKE_FRONTEND=widgets" TIMEOUT 120)
+
+set(AWAKE_INTEGRATION_TEST_SOURCES
+    ../launcher/awake/integration/Protocol.cpp ../launcher/awake/integration/InstanceDiscovery.cpp
+    ../launcher/awake/integration/IntegrationServer.cpp ../launcher/awake/integration/ProfileAccess.cpp)
+if(WIN32)
+    set(AWAKE_INTEGRATION_TEST_SOURCES)
+endif()
+ecm_add_test(AwakeIntegration_test.cpp ${AWAKE_INTEGRATION_TEST_SOURCES}
+    LINK_LIBRARIES Qt6::Core Qt6::Network Qt6::Test TEST_NAME AwakeIntegration)
+target_include_directories(AwakeIntegration PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+
+if(WIN32)
+    target_link_libraries(AwakeIntegration AwakeCore)
+    ecm_add_test(AwakeOperations_test.cpp LINK_LIBRARIES AwakeCore Qt6::Test TEST_NAME AwakeOperations)
+    target_include_directories(AwakeOperations PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+    target_link_libraries(AwakeOperations advapi32)
+    set_tests_properties(AwakeOperations PROPERTIES TIMEOUT 60)
+    ecm_add_test(AwakeTransactions_test.cpp LINK_LIBRARIES AwakeCore Qt6::Test TEST_NAME AwakeTransactions)
+    target_include_directories(AwakeTransactions PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+    target_link_libraries(AwakeTransactions advapi32)
+    set_tests_properties(AwakeTransactions PROPERTIES TIMEOUT 120)
+endif()
+set_tests_properties(AwakeIntegration PROPERTIES TIMEOUT 60)

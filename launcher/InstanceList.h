@@ -102,6 +102,7 @@ class InstanceList : public QAbstractListModel {
     int count() const { return static_cast<int>(m_instances.size()); }
 
     InstListError loadList();
+    bool linkManagerWorkspace(const QString& path, QString* error = nullptr);
     void saveNow();
 
     /* O(n) */
@@ -200,6 +201,7 @@ class InstanceList : public QAbstractListModel {
     SettingsObject* m_globalSettings;
     QStringList m_instDirs;
     QHash<InstanceId, QString> m_instanceRootDirMap;
+    QMap<InstanceId, QJsonObject> m_managerLinks;
     QString rootDirOf(const InstanceId& id) const;
     QFileSystemWatcher* m_watcher;
     // FIXME: this is so inefficient that looking at it is almost painful.
