@@ -74,6 +74,9 @@ void ResourceFolderLoadTask::executeTask()
     // Read JAR files that don't have metadata
     m_resource_dir.refresh();
     for (auto entry : m_resource_dir.entryInfoList()) {
+        if (m_aborted) {
+            break;  // the model that owns m_create_func is going away
+        }
         auto filePath = entry.absoluteFilePath();
         if (auto* app = APPLICATION_DYN; (app != nullptr) && app->checkQSavePath(filePath)) {
             continue;
@@ -116,7 +119,8 @@ void ResourceFolderLoadTask::executeTask()
 
     // Remove orphan metadata to prevent issues
     // See https://github.com/PolyMC/PolyMC/issues/996
-    if (m_clean_orphan) {
+    // An aborted scan is partial: entries it never reached would look like orphans.
+    if (m_clean_orphan && !m_aborted) {
         QMutableMapIterator iter(m_result->resources);
         while (iter.hasNext()) {
             auto resource = iter.next().value();
@@ -138,6 +142,9 @@ void ResourceFolderLoadTask::getFromMetadata()
 {
     m_index_dir.refresh();
     for (const auto& entry : m_index_dir.entryList(QDir::Files)) {
+        if (m_aborted) {
+            return;
+        }
         if (!entry.endsWith(".pw.toml")) {
             continue;
         }
