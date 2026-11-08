@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $pwsh = (Get-Command pwsh.exe).Source
 if ($Worker) {
     try {
-        . "$PSScriptRoot/prepare-private-test-storage.ps1" -BuildRoot $BuildRoot
+        $env:TEMP = $env:TMP = (Resolve-Path (Join-Path $BuildRoot '.validation/native-temp')).Path
         $env:AWAKE_CI_CHILD_PROBE = Join-Path $env:TEMP "child-owner-$([guid]::NewGuid()).txt"
         $owner = & $pwsh -NoProfile -NonInteractive -Command '[IO.File]::WriteAllText($env:AWAKE_CI_CHILD_PROBE,"fixture"); (Get-Acl -LiteralPath $env:AWAKE_CI_CHILD_PROBE).GetOwner([Security.Principal.SecurityIdentifier]).Value'
         $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -16,7 +16,7 @@ if ($Worker) {
         }
         @{passed=$true} | ConvertTo-Json | Set-Content $env:AWAKE_CI_RESULT -Encoding utf8
     } catch {
-        @{passed=$false; error=$_.Exception.Message} | ConvertTo-Json | Set-Content $env:AWAKE_CI_RESULT -Encoding utf8
+        @{passed=$false; error="$($_.Exception.Message) at $($_.InvocationInfo.PositionMessage)"} | ConvertTo-Json | Set-Content $env:AWAKE_CI_RESULT -Encoding utf8
     }
     return
 }
