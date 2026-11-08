@@ -147,6 +147,20 @@ class TaskTest : public QObject {
         QVERIFY(parent.wasSuccessful()); QVERIFY(fresh->wasSuccessful());
     }
 #ifdef Q_OS_WIN
+    void instanceLeasePinsItsOwnVolume()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const auto root = temporary.path() + "/instance", mods = root + "/mods";
+        QVERIFY(QDir().mkpath(mods));
+        auto lease = fixtureLease(root, physicalIdentityV2(root), temporary.path() + "/leases");
+        QVERIFY(lease);
+        QString error;
+        QVERIFY2(lease->pinDirectory("mods", &error), qPrintable(error));
+        QVERIFY(!QDir().rename(mods, root + "/moved"));
+        lease.reset();
+        QVERIFY(QDir().rename(mods, root + "/moved"));
+    }
     void cancelingQueuedConcurrentChildrenReleasesTheirOwnership()
     {
         QTemporaryDir temporary;

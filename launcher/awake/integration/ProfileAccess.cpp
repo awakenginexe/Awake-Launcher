@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QScopeGuard>
+#include <QStorageInfo>
 #ifdef Q_OS_WIN
 #include <aclapi.h>
 #include <qt_windows.h>
@@ -20,7 +21,7 @@ static bool accessIsPrivate(const QString& directory, bool privateRead, bool all
     if (path.isEmpty() || (!QFileInfo(path).isDir() && !(allowFiles && QFileInfo(path).isFile())))
         return false;
 #ifdef Q_OS_WIN
-    const auto drive = QDir::toNativeSeparators(QDir(path).rootPath());
+    const auto drive = QDir::toNativeSeparators(QStorageInfo(path).rootPath());
     if (GetDriveTypeW(reinterpret_cast<LPCWSTR>(drive.utf16())) != DRIVE_FIXED)
         return false;
     HANDLE token = nullptr;
