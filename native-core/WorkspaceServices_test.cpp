@@ -6,6 +6,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/ProfileAccess.h"
 #include "awake/integration/TransactionEngine.h"
 #include <QCryptographicHash>
