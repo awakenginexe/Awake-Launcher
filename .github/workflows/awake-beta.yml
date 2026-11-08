@@ -98,10 +98,18 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $digest = gh api "repos/microsoft/vcpkg-tool/releases/tags/$tag" --jq '.assets[] | select(.name=="vcpkg.exe") | .digest'
           if ($LASTEXITCODE -or $digest -notmatch '^sha256:[0-9a-f]{64}$' -or (Get-FileHash cmake/vcpkg/vcpkg.exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest.Substring(7)) { throw 'vcpkg executable verification failed.' }
-          $tool = (Get-Content cmake/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools | Where-Object { $_.name -eq 'cmake' -and $_.os -eq 'windows' -and $_.arch -eq 'amd64' }
-          gh release download "v$($tool.version)" --repo Kitware/CMake --pattern $tool.archive --dir cmake/vcpkg/downloads --clobber
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          if ((Get-FileHash "cmake/vcpkg/downloads/$($tool.archive)" -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw 'Pinned CMake archive verification failed.' }
+          $tools = (Get-Content cmake/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools
+          New-Item -ItemType Directory -Path cmake/vcpkg/downloads -Force | Out-Null
+          foreach ($name in 'cmake','ninja') {
+            $tool = @($tools | Where-Object { $_.name -eq $name -and $_.os -eq 'windows' -and $_.arch -in 'amd64','x64' })
+            if ($tool.Count -ne 1) { throw "Expected one pinned Windows x64 $name tool." }
+            $tool = $tool[0]
+            $url = [uri]$tool.url
+            $repo = ($url.AbsolutePath.TrimStart('/') -split '/')[0..1] -join '/'
+            gh release download "v$($tool.version)" --repo $repo --pattern ([IO.Path]::GetFileName($url.AbsolutePath)) --output "cmake/vcpkg/downloads/$($tool.archive)" --clobber
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            if ((Get-FileHash "cmake/vcpkg/downloads/$($tool.archive)" -Algorithm SHA512).Hash.ToLowerInvariant() -ne $tool.sha512) { throw "Pinned $name archive verification failed." }
+          }
       - name: Configure with release services
         env:
           AWAKE_CURSEFORGE_API_KEY: ${{ secrets.AWAKE_CURSEFORGE_API_KEY }}
