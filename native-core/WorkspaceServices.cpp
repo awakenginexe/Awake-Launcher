@@ -10,6 +10,8 @@
 #include "settings/INIFile.h"
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -85,11 +87,16 @@ QString WorkspaceServices::root(const QJsonObject& record) const
     if (!uuid(id)) throw ServiceError{"RECOVERY_REQUIRED", "Workspace registration is invalid."};
     return m_profile + "/workspaces/" + id;
 }
-std::shared_ptr<PhysicalInstanceLease> WorkspaceServices::acquire(const QJsonObject& record) const
+std::shared_ptr<PhysicalInstanceLease> WorkspaceServices::acquire(const QJsonObject& record, int waitMs) const
 {
-    QString error; auto lease = PhysicalInstanceLease::acquire(root(record), record["physicalId"].toString(), m_profile + "/ownership", &error);
-    if (!lease) throw ServiceError{"BUSY", error, true};
-    return lease;
+    // Reads and short steps queue briefly behind each other instead of failing on a momentary lock.
+    QElapsedTimer waited; waited.start();
+    for (;;) {
+        QString error; auto lease = PhysicalInstanceLease::acquire(root(record), record["physicalId"].toString(), m_profile + "/ownership", &error);
+        if (lease) return lease;
+        if (!error.contains("busy") || waited.elapsed() >= waitMs) throw ServiceError{"BUSY", error, true};
+        QThread::msleep(100);
+    }
 }
 QJsonObject WorkspaceServices::workspaceRecord(const QString& id) const
 {
@@ -174,7 +181,7 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
         const auto record = readRecord(file.absoluteFilePath());
         workspaceRecord(record["physicalId"].toString());
         // A project being changed or played stays listed; only its content revision is unknown until it is free.
-        try { auto lease = acquire(record); result.append(workspaceView(record)); }
+        try { auto lease = acquire(record, 0); result.append(workspaceView(record)); }
         catch (const ServiceError& error) {
             if (error.code != "BUSY") throw;
             QJsonObject busy; for (const auto* key : {"workspaceId", "physicalId", "name", "minecraftVersion", "loader"}) busy[key] = record[key];

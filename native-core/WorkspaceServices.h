@@ -43,7 +43,7 @@ private:
     QJsonObject workspaceRecord(const QString& physicalId) const;
     QJsonObject workspaceView(const QJsonObject& record) const;
     QString root(const QJsonObject& record) const;
-    std::shared_ptr<Awake::Integration::PhysicalInstanceLease> acquire(const QJsonObject& record) const;
+    std::shared_ptr<Awake::Integration::PhysicalInstanceLease> acquire(const QJsonObject& record, int waitMs = 20000) const;
     QJsonArray scan(const QJsonObject& record) const;
     void finishDelete(const QString& workspaceId);
     QJsonObject policies(const QJsonObject& record) const;
