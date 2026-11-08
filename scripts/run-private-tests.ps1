@@ -60,6 +60,7 @@ $name = "standard-user-$([guid]::NewGuid())"
 $env:AWAKE_CI_RESULT = Join-Path $env:TEMP "$name.json"
 $env:AWAKE_CI_LOG = Join-Path $env:TEMP "$name.log"
 $env:AWAKE_CI_PROBE_ONLY = if ($ProbeOnly) { '1' } else { '0' }
+$env:AWAKE_CI_TESTS = $Tests
 # The disposable runner account has no Administrators membership; product ownership checks remain enabled.
 $arguments = '-NoProfile -NonInteractive -File "{0}" -BuildRoot "{1}" -Worker' -f $PSCommandPath,([IO.Path]::GetFullPath($BuildRoot))
 $process = Start-Process -FilePath $pwsh -ArgumentList $arguments -Credential $credential -LoadUserProfile -WorkingDirectory ([IO.Path]::GetFullPath($BuildRoot)) -PassThru -WindowStyle Hidden
