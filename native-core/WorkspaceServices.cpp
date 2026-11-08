@@ -21,7 +21,6 @@
 namespace Awake::Core {
 using namespace Awake::Integration;
 namespace {
-constexpr auto mods = ".minecraft/mods";
 QByteArray encode(const QJsonObject& object) { return QJsonDocument(object).toJson(QJsonDocument::Compact); }
 QString sha(const QByteArray& bytes) { return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()); }
 bool uuid(const QString& value) { return !QUuid(value).isNull() && QUuid(value).toString(QUuid::WithoutBraces) == value; }
@@ -83,6 +82,7 @@ QJsonObject WorkspaceServices::context(const QString& id) const
 }
 QString WorkspaceServices::root(const QJsonObject& record) const
 {
+    if (record.contains("sharedRoot")) return record["sharedRoot"].toString();
     const auto id = record["workspaceId"].toString();
     if (!uuid(id)) throw ServiceError{"RECOVERY_REQUIRED", "Workspace registration is invalid."};
     return m_profile + "/workspaces/" + id;
@@ -111,12 +111,13 @@ QJsonObject WorkspaceServices::workspaceRecord(const QString& id) const
 }
 QJsonObject WorkspaceServices::workspaceView(const QJsonObject& record) const
 {
-    TransactionEngine engine(m_store, root(record), mods); const auto revision = engine.revision();
+    TransactionEngine engine(m_store, root(record), modsPath(record)); const auto revision = engine.revision();
     if (revision.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Workspace inventory cannot be verified."};
     QJsonObject value;
     for (const auto* key : {"workspaceId", "physicalId", "name", "minecraftVersion", "loader"}) value[key] = record[key];
     value["instanceRevision"] = revision; value["ownership"] = "manager-owned";
     value["recoveryRequired"] = QFileInfo::exists(root(record) + "/.awake-integration/recovery.json");
+    if (record.contains("sharedRoot")) value["sharedRoot"] = record["sharedRoot"];
     if (!Contract().valid("workspace", value)) throw ServiceError{"RECOVERY_REQUIRED", "Workspace metadata is invalid."};
     return value;
 }
@@ -129,7 +130,7 @@ QJsonObject WorkspaceServices::policies(const QJsonObject& record) const
 }
 QJsonArray WorkspaceServices::scan(const QJsonObject& record) const
 {
-    const auto projects = policies(record)["projects"].toObject(); QMap<QString, QPair<QString, QJsonObject>> metadata;
+    const auto mods = modsPath(record); const auto projects = policies(record)["projects"].toObject(); QMap<QString, QPair<QString, QJsonObject>> metadata;
     for (auto it = projects.begin(); it != projects.end(); ++it) {
         const auto entry = it.value().toObject(); const auto filename = entry["fileName"].toString(), index = entry["indexFile"].toString();
         const auto version = entry["version"].toObject();
@@ -179,6 +180,7 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
     QJsonArray result;
     for (const auto& file : QDir(m_profile + "/catalog").entryInfoList({"*.json"}, QDir::Files | QDir::Hidden | QDir::System, QDir::Name)) {
         const auto record = readRecord(file.absoluteFilePath());
+        if (record.contains("sharedRoot") && !QFileInfo::exists(root(record) + "/.awake-integration/ownership.json")) continue; // its folder is gone
         workspaceRecord(record["physicalId"].toString());
         // A project being changed or played stays listed; only its content revision is unknown until it is free.
         try { auto lease = acquire(record, 0); result.append(workspaceView(record)); }
@@ -186,7 +188,9 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
             if (error.code != "BUSY") throw;
             QJsonObject busy; for (const auto* key : {"workspaceId", "physicalId", "name", "minecraftVersion", "loader"}) busy[key] = record[key];
             busy["instanceRevision"] = sha(encode({{"busy", record["workspaceId"]}})); busy["ownership"] = "manager-owned";
-            busy["recoveryRequired"] = QFileInfo::exists(root(record) + "/.awake-integration/recovery.json"); result.append(busy);
+            busy["recoveryRequired"] = QFileInfo::exists(root(record) + "/.awake-integration/recovery.json");
+            if (record.contains("sharedRoot")) busy["sharedRoot"] = record["sharedRoot"];
+            result.append(busy);
         }
     }
     return paged("workspaces", result, params);
@@ -194,7 +198,7 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
 QJsonObject WorkspaceServices::inventory(const QJsonObject& params)
 {
     const auto record = workspaceRecord(params["physicalId"].toString()); auto lease = acquire(record);
-    TransactionEngine engine(m_store, root(record), mods); const auto before = engine.revision();
+    TransactionEngine engine(m_store, root(record), modsPath(record)); const auto before = engine.revision();
     if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Inventory cannot be verified."};
     if (params.contains("instanceRevision") && params["instanceRevision"] != before) throw ServiceError{"STALE_INSTANCE", "Inventory changed between pages."};
     auto result = paged("items", scan(record), params);
@@ -203,7 +207,9 @@ QJsonObject WorkspaceServices::inventory(const QJsonObject& params)
 }
 QJsonObject WorkspaceServices::rename(const QJsonObject& request)
 {
-    auto record = workspaceRecord(request["physicalId"].toString()); auto lease = acquire(record);
+    auto record = workspaceRecord(request["physicalId"].toString());
+    if (record.contains("sharedRoot")) throw ServiceError{"UNSUPPORTED_CAPABILITY", "Rename this instance in Awake Launcher."};
+    auto lease = acquire(record);
     const auto name = request["name"].toString().trimmed();
     if (name.isEmpty() || name.size() > 80) throw ServiceError{"INVALID_REQUEST", "Project names must have 1 to 80 characters."};
     if (QFileInfo::exists(root(record) + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Workspace recovery must finish first."};
@@ -232,7 +238,9 @@ void WorkspaceServices::sweepDeleted()
 void WorkspaceServices::remove(const QString& id, const QJsonObject& request)
 {
     requireResult(m_store.transition(id, "resolving"));
-    const auto record = workspaceRecord(request["physicalId"].toString()); auto lease = acquire(record);
+    const auto record = workspaceRecord(request["physicalId"].toString());
+    if (record.contains("sharedRoot")) throw ServiceError{"UNSUPPORTED_CAPABILITY", "Delete this instance in Awake Launcher after it stops being managed here."};
+    auto lease = acquire(record);
     const auto workspaceId = record["workspaceId"].toString(), from = root(record), to = m_profile + "/deleted/" + workspaceId;
     if (QFileInfo::exists(from + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Workspace recovery must finish before it can be deleted."};
     directory(m_profile + "/deleted");
@@ -249,6 +257,7 @@ void WorkspaceServices::remove(const QString& id, const QJsonObject& request)
 void WorkspaceServices::create(const QString& id, const QJsonObject& request)
 {
     requireResult(m_store.transition(id, "resolving")); m_provider.checkCancelled();
+    const QString mods = QStringLiteral(".minecraft/mods");
     const auto loader = request["loader"].toObject();
     const auto catalog = m_provider.catalog({{"minecraftVersion", request["minecraftVersion"]}, {"loader", loader["id"]}});
     const auto loaderId = loader["id"].toString();
@@ -297,7 +306,7 @@ QJsonObject WorkspaceServices::outboxList(const QJsonObject& params)
 {
     if (!Contract().valid("outbox.list.params", params)) throw ServiceError{"INVALID_REQUEST", "Invalid outbox selection."};
     const auto record = workspaceRecord(params["physicalId"].toString()); auto lease = acquire(record);
-    TransactionEngine engine(m_store, root(record), mods); const auto before = engine.revision();
+    TransactionEngine engine(m_store, root(record), modsPath(record)); const auto before = engine.revision();
     if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Configuration paths cannot be verified."};
     if (params["instanceRevision"] != before) throw ServiceError{"STALE_INSTANCE", "Workspace changed before export."};
     if (QFileInfo::exists(root(record) + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Resolve workspace recovery before export."};
@@ -317,7 +326,7 @@ QJsonObject WorkspaceServices::outboxRead(const QJsonObject& params)
     if (params.contains("token")) throw ServiceError{"UNSUPPORTED_CAPABILITY", "Token-based archive outbox is not implemented."};
     if (!Contract().valid("outbox.read.params", params)) throw ServiceError{"INVALID_REQUEST", "Invalid outbox read."};
     const auto record = workspaceRecord(params["physicalId"].toString()); auto lease = acquire(record);
-    TransactionEngine engine(m_store, root(record), mods); const auto before = engine.revision();
+    TransactionEngine engine(m_store, root(record), modsPath(record)); const auto before = engine.revision();
     if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Configuration paths cannot be verified."};
     if (params["instanceRevision"] != before) throw ServiceError{"STALE_INSTANCE", "Workspace changed before export."};
     if (QFileInfo::exists(root(record) + "/.awake-integration/recovery.json")) throw ServiceError{"RECOVERY_REQUIRED", "Resolve workspace recovery before export."};
@@ -339,10 +348,11 @@ QJsonObject WorkspaceServices::plan(const QJsonObject& params)
     auto check = value; const auto digest = check.take("planDigest");
     if (digest != sha(encode(check)) || value["operationId"] != id) throw ServiceError{"RECOVERY_REQUIRED", "Reviewed plan is corrupt."};
     QJsonArray files;
+    const auto mods = value["modsRelative"].toString(QStringLiteral(".minecraft/mods"));
     for (const auto& entry : value["files"].toArray()) { const auto file = entry.toObject(); files.append(QJsonObject{{"path", file["path"]},
         {"action", file["afterHash"] == "missing" ? "remove" : file["beforeHash"] == "missing" ? "install" : "replace"},
-        {"kind", file["path"].toString().startsWith(".awake-integration/") || file["path"].toString().startsWith(".minecraft/mods/.index/") ? "bookkeeping" :
-            file["path"].toString().startsWith(".minecraft/mods/") && (file["path"].toString().endsWith(".jar", Qt::CaseInsensitive) || file["path"].toString().endsWith(".jar.disabled", Qt::CaseInsensitive)) ? "mod" : "override"},
+        {"kind", file["path"].toString().startsWith(".awake-integration/") || file["path"].toString().startsWith(mods + "/.index/") ? "bookkeeping" :
+            file["path"].toString().startsWith(mods + '/') && (file["path"].toString().endsWith(".jar", Qt::CaseInsensitive) || file["path"].toString().endsWith(".jar.disabled", Qt::CaseInsensitive)) ? "mod" : "override"},
         {"beforeSha256", file["beforeHash"]}, {"afterSha256", file["afterHash"]}, {"size", file["sizeAfter"]}}); }
     auto result = paged("files", files, params);
     for (const auto* key : {"operationId", "planDigest", "instanceRevision", "expectedInstanceRevision"}) result[key] = value[key];

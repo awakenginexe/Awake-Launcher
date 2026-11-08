@@ -16,4 +16,5 @@ QJsonObject failure(const QString& code, const QString& message, bool retryable 
 Request parseRequest(const QByteArray& bytes, int major = 1, int minor = 0);
 QByteArray frame(const QJsonObject& body);
 QJsonObject capabilities();
+QJsonObject managerCapabilities();
 }  // namespace Awake::Integration

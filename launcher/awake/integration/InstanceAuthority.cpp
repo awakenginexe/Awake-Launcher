@@ -116,6 +116,24 @@ bool enroll(const QString& root, const QString& id, const QString& registry, con
     auto global = expected; global["gameRecordRequired"] = false;
     return write(name + ".json", global, error) && write(marker, expected, error) && validate(root, id, registry, error);
 }
+bool unenroll(const QString& root, const QString& id, const QString& registration, QString* error)
+{
+    const auto name = stem(id, error); if (name.isEmpty()) return false;
+    auto held = lock(id, error); if (!held) return false;
+    auto release = qScopeGuard([&] { if (held) CloseHandle(held); });
+    const auto markerDirectory = root + "/.awake-integration", marker = markerDirectory + "/ownership.json";
+    QFile existing(marker);
+    if (existing.open(QIODevice::ReadOnly)) {
+        const auto owner = QJsonDocument::fromJson(existing.read(16384)).object()["body"].toObject()["registrationId"].toString();
+        existing.close();
+        if (owner != registration) { if (error) *error = "Another registration owns this instance."; return false; }
+    }
+    if (QFileInfo::exists(markerDirectory) && !QDir(markerDirectory).removeRecursively()) { if (error) *error = "The coordination folder is in use."; return false; }
+    if (QFileInfo::exists(name + ".json") && !QFile::remove(name + ".json")) { if (error) *error = "Ownership evidence cannot be removed."; return false; }
+    CloseHandle(held); held = nullptr;
+    if (!QFile::remove(name + ".lock")) { if (error) *error = "The instance lock cannot be removed."; return false; }
+    return true;
+}
 bool requireGameRecord(const QString& id, QString* error)
 {
     auto object = binding(id, error); if (object.isEmpty()) return false;

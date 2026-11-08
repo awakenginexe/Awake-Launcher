@@ -7,6 +7,7 @@
 #include "awake/integration/PhysicalInstanceLease.h"
 namespace Awake::Core {
 QJsonObject readRecord(const QString& path);
+QString modsPath(const QJsonObject& record);
 void writeRecord(const QString& path, const QJsonObject& value);
 void requireResult(const QJsonObject& response);
 class WorkspaceServices {
@@ -20,6 +21,10 @@ public:
     void prepareImport(const QString& id, const QJsonObject& request);
     void apply(const QString& id, const QJsonObject& request);
     void remove(const QString& id, const QJsonObject& request);
+    void adopt(const QString& id, const QJsonObject& request);
+    void undoAdopt(const QString& id, const QJsonObject& request);
+    QJsonObject release(const QJsonObject& request);
+    void sweepShared();
     QJsonObject rename(const QJsonObject& request);
     void sweepDeleted();
     void recover(const QString& id);

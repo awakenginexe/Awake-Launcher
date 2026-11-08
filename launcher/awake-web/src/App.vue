@@ -295,6 +295,7 @@ onUnmounted(() => {
               <div><dt>{{ t('instanceTotalPlaytime') }}</dt><dd>{{ formatPlaytime(selected.totalTimePlayed, state.locale) }}</dd></div>
             </dl>
             <p v-if="selected.managerLinked" class="secondary">{{ t('managerWorkspaceHint') }}</p>
+            <p v-if="selected.managerShared" class="secondary">{{ t('managerSharedHint') }}</p>
             <div class="identity-actions"><button class="quiet" :disabled="!enabled || selected.managerLinked" @click="openEditor(selected)">{{ t('edit') }}</button><button class="quiet" :disabled="!enabled" @click="action('folder', selected.id)">{{ t('folder') }}</button></div>
           </div>
         </Transition>
@@ -325,10 +326,10 @@ onUnmounted(() => {
         <button role="menuitem" :disabled="!enabled" @click="toggleContextPin(contextMenu.instance)">{{ t(contextMenu.instance.pinned ? 'unpin' : 'pin') }}</button>
         <button role="menuitem" :disabled="!enabled" @click="runContextAction('rename', contextMenu.instance)">{{ t('rename') }}</button>
         <button role="menuitem" :disabled="!enabled" @click="runContextAction('changeGroup', contextMenu.instance)">{{ t('changeGroup') }}</button>
-        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.managerLinked" @click="runContextAction('copy', contextMenu.instance)">{{ t('copy') }}</button>
-        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.broken || contextMenu.instance.managerLinked" @click="runContextAction('export', contextMenu.instance)">{{ t('export') }}</button>
+        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.managerLinked || contextMenu.instance.managerShared" @click="runContextAction('copy', contextMenu.instance)">{{ t('copy') }}</button>
+        <button role="menuitem" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.broken || contextMenu.instance.managerLinked || contextMenu.instance.managerShared" @click="runContextAction('export', contextMenu.instance)">{{ t('export') }}</button>
         <div class="instance-context-separator" role="separator"></div>
-        <button role="menuitem" class="destructive" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.managerLinked" @click="runContextAction('delete', contextMenu.instance)">{{ t('delete') }}</button>
+        <button role="menuitem" class="destructive" :disabled="!enabled || contextMenu.instance.running || contextMenu.instance.managerLinked || contextMenu.instance.managerShared" @click="runContextAction('delete', contextMenu.instance)">{{ t('delete') }}</button>
         <button role="menuitem" :disabled="!enabled || !contextMenu.instance.running" @click="runContextAction('kill', contextMenu.instance)">{{ t('kill') }}</button>
       </div>
     </div>

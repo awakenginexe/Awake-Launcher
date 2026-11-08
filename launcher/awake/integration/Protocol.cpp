@@ -65,4 +65,11 @@ QJsonObject capabilities()
         result[name] = false;
     return result;
 }
+QJsonObject managerCapabilities()
+{
+    auto result = capabilities();
+    for (const auto* name : { "launch.request", "operations.get", "instances.enroll", "instances.icon" })
+        result[name] = true;
+    return result;
+}
 }  // namespace Awake::Integration

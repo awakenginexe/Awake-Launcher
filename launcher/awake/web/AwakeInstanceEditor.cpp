@@ -19,6 +19,7 @@
 #include "ui/dialogs/ProgressDialog.h"
 #include "ResourceDownloadTask.h"
 #include "tasks/ConcurrentTask.h"
+#include <QSet>
 #include <QApplication>
 #include <QClipboard>
 #include <QDesktopServices>
@@ -164,7 +165,9 @@ QVariantMap InstanceEditor::command(const QString& instanceId, const QString& na
 {
     auto* instance = APPLICATION->instances()->getInstanceById(instanceId);
     if (!instance) return failure(tr("This instance no longer exists."));
-    if (instance->isManagerLinked()) return failure(tr("Manage this workspace's mods and files in Awake Modpack Manager. Choose Java in Launcher settings."));
+    static const QSet<QString> settingsCommands{"packReminder", "saveNotes", "saveSettings", "clearLog", "copyLog", "openFolder"};
+    if (instance->isManagerShared() && !settingsCommands.contains(name)) return failure(tr("This pack's mods are managed in Awake Modpack Manager. Stop managing it there to change them here."));
+    if (instance->isManagerLinked() && !instance->isManagerShared()) return failure(tr("Manage this workspace's mods and files in Awake Modpack Manager. Choose Java in Launcher settings."));
     const auto options = payload.toMap();
     const auto section = options.value("section").toString();
     if (name == "packReminder") {

@@ -84,6 +84,7 @@ QJsonObject Contract::capabilities(bool writes, bool extensions, bool evidence) 
     if (evidence) {
         result["dependencies.resolutions.v1"] = writes; result["loaders.connector.v1"] = writes;
         result["workspaces.delete"] = writes; result["workspaces.rename"] = writes; result["imports.packAuthoritative.v1"] = writes;
+        result["workspaces.adopt"] = writes; result["workspaces.release"] = writes;
     }
     return result;
 }

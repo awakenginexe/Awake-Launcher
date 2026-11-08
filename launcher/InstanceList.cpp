@@ -692,9 +692,12 @@ InstanceList::InstListError InstanceList::loadList()
     for (auto& id : discoverInstances()) {
         auto* existing = existingIds.contains(id) ? existingIds[id].first : nullptr;
         const bool sameRoot = existing && QFileInfo(existing->instanceRoot()).canonicalFilePath() == QFileInfo(FS::PathCombine(rootDirOf(id), id)).canonicalFilePath();
-        const bool sameLink = existing && existing->isManagerLinked() == m_managerLinks.contains(id) &&
-            (!existing->isManagerLinked() || existing->managerPhysicalId() == m_managerLinks[id]["physicalId"].toString());
-        if (sameRoot && sameLink) {
+        const bool wasLinked = existing && existing->isManagerLinked() && !existing->isManagerShared();
+        const bool sameLink = existing && wasLinked == m_managerLinks.contains(id) &&
+            (!wasLinked || existing->managerPhysicalId() == m_managerLinks[id]["physicalId"].toString());
+        // Connecting or disconnecting in the Manager changes how this instance has to be loaded.
+        const bool sameSharing = existing && (wasLinked || existing->isManagerShared() == QFileInfo::exists(rootDirOf(id) + "/" + id + "/.awake-integration/ownership.json"));
+        if (sameRoot && sameLink && sameSharing) {
             existingIds.remove(id);
             qInfo() << "Should keep and soft-reload" << id;
         } else {
@@ -873,11 +876,15 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     auto instanceRoot = FS::PathCombine(rootDirOf(id), id);
 #ifdef Q_OS_WIN
     const bool managerLinked = m_managerLinks.contains(id);
+    QString sharedPhysicalId;
     const QDir ownership(FS::PathCombine(instanceRoot, ".awake-integration"));
     if (!managerLinked && ((ownership.exists() && !ownership.entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot).isEmpty()) ||
         Awake::Integration::InstanceAuthority::blocksNativeLoad(instanceRoot))) {
-        qWarning() << "Instance requires external ownership/recovery coordination:" << instanceRoot;
-        return nullptr;
+        sharedPhysicalId = Awake::Integration::sharedInstanceBinding(instanceRoot)["physicalId"].toString();
+        if (sharedPhysicalId.isEmpty()) {
+            qWarning() << "Instance requires external ownership/recovery coordination:" << instanceRoot;
+            return nullptr;
+        }
     }
 #endif
     auto instanceSettings = std::make_unique<INISettingsObject>(FS::PathCombine(instanceRoot, "instance.cfg"));
@@ -903,6 +910,7 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     auto inst = std::make_unique<MinecraftInstance>(m_globalSettings, std::move(instanceSettings), instanceRoot);
 #ifdef Q_OS_WIN
     if (managerLinked) inst->setManagerLinked(m_managerLinks[id]["physicalId"].toString());
+    if (!sharedPhysicalId.isEmpty()) inst->setManagerShared(sharedPhysicalId);
 #endif
     qDebug() << "Loaded instance" << inst->name() << "from" << inst->instanceRoot();
 

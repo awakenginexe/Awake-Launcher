@@ -10,5 +10,7 @@ void* lock(const QString& physicalId, QString* error = nullptr);
 QJsonObject binding(const QString& physicalId, QString* error = nullptr);
 bool validate(const QString& root, const QString& physicalId, const QString& registry, QString* error = nullptr);
 bool requireGameRecord(const QString& physicalId, QString* error = nullptr);
+// Undoes enroll for this registration so the instance is ordinary again. Files outside .awake-integration are untouched.
+bool unenroll(const QString& root, const QString& physicalId, const QString& registrationId, QString* error = nullptr);
 bool blocksNativeLoad(const QString& instanceRoot);
 }

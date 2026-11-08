@@ -63,6 +63,7 @@ void WorkspaceServices::prepareImport(const QString& id, const QJsonObject& requ
     m_provider.setPackAuthoritative(authoritative); m_curseforge.setPackAuthoritative(authoritative);
     const auto directory = operationDirectory(id) + "/import";
     const auto parsed = unpack(m_profile, request, directory), record = workspaceRecord(request["physicalId"].toString());
+    if (record.contains("sharedRoot")) throw ServiceError{"UNSUPPORTED_CAPABILITY", "Update this modpack in Awake Launcher."};
     const bool loaderBump = authoritative && request["allowLoaderUpdate"].toBool() && parsed["minecraftVersion"] == record["minecraftVersion"] &&
         parsed["loader"].toObject()["id"] == record["loader"].toObject()["id"] && parsed["loader"] != record["loader"];
     if (!loaderBump && (parsed["minecraftVersion"] != record["minecraftVersion"] || parsed["loader"] != record["loader"]))

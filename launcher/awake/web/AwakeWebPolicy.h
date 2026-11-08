@@ -15,7 +15,7 @@ QString nativeLocale(QString locale);
 
 struct InstanceData {
     QString id, name, group, minecraftVersion, loader, loaderVersion, iconUrl;
-    bool pinned = false, canLaunch = false, running = false, broken = false, managerLinked = false;
+    bool pinned = false, canLaunch = false, running = false, broken = false, managerLinked = false, managerShared = false;
     qint64 lastLaunch = 0, lastTimePlayed = 0, totalTimePlayed = 0;
 };
 QVariantMap instanceDto(const InstanceData& instance);
