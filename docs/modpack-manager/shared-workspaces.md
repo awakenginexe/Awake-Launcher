@@ -1,6 +1,6 @@
 # Play a Manager workspace in Awake Launcher
 
-Requires **Awake Launcher 3.1.0** and **Awake Modpack Manager 1.0.0**, with Manager's pinned Native Core 0.3.0. Launcher 3.0.0 and Manager 0.1.0 do not support this workflow.
+Requires **Awake Launcher 3.1.1** and **Awake Modpack Manager 1.0.0**, with Manager's pinned Native Core 0.3.0. Launcher 3.0.0 and Manager 0.1.0 do not support this workflow.
 
 1. Create a workspace in Manager and finish installing its mods.
 2. Choose **Open in Awake Launcher** on its library card. If Launcher is not found, add your Awake Launcher installation folder in Manager's Settings → Launcher connection.

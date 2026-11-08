@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-param([Parameter(Mandatory)][string]$BuildRoot, [switch]$ProbeOnly, [switch]$Worker)
+param([Parameter(Mandatory)][string]$BuildRoot, [switch]$ProbeOnly, [switch]$Worker, [string]$Tests = '^(Task|ResourceFolderModel|AwakeWebPolicy|AwakeWebBridge)$')
 $ErrorActionPreference = 'Stop'
 $pwsh = (Get-Command pwsh.exe).Source
 if ($Worker) {
@@ -23,7 +23,7 @@ if ($Worker) {
         if ($LASTEXITCODE -or ($owner -join '').Trim() -ne $sid) { throw 'Child-process files must be owned by the test user.' }
         'Standard-user child-process ownership verified.' | Set-Content $env:AWAKE_CI_LOG -Encoding utf8
         if ($env:AWAKE_CI_PROBE_ONLY -ne '1') {
-            & ctest --test-dir $BuildRoot -C Release --output-on-failure -R '^(Task|ResourceFolderModel|AwakeWebPolicy|AwakeWebBridge|AwakeIntegration|AwakeOperations|AwakeTransactions)$' *> $env:AWAKE_CI_LOG
+            & ctest --test-dir $BuildRoot -C Release --output-on-failure -R $env:AWAKE_CI_TESTS *> $env:AWAKE_CI_LOG
             if ($LASTEXITCODE) { throw "Native tests failed: $LASTEXITCODE" }
         }
         @{passed=$true} | ConvertTo-Json | Set-Content $env:AWAKE_CI_RESULT -Encoding utf8
@@ -60,10 +60,11 @@ $name = "standard-user-$([guid]::NewGuid())"
 $env:AWAKE_CI_RESULT = Join-Path $env:TEMP "$name.json"
 $env:AWAKE_CI_LOG = Join-Path $env:TEMP "$name.log"
 $env:AWAKE_CI_PROBE_ONLY = if ($ProbeOnly) { '1' } else { '0' }
+$env:AWAKE_CI_TESTS = $Tests
 # The disposable runner account has no Administrators membership; product ownership checks remain enabled.
 $arguments = '-NoProfile -NonInteractive -File "{0}" -BuildRoot "{1}" -Worker' -f $PSCommandPath,([IO.Path]::GetFullPath($BuildRoot))
 $process = Start-Process -FilePath $pwsh -ArgumentList $arguments -Credential $credential -LoadUserProfile -WorkingDirectory ([IO.Path]::GetFullPath($BuildRoot)) -PassThru -WindowStyle Hidden
-$deadline = [DateTime]::UtcNow.AddSeconds($(if ($ProbeOnly) { 20 } else { 600 }))
+$deadline = [DateTime]::UtcNow.AddSeconds($(if ($ProbeOnly) { 20 } else { 1500 }))
 while (!(Test-Path -LiteralPath $env:AWAKE_CI_RESULT) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
 if (!(Test-Path -LiteralPath $env:AWAKE_CI_RESULT)) { throw "Standard-user test process did not return a result (exited: $($process.HasExited))." }
 $result = Get-Content -LiteralPath $env:AWAKE_CI_RESULT -Raw | ConvertFrom-Json

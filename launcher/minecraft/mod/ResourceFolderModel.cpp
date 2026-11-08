@@ -61,6 +61,12 @@ ResourceFolderModel::ResourceFolderModel(const QDir& dir, MinecraftInstance* ins
 
 ResourceFolderModel::~ResourceFolderModel()
 {
+    // A folder load running on the pool calls back into this model, so it has to end first.
+    if (m_currentUpdateTask) {
+        m_currentUpdateTask->abort();
+    }
+    m_updatePool.waitForDone();
+
     m_resourceResolverThread.quit();
     while (!m_resourceResolverThread.wait(100)) {
         QCoreApplication::processEvents();
@@ -377,9 +383,9 @@ bool ResourceFolderModel::update()
 
         connect(task, &Task::finished, task, &Task::deleteLater);
 
-        QThreadPool::globalInstance()->start(task);
+        m_updatePool.start(task);
     } else {
-        QThreadPool::globalInstance()->start(m_currentUpdateTask.get());
+        m_updatePool.start(m_currentUpdateTask.get());
     }
 
     return true;

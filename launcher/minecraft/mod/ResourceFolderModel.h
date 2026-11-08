@@ -5,6 +5,7 @@
 #include <QHeaderView>
 #include <QSortFilterProxyModel>
 #include <QThread>
+#include <QThreadPool>
 #include <QTreeView>
 
 #include "Resource.h"
@@ -269,6 +270,8 @@ class ResourceFolderModel : public QAbstractListModel {
 
     Task::Ptr m_currentUpdateTask = nullptr;
     bool m_scheduledUpdate = false;
+    // Only this model's folder loads, so the destructor can wait for exactly those.
+    QThreadPool m_updatePool;
 
     QList<Resource::Ptr> m_resources;
 
