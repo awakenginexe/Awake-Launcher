@@ -4,6 +4,18 @@ $ErrorActionPreference = 'Stop'
 $pwsh = (Get-Command pwsh.exe).Source
 if ($Worker) {
     try {
+        $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $profile = (Get-ItemProperty "HKLM:/SOFTWARE/Microsoft/Windows NT/CurrentVersion/ProfileList/$sid").ProfileImagePath
+        $env:USERPROFILE = [Environment]::ExpandEnvironmentVariables($profile)
+        $env:APPDATA = Join-Path $env:USERPROFILE 'AppData/Roaming'
+        $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData/Local'
+        $env:USERNAME = [Security.Principal.WindowsIdentity]::GetCurrent().Name.Split('\')[-1]
+        $local = [Environment]::GetFolderPath('LocalApplicationData')
+        if ([IO.Path]::GetFullPath($local) -ne [IO.Path]::GetFullPath($env:LOCALAPPDATA)) { throw 'Test-user LocalAppData resolves to another profile.' }
+        $localOwner = (Get-Acl -LiteralPath $local).GetOwner([Security.Principal.SecurityIdentifier]).Value
+        if ($localOwner -ne $sid) { throw 'Test-user LocalAppData must be owned by the test user.' }
+        "Verified test-user profile: $env:USERPROFILE"
+
         $env:TEMP = $env:TMP = (Resolve-Path (Join-Path $BuildRoot '.validation/native-temp')).Path
         $env:AWAKE_CI_CHILD_PROBE = Join-Path $env:TEMP "child-owner-$([guid]::NewGuid()).txt"
         $owner = & $pwsh -NoProfile -NonInteractive -Command '[IO.File]::WriteAllText($env:AWAKE_CI_CHILD_PROBE,"fixture"); (Get-Acl -LiteralPath $env:AWAKE_CI_CHILD_PROBE).GetOwner([Security.Principal.SecurityIdentifier]).Value'
