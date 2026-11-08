@@ -11,7 +11,7 @@ on:
   push:
     tags: ['v*.*.*-beta.*', 'v*.*.*-rc.*', 'v*.*.*-alpha.*']
     branches: [feat/native-core-manager-020]
-    paths: ['.github/workflows/awake-beta.yml', 'scripts/package-windows-setup.ps1', 'program_info/awake_install.nsi']
+    paths: ['.github/workflows/awake-beta.yml', 'scripts/package-windows-setup.ps1', 'program_info/awake_install.nsi', 'scripts/prepare-private-test-storage.ps1', 'scripts/run-private-tests.ps1', 'scripts/beta-start-here.txt']
 
 permissions:
   contents: read
