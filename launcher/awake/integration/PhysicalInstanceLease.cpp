@@ -7,6 +7,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
+#include <QStorageInfo>
 #include <qt_windows.h>
 namespace Awake::Integration {
 PhysicalInstanceLease::PhysicalInstanceLease(QString root, QString id, QString registry, void* handle)
@@ -54,7 +55,11 @@ bool PhysicalInstanceLease::pinDirectory(const QString& path, QString* error)
 }
 bool PhysicalInstanceLease::pinAbsoluteDirectory(const QString& directory, QString* error)
 {
-    auto position = QDir(directory).rootPath();
+    auto position = QStorageInfo(directory).rootPath();
+    if (position.isEmpty()) {
+        if (error) *error = "Cannot resolve the instance volume.";
+        return false;
+    }
     const auto parts = directory.mid(position.size()).split('/', Qt::SkipEmptyParts);
     QStringList paths{position};
     for (const auto& part : parts) { position = QDir(position).filePath(part); paths.append(position); }

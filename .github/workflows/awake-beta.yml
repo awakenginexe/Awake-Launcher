@@ -7,11 +7,9 @@ on:
       release_tag:
         description: Existing immutable beta tag to build
         required: true
-        default: v3.1.0-beta.1
+        default: v3.1.0-beta.2
   push:
     tags: ['v*.*.*-beta.*', 'v*.*.*-rc.*', 'v*.*.*-alpha.*']
-    branches: [feat/native-core-manager-020]
-    paths: ['.github/workflows/awake-beta.yml', 'scripts/package-windows-setup.ps1', 'program_info/awake_install.nsi', 'scripts/prepare-private-test-storage.ps1', 'scripts/run-private-tests.ps1', 'scripts/beta-start-here.txt']
 
 permissions:
   contents: read
@@ -30,7 +28,7 @@ jobs:
         working-directory: source
     env:
       VCPKG_MAX_CONCURRENCY: 4
-      RELEASE_TAG: ${{ inputs.release_tag || (github.ref_type == 'tag' && github.ref_name) || 'v3.1.0-beta.1' }}
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -172,7 +170,6 @@ jobs:
           git diff --exit-code
           if ($LASTEXITCODE) { throw 'Application source changed during packaging.' }
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: Awake-Launcher-${{ env.RELEASE_TAG }}-Windows-x64
           path: |

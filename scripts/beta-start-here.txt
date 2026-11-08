@@ -1,8 +1,8 @@
 Awake coordinated beta: Windows x64 installers and optional Portable ZIPs
 
-Use Launcher v3.1.0-beta.1 with Manager v0.2.0-beta.1.
-https://github.com/awakenginexe/Awake-Launcher/releases/tag/v3.1.0-beta.1
-https://github.com/awakenginexe/Awake-Modpack-Manager/releases/tag/v0.2.0-beta.1
+Use Launcher v3.1.0-beta.2 with Manager v0.2.0-beta.2.
+https://github.com/awakenginexe/Awake-Launcher/releases/tag/v3.1.0-beta.2
+https://github.com/awakenginexe/Awake-Modpack-Manager/releases/tag/v0.2.0-beta.2
 
 1. Download both Windows-x64-Setup.exe installers and verify them against SHA256SUMS.txt on each release page.
 2. Run the installers. They install or update the apps for your Windows user. Use separate folders/data locations if keeping a stable installation alongside the beta.
@@ -18,7 +18,7 @@ There is ONE physical playable workspace, with no exported, imported or duplicat
 Portable ZIP alternative: extract both ZIPs into their own writable folders. Run awakelauncher.exe from Launcher and Run-Manager-Beta.cmd from Manager. The Launcher portable marker and Manager script use separate beta data; installers use the normal app data locations.
 Windows 10/11 x64 is required. Manager's installer can fetch Microsoft Edge WebView2; the portable ZIP requires WebView2 already installed.
 
-The Launcher Actions build configures its approved Microsoft application ID and CurseForge API access from repository secrets. Manager's unchanged helper still disables CurseForge network access by default; a Manager Actions build does not inherit Launcher's key.
+Both Actions builds configure their separately approved CurseForge access from their own repository secrets. The Launcher build also includes its Microsoft application ID. Manager v0.2.0-beta.2 forwards its approved public-client configuration to the unchanged Native Core 0.2.1 helper; the older Manager beta.1 has CurseForge disabled.
 
 These apps and the helper are unsigned beta software, not production-ready. Other loader/modpack combinations have not all received the shared-instance gameplay test. Read the known issues in both release notes.
 Report bugs with versions, Minecraft/loader versions, steps and error messages through GitHub Issues. Remove tokens, private logs, worlds and proprietary modpack data from attachments.
