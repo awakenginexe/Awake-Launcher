@@ -188,7 +188,8 @@ QVariantMap Bridge::snapshot()
         data.iconUrl = iconUrl(instance);
         data.pinned = pins.contains(data.id);
         data.canLaunch = instance->canLaunch();
-        data.managerLinked = instance->isManagerLinked();
+        data.managerLinked = instance->isManagerLinked() && !instance->isManagerShared();
+        data.managerShared = instance->isManagerShared();
         data.running = instance->isRunning();
         running = running || data.running;
         data.broken = instance->hasVersionBroken();

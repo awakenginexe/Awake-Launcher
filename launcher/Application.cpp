@@ -1440,7 +1440,8 @@ void Application::performMainStartupAction()
             const bool preparing = entry != m_instanceExtras.end() && entry->second.controller;
             m_instanceExtrasMutex.unlock();
             return QString(preparing ? "launch_preparing" : "idle");
-        });
+        },
+        [this](MinecraftInstance* instance) { return launch(instance); });
     QString integrationError;
     if (!m_integration->start(&integrationError)) qInfo() << "Modpack Manager integration unavailable:" << integrationError;
     connect(this, &Application::aboutToQuit, m_integration.get(), &Awake::Integration::Coordinator::stop);
@@ -1697,12 +1698,17 @@ bool Application::launch(MinecraftInstance* instance,
         qDebug() << "Cannot launch instances while an update is running. Please try again when updates are completed.";
     } else if (instance->canLaunch()) {
 #ifdef Q_OS_WIN
+        if (m_integration && m_integration->isCoordinating(instance)) {
+            CustomMessageBox::selectable(m_mainWindow, tr("Instance unavailable"), tr("Awake Modpack Manager is connecting this instance. Try again in a moment."), QMessageBox::Information)->exec();
+            return false;
+        }
         std::shared_ptr<Awake::Integration::PhysicalInstanceLease> lease;
         if (instance->isManagerLinked()) {
             QString error;
             const auto root = instance->instanceRoot();
-            lease = Awake::Integration::acquireManagerWorkspace(root, instance->managerPhysicalId(), &error);
-            if (!lease || !lease->pinDirectory(".minecraft/mods", &error)) {
+            lease = instance->isManagerShared() ? Awake::Integration::acquireSharedInstance(root, instance->managerPhysicalId(), &error)
+                                                : Awake::Integration::acquireManagerWorkspace(root, instance->managerPhysicalId(), &error);
+            if (!lease || !lease->pinDirectory(QDir(root).relativeFilePath(instance->modsRoot()), &error)) {
                 CustomMessageBox::selectable(m_mainWindow, tr("Workspace unavailable"),
                     tr("Finish operations in Awake Modpack Manager and close any game using this workspace, then try again.\n\n") + error, QMessageBox::Warning)->exec();
                 return false;

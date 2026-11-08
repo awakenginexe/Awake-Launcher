@@ -114,6 +114,9 @@ class BaseInstance : public QObject {
     bool isManagerLinked() const { return !m_managerPhysicalId.isEmpty(); }
     QString managerPhysicalId() const { return m_managerPhysicalId; }
     void setManagerLinked(const QString& physicalId) { m_managerPhysicalId = physicalId; }
+    // Linked covers both kinds; shared means the instance lives in the Launcher and keeps its own settings.
+    bool isManagerShared() const { return m_managerShared; }
+    void setManagerShared(const QString& physicalId) { m_managerPhysicalId = physicalId; m_managerShared = true; }
     QString uuid() const { return m_uuid; }
     void regenerateUuid();
 
@@ -301,6 +304,7 @@ class BaseInstance : public QObject {
    protected: /* data */
     QString m_rootDir;
     QString m_managerPhysicalId;
+    bool m_managerShared = false;
     std::unique_ptr<SettingsObject> m_settings;
     // InstanceFlags m_flags;
     bool m_isRunning = false;

@@ -3,15 +3,9 @@ name: Native Core package
 # Builds the Modpack Manager helper from this exact commit with the recorded toolchain, packages it
 # with its corresponding source, and commits the delivery next to the source. The Manager pins that
 # commit. Nothing is released or tagged here.
+# Start it by hand on the release branch; the delivery is committed to that branch.
 on:
-  push:
-    branches: ['feat/native-core-manager-*']
-    paths:
-      - 'native-core/**'
-      - '!native-core/redistribution/**'
-      - 'launcher/awake/integration/**'
-      - 'docs/modpack-manager/core.schema.json'
-      - '.github/workflows/native-core-package.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write

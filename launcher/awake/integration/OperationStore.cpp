@@ -45,7 +45,7 @@ bool allowed(const QString& before, const QString& after, const QString& method)
     if (after == "rolling_back") return before == "applying" || before == "verifying" || before == "recovery_required";
     if (after == "rolled_back") return before == "rolling_back";
     if (after == "cancelled") return before == "queued" || before == "resolving" || before == "downloading" || before == "prepared";
-    if (before == "resolving" && (after == "prepared" || (after == "verifying" && (method == "workspaces.create" || method == "workspaces.delete")))) return true;
+    if (before == "resolving" && (after == "prepared" || (after == "verifying" && (method == "workspaces.create" || method == "workspaces.delete" || method == "workspaces.adopt")))) return true;
     static const QStringList order{"queued", "resolving", "downloading", "prepared", "acquiring", "revalidating", "backing_up", "applying", "verifying", "completed"};
     const auto index = order.indexOf(before);
     return index >= 0 && index + 1 < order.size() && order[index + 1] == after;

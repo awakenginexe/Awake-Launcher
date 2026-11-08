@@ -11,7 +11,8 @@
 #include <QJsonDocument>
 #include <QUuid>
 namespace Awake::Integration {
-QJsonObject managerWorkspaceBinding(const QString& root, const QString& expected, QString* error)
+namespace {
+QJsonObject verifiedBinding(const QString& root, const QString& expected, bool shared, QString* error)
 {
     const auto reject = [error]() -> QJsonObject {
         if (error) *error = "Choose a completed Awake Modpack Manager workspace. Its folder or saved ownership could not be verified.";
@@ -23,7 +24,7 @@ QJsonObject managerWorkspaceBinding(const QString& root, const QString& expected
     const auto registration = binding["registrationId"].toString(), registry = binding["registry"].toString();
     const auto profile = QFileInfo(registry).dir().canonicalPath();
     if (binding.isEmpty() || QUuid(registration).toString(QUuid::WithoutBraces) != registration ||
-        canonical != profile + "/workspaces/" + registration || registry != profile + "/ownership" ||
+        (!shared && canonical != profile + "/workspaces/" + registration) || registry != profile + "/ownership" ||
         binding["ownerProfile"] != physicalIdentityV2(profile) || !InstanceAuthority::validate(canonical, id, registry, error)) return reject();
     const auto catalog = profile + "/catalog/" + registration + ".json";
     if (!storageAccessIsPrivate(catalog) || DurableIO::hash(catalog).isEmpty()) return reject();
@@ -33,20 +34,26 @@ QJsonObject managerWorkspaceBinding(const QString& root, const QString& expected
     const auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
     const auto config = DurableIO::hash(canonical + "/instance.cfg"), pack = DurableIO::hash(canonical + "/mmc-pack.json");
     if (envelope.size() != 2 || envelope["sha256"] != digest || body["format"] != 1 || body["workspaceId"] != registration || body["physicalId"] != id ||
+        (shared ? body["sharedRoot"] != canonical : body.contains("sharedRoot")) ||
         config.isEmpty() || config == "missing" || pack.isEmpty() || pack == "missing") return reject();
     return binding;
 }
-std::shared_ptr<PhysicalInstanceLease> acquireManagerWorkspace(const QString& root, const QString& expected, QString* error)
+std::shared_ptr<PhysicalInstanceLease> acquireVerified(const QString& root, const QString& expected, bool shared, QString* error)
 {
-    const auto binding = managerWorkspaceBinding(root, expected, error);
+    const auto binding = verifiedBinding(root, expected, shared, error);
     if (binding.isEmpty()) return {};
     auto lease = PhysicalInstanceLease::acquire(root, binding["physicalId"].toString(), binding["registry"].toString(), error);
     if (!lease || !lease->pinRoot(error)) return {};
     // Recovery can be published by the operation that held the lock immediately before us.
-    if (managerWorkspaceBinding(root, lease->physicalId(), error).isEmpty() || QFileInfo::exists(root + "/.awake-integration/recovery.json")) {
+    if (verifiedBinding(root, lease->physicalId(), shared, error).isEmpty() || QFileInfo::exists(root + "/.awake-integration/recovery.json")) {
         if (error) *error = "Open Awake Modpack Manager and finish recovering this workspace before playing.";
         return {};
     }
     return lease;
 }
+}  // namespace
+QJsonObject managerWorkspaceBinding(const QString& root, const QString& expected, QString* error) { return verifiedBinding(root, expected, false, error); }
+QJsonObject sharedInstanceBinding(const QString& root, const QString& expected, QString* error) { return verifiedBinding(root, expected, true, error); }
+std::shared_ptr<PhysicalInstanceLease> acquireManagerWorkspace(const QString& root, const QString& expected, QString* error) { return acquireVerified(root, expected, false, error); }
+std::shared_ptr<PhysicalInstanceLease> acquireSharedInstance(const QString& root, const QString& expected, QString* error) { return acquireVerified(root, expected, true, error); }
 }

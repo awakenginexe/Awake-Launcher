@@ -6,6 +6,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include "awake/integration/DurableIO.h"
+#include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/ProfileAccess.h"
 #include "awake/integration/TransactionEngine.h"
 #include <QCryptographicHash>
@@ -199,6 +200,43 @@ private slots:
         } catch (const ServiceError& error) { QFAIL(qPrintable(error.code+": "+error.message)); }
     }
 
+    void launcherInstanceConnectsEditsAndDisconnects()
+    {
+        try {
+            Fixture f(0); Contract contract;
+            const auto home = f.temporary.path() + "/launcher"; QVERIFY(createPrivateStorageDirectory(home));
+            const auto instance = home + "/pack", mods = instance + "/minecraft/mods"; QVERIFY(QDir().mkpath(mods + "/.index"));
+            const auto tracked = jar("p0-v1");
+            QVERIFY(DurableIO::write(instance + "/instance.cfg", "InstanceType=OneSix\nname=Existing pack\n"));
+            QVERIFY(DurableIO::write(instance + "/mmc-pack.json", R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.21.1"},{"uid":"net.fabricmc.fabric-loader","version":"0.16.9"}]})"));
+            QVERIFY(DurableIO::write(mods + "/p0-v1.jar", tracked)); QVERIFY(DurableIO::write(mods + "/manual.jar", "manual mod"));
+            QVERIFY(DurableIO::write(mods + "/.index/some-name.pw.toml", "name = \"P0\"\nfilename = \"p0-v1.jar\"\nside = \"both\"\n\n[download]\nhash-format = \"sha512\"\nhash = \"" + digest(tracked, QCryptographicHash::Sha512) +
+                "\"\nmode = \"url\"\nurl = \"https://cdn.modrinth.com/data/p0-v1.jar\"\n\n[update]\n[update.modrinth]\nmod-id = \"p0\"\nversion = \"p0-v1\"\n"));
+            const QJsonObject params{{"idempotencyKey", "adopt"}, {"path", instance}};
+            QVERIFY(contract.valid("workspaces.adopt.params", params));
+            const auto id = f.begin("workspaces.adopt", params); f.services.adopt(id, params);
+            f.workspace = f.services.operation(id)["result"].toObject()["workspace"].toObject();
+            QVERIFY(contract.valid("workspace", f.workspace));
+            QCOMPARE(f.workspace["sharedRoot"].toString(), QFileInfo(instance).canonicalFilePath());
+            QCOMPARE(f.workspace["name"].toString(), QString("Existing pack"));
+            QCOMPARE(f.item("p0")["metadataState"].toString(), QString("verified"));
+            QCOMPARE(f.inventory()["total"].toInt(), 2);
+            bool refused = false;
+            try { f.services.rename({{"physicalId", f.workspace["physicalId"]}, {"name", "Other"}}); } catch (const ServiceError& error) { refused = error.code == "UNSUPPORTED_CAPABILITY"; }
+            QVERIFY(refused);
+            f.apply(f.prepare(QJsonArray{QJsonObject{{"action", "replace"}, {"projectId", "p0"}, {"versionId", "p0-v2"}}}));
+            QCOMPARE(f.item("p0")["versionId"].toString(), QString("p0-v2"));
+            QVERIFY(QFileInfo::exists(mods + "/p0-v2.jar")); QVERIFY(!QFileInfo::exists(mods + "/p0-v1.jar"));
+            QVERIFY(!QFileInfo::exists(mods + "/.index/some-name.pw.toml")); QVERIFY(QFileInfo::exists(mods + "/.index/modrinth-p0.pw.toml"));
+            QVERIFY(QFileInfo::exists(mods + "/manual.jar"));
+            QVERIFY(InstanceAuthority::blocksNativeLoad(instance));
+            const auto released = f.services.release({{"physicalId", f.workspace["physicalId"]}});
+            QVERIFY(contract.valid("workspaces.release.result", released));
+            QVERIFY(!QFileInfo::exists(instance + "/.awake-integration")); QVERIFY(!InstanceAuthority::blocksNativeLoad(instance));
+            QVERIFY(QFileInfo::exists(mods + "/p0-v2.jar")); QVERIFY(QFileInfo::exists(mods + "/manual.jar"));
+            QCOMPARE(f.services.list({})["total"].toInt(), 1);
+        } catch (const ServiceError& error) { QFAIL(qPrintable(error.code + ": " + error.message)); }
+    }
     void policyStatesAreIndependent()
     {
         Fixture f;

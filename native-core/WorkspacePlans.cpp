@@ -22,7 +22,6 @@ namespace {
 QString providerId(const QJsonObject& value) { return value["provider"].toString("modrinth"); }
 QString projectKey(const QString& provider, const QString& id) { return provider == "curseforge" ? provider + ':' + id : id; }
 QString projectKey(const QJsonObject& row) { return projectKey(providerId(row), row["projectId"].toString()); }
-constexpr auto mods = ".minecraft/mods";
 // Sinytra Connector loads Fabric mods on Forge/NeoForge; Forgified Fabric API replaces Fabric API there.
 constexpr auto connectorProject = "u58R1TMW", forgifiedFabricApiProject = "Aqlf1Shp", fabricApiProject = "P7dR8mSH";
 QString checkedHash(const QString& path)
@@ -44,7 +43,7 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
     const bool packAuthoritative = request["packAuthoritative"].toBool();
     m_provider.setPackAuthoritative(packAuthoritative); m_curseforge.setPackAuthoritative(packAuthoritative);
     const auto record = workspaceRecord(request["physicalId"].toString()), loader = record["loader"].toObject();
-    const auto game = record["minecraftVersion"].toString(), loaderId = loader["id"].toString(), directory = operationDirectory(id), instanceRoot = root(record);
+    const auto game = record["minecraftVersion"].toString(), loaderId = loader["id"].toString(), directory = operationDirectory(id), instanceRoot = root(record), mods = modsPath(record);
     TransactionEngine engine(m_store, instanceRoot, mods);
     QJsonObject originalPolicies; QJsonArray originalRows;
     {
@@ -509,6 +508,8 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
             throw ServiceError{"INTEGRITY_FAILED", "Native mod metadata serialization did not verify."};
         const auto indexName = "index-" + QString::number(ordinal); copy(indexPath, directory + "/staging/" + indexName);
         if (!old.isEmpty() && old["fileName"] != target) remove(QString(mods) + '/' + old["fileName"].toString());
+        // Instances connected from the Launcher can name this metadata file differently.
+        if (const auto oldIndex = originalPolicies["projects"].toObject()[project].toObject()["indexFile"].toString(); !old.isEmpty() && !oldIndex.isEmpty() && oldIndex.compare(indexFile, Qt::CaseInsensitive) != 0) remove(QString(mods) + "/.index/" + oldIndex);
         stage(QString(mods) + '/' + target, artifactName); stage(QString(mods) + "/.index/" + indexFile, indexName);
         entry["projectId"] = wire["projectId"]; if (providerId(wire) != "modrinth") entry["provider"] = providerId(wire); entry["versionId"] = wire["versionId"]; entry["versionNumber"] = wire["versionNumber"];
         entry["fileName"] = filename; entry["sha256"] = checkedHash(directory + "/staging/" + artifactName);
@@ -578,7 +579,7 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
 void WorkspaceServices::apply(const QString& id, const QJsonObject& request)
 {
     const auto initial = context(id)["request"].toObject(); const auto record = workspaceRecord(initial["physicalId"].toString()); auto lease = acquire(record);
-    TransactionEngine engine(m_store, root(record), mods);
+    TransactionEngine engine(m_store, root(record), modsPath(record));
     requireResult(engine.apply(id, request["planDigest"].toString(), request["instanceRevision"].toString(), lease));
     // No native model is loaded for these roots; parse/hash all native metadata before durable completion.
     const auto rows = scan(record);
@@ -615,7 +616,7 @@ void WorkspaceServices::recover(const QString& id)
     if (saved["method"] == "workspaces.create") throw ServiceError{"RECOVERY_REQUIRED", "Interrupted workspace initialization requires inspection; no partial files were removed."};
     if (saved["method"] == "workspaces.delete") throw ServiceError{"RECOVERY_REQUIRED", "Workspace deletion did not finish; delete it again."};
     const auto record = workspaceRecord(request["physicalId"].toString()); auto lease = acquire(record);
-    TransactionEngine engine(m_store, root(record), mods); requireResult(engine.recover(id, lease));
+    TransactionEngine engine(m_store, root(record), modsPath(record)); requireResult(engine.recover(id, lease));
 }
 void WorkspaceServices::startupRecovery()
 {
@@ -627,6 +628,12 @@ void WorkspaceServices::startupRecovery()
         }
         try {
             const auto saved = context(id); const auto request = saved["request"].toObject();
+            if (saved["method"] == "workspaces.adopt") {
+                if (status["terminal"].toBool()) continue;
+                undoAdopt(id, request);
+                requireResult(m_store.transition(id, "failed", {}, {{"code", "IO_ERROR"}, {"message", "The Manager closed while connecting this instance. It was left as it was; try again."}, {"retryable", false}}));
+                continue;
+            }
             if (saved["method"] == "workspaces.delete") {
                 if (status["terminal"].toBool()) continue;
                 const auto path = operationDirectory(id) + "/delete.json";

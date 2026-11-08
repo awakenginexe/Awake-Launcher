@@ -68,11 +68,12 @@ bool CoreBackend::start(const QString& requested, QString* error)
         Awake::Integration::DurableIO::setHashCacheEnabled(true);
         WorkspaceServices(m_profile, *m_store).startupRecovery();
         WorkspaceServices(m_profile, *m_store).sweepDeleted();
+        WorkspaceServices(m_profile, *m_store).sweepShared();
         IntegrationServer::Options options; options.major = 2; options.directory = "core-v2"; options.prefix = "awake-core-v2-";
         options.capabilities = m_contract.capabilities(true);
         options.extension = "manager.v0.2"; options.legacyCapabilities = m_contract.capabilities(true, false);
         options.nextExtension = evidenceExtension; options.nextCapabilities = m_contract.capabilities(true, true, true);
-        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.3.0"}, {"storageVersion", 1}};
+        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.4.0"}, {"storageVersion", 1}};
         options.validate = [this](const QString& method, const QJsonObject& params) { return m_contract.valid(method + ".params", params); };
         if (!m_server.start(m_profile, {{"role", "modpack-core"}, {"profileId", m_profileId}},
             [this](const Request& request, IntegrationServer::Reply reply) { handle(request, std::move(reply)); }, options, &reason)) throw ServiceError{"IO_ERROR", reason};
@@ -146,7 +147,7 @@ void CoreBackend::handle(const Request& request, IntegrationServer::Reply reply)
             }
             if (extended || (!physical.isEmpty() && !services.legacyCompatible(physical))) throw ServiceError{"UNSUPPORTED_CAPABILITY", "This workspace or request requires the manager.v0.2 extension; upgrade the client."};
         }
-        if (request.method == "imports.prepare" || request.method == "workspaces.create" || request.method == "workspaces.delete" || request.method == "plans.prepare" || request.method == "transactions.apply" || request.method == "recovery.run") {
+        if (request.method == "imports.prepare" || request.method == "workspaces.create" || request.method == "workspaces.delete" || request.method == "workspaces.adopt" || request.method == "plans.prepare" || request.method == "transactions.apply" || request.method == "recovery.run") {
             submit(request, checked); return;
         }
         if (request.method == "operations.cancel") {
@@ -203,6 +204,7 @@ void CoreBackend::submit(const Request& request, IntegrationServer::Reply reply)
             try {
                 if (method == "workspaces.create") work.create(id, params);
                 else if (method == "workspaces.delete") work.remove(id, params);
+                else if (method == "workspaces.adopt") work.adopt(id, params);
                 else if (method == "plans.prepare") work.prepare(id, params);
                 else if (method == "imports.prepare") work.prepareImport(id, params);
                 else if (method == "transactions.apply") work.apply(id, params);
@@ -235,7 +237,7 @@ QJsonObject CoreBackend::read(const Request& request)
     const auto method = request.method; const auto params = request.params;
     if (method == "core.info") {
         const auto recovery = services.recoveryStatus();
-        return {{"role", "modpack-core"}, {"coreVersion", "0.3.0"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
+        return {{"role", "modpack-core"}, {"coreVersion", "0.4.0"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
             {"workspaceRoot", m_profile + "/workspaces"}, {"state", recovery["operations"].toArray().isEmpty() && recovery["blockedWorkspaces"].toArray().isEmpty() ? "ready" : "recovery_required"},
             {"supportedLoaders", request.managerExtensions ? QJsonArray{"vanilla", "fabric", "forge", "neoforge", "quilt"} : QJsonArray{"vanilla", "fabric"}}};
     }
@@ -253,6 +255,7 @@ QJsonObject CoreBackend::read(const Request& request)
     if (method == "inbox.discard") return inbox.discard(params);
     if (method == "workspaces.list") return services.list(params);
     if (method == "workspaces.rename") return services.rename(params);
+    if (method == "workspaces.release") return services.release(params);
     if (method == "mods.list") return services.inventory(params);
     if (method == "updates.check") return services.updates(params);
     if (method == "plans.get") return services.plan(params);

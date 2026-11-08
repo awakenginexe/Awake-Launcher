@@ -74,11 +74,13 @@ bool safePath(const QString& root, const QString& relativePath, QString* error)
     }
     return true;
 }
+// "<game>/mods" -> "<game>/": Launcher instances may use "minecraft" as well as ".minecraft".
+QString gameFolder(const QString& mods) { return mods.left(mods.size() - 4); }
 bool allowedPath(const QString& path, const QString& mods)
 {
     if (!relative(path)) return false;
     if (path == "instance.cfg" || path == "mmc-pack.json" || path == ".awake-integration/policies.json") return true;
-    if (path.startsWith(".minecraft/") && !path.startsWith(mods + '/', Qt::CaseInsensitive)) return true;
+    if (path.startsWith(gameFolder(mods)) && !path.startsWith(mods + '/', Qt::CaseInsensitive)) return true;
     if (!path.startsWith(mods + '/')) return false;
     const auto rest = path.mid(mods.size() + 1);
     if (rest.startsWith(".index/")) return leaf(rest.mid(7)) && rest.endsWith(".pw.toml");
@@ -102,7 +104,7 @@ bool overridePaths(const QString& root, const QString& policy, const QString& mo
     const auto overrides = value.toObject();
     for (auto it = overrides.begin(); it != overrides.end(); ++it) {
         const auto path = it.key(), key = path.toCaseFolded();
-        if (!path.startsWith(".minecraft/") || !allowedPath(path, mods) || path.startsWith(mods + "/.index/", Qt::CaseInsensitive) ||
+        if (!path.startsWith(gameFolder(mods)) || !allowedPath(path, mods) || path.startsWith(mods + "/.index/", Qt::CaseInsensitive) ||
             !it.value().isString() || !hash.match(it.value().toString()).hasMatch() || folded.contains(key) || !safePath(root, path, error)) {
             if (error && error->isEmpty()) *error = "Invalid managed override."; return false;
         }
@@ -330,7 +332,7 @@ QJsonObject TransactionEngine::prepare(const QString& id, const QList<FileChange
     quint64 bytes = 16 * 1024 * 1024;
     for (const auto& change : changes) {
         const auto path = change.relativePath;
-        if (path.startsWith(".minecraft/") && !path.startsWith(m_mods + '/', Qt::CaseInsensitive) && !nextOverrides.contains(path))
+        if (path.startsWith(gameFolder(m_mods)) && !path.startsWith(m_mods + '/', Qt::CaseInsensitive) && !nextOverrides.contains(path))
             return failure("INVALID_REQUEST", "Game file targets must be declared as managed overrides.");
         if (change.stagedName.isEmpty() && protectedMetadata(path)) return failure("INVALID_REQUEST", "Native instance and policy metadata must be serialized, not deleted.");
         if (!allowedPath(path, m_mods) || !safePath(m_root, path, &error) || targets.contains(path.toCaseFolded()) ||

@@ -114,6 +114,11 @@
         },
         "recoveryRequired": {
           "type": "boolean"
+        },
+        "sharedRoot": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
         }
       },
       "required": [
@@ -1056,6 +1061,12 @@
           "type": "boolean"
         },
         "workspaces.rename": {
+          "type": "boolean"
+        },
+        "workspaces.adopt": {
+          "type": "boolean"
+        },
+        "workspaces.release": {
           "type": "boolean"
         },
         "imports.packAuthoritative.v1": {
@@ -3793,6 +3804,54 @@
     "workspaces.delete.result": {
       "$ref": "#/$defs/accepted"
     },
+    "workspaces.adopt.params": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.adopt.result": {
+      "$ref": "#/$defs/accepted"
+    },
+    "workspaces.release.params": {
+      "type": "object",
+      "properties": {
+        "physicalId": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "physicalId"
+      ],
+      "additionalProperties": false
+    },
+    "workspaces.release.result": {
+      "type": "object",
+      "properties": {
+        "released": {
+          "const": true
+        }
+      },
+      "required": [
+        "released"
+      ],
+      "additionalProperties": false
+    },
     "workspaces.rename.params": {
       "type": "object",
       "properties": {
@@ -4089,6 +4148,26 @@
         "$ref": "#/$defs/workspaces.rename.result"
       },
       "capability": "workspaces.rename",
+      "extension": "manager.v0.2.1"
+    },
+    "workspaces.adopt": {
+      "params": {
+        "$ref": "#/$defs/workspaces.adopt.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.adopt.result"
+      },
+      "capability": "workspaces.adopt",
+      "extension": "manager.v0.2.1"
+    },
+    "workspaces.release": {
+      "params": {
+        "$ref": "#/$defs/workspaces.release.params"
+      },
+      "result": {
+        "$ref": "#/$defs/workspaces.release.result"
+      },
+      "capability": "workspaces.release",
       "extension": "manager.v0.2.1"
     }
   }

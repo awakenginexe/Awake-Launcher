@@ -65,7 +65,7 @@ class MinecraftInstance : public BaseInstance {
     // FIXME: remove
     QSet<QString> traits() const override;
 
-    bool canEdit() const override { return !isManagerLinked(); }
+    bool canEdit() const override { return !isManagerLinked() || isManagerShared(); }
 
     bool canExport() const override { return !isManagerLinked(); }
 

@@ -54,10 +54,13 @@ private slots:
         instance.lastTimePlayed = 12;
         instance.totalTimePlayed = 42;
         auto dto = instanceDto(instance);
-        QCOMPARE(dto.size(), 15);
+        QCOMPARE(dto.size(), 16);
         QCOMPARE(dto.value("managerLinked").toBool(), false);
         instance.managerLinked = true;
         QVERIFY(instanceDto(instance).value("managerLinked").toBool());
+        QCOMPARE(dto.value("managerShared").toBool(), false);
+        instance.managerShared = true;
+        QVERIFY(instanceDto(instance).value("managerShared").toBool());
         QCOMPARE(dto.value("name").toString(), instance.name);
         QCOMPARE(dto.value("lastLaunch").toLongLong(), 1000LL);
         QCOMPARE(dto.value("lastTimePlayed").toLongLong(), 12LL);
