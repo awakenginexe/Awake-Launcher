@@ -1,0 +1,33 @@
+{
+  "sourceRepository": "https://github.com/awakenginexe/Awake-Launcher",
+  "sourceCommit": "8787e06f934c6f792d102d7ab885d8afffdccb12",
+  "sourceBranch": "feat/native-core-manager-040",
+  "implementationVersion": "0.4.0",
+  "protocol": {
+    "major": 2,
+    "minor": 0
+  },
+  "extension": "manager.v0.2.1",
+  "platform": "windows-x64",
+  "publicRelease": false,
+  "executableSha256": "4e0c761a9550d3236ace200d38676c729075d509f9d828577d5d527b5cfe9a6b",
+  "reproducibleBuildVerified": false,
+  "sourceArchive": "awake-core-source-8787e06f934c.zip",
+  "sourceArchiveSha256": "55e57c82b76ee026350817647d1be32838d77f8db196de9b4404f87956f76c2b",
+  "helperZip": "awake-core-manager-v0.4.0-windows-x64.zip",
+  "helperZipSha256": "76cb2078d065efeb0a80b230cbed794d04ac2079ee1cd70973b0b56a616ab7b5",
+  "sumsSha256": "f10ff14db549ccbabba267794c882330e3711561208c479498c2a2a0fdcfe319",
+  "sourceZipBytes": 107323839,
+  "sourceParts": [
+    {
+      "file": "awake-core-source-8787e06f934c.zip.001",
+      "sha256": "2ef496d2cbc0fa6883160b5ca276ac2f170122054dff350796b77d6eaf23f596",
+      "size": 67108864
+    },
+    {
+      "file": "awake-core-source-8787e06f934c.zip.002",
+      "sha256": "cccb8cd93595431be3bfad50e30ed71f18a19d6f5fdc6956c3b00146464a7523",
+      "size": 40214975
+    }
+  ]
+}
