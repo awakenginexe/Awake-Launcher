@@ -4,6 +4,7 @@ name: Native Core package
 # with its corresponding source, and commits the delivery next to the source. The Manager pins that
 # commit. Nothing is released or tagged here.
 on:
+  workflow_dispatch:
   push:
     branches: ['feat/native-core-manager-*']
     paths:
