@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.25)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    project(AwakeNativeCore VERSION 0.4.0 LANGUAGES CXX)
+    project(AwakeNativeCore VERSION 0.4.1 LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 23)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Core Network)
