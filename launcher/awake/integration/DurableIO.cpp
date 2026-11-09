@@ -86,6 +86,19 @@ bool singleStream(const QString& path)
     auto close = qScopeGuard([&] { FindClose(search); });
     return QString::fromWCharArray(stream.cStreamName) == "::$DATA" && !FindNextStreamW(search, &stream) && GetLastError() == ERROR_HANDLE_EOF;
 }
+// Files take these from their folder and they do not change how a file reads or moves. The Launcher's staging
+// folder is marked not-indexed, so every file of a pack installed through it carries that attribute.
+constexpr DWORD harmlessAttributes = FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED | FILE_ATTRIBUTE_COMPRESSED;
+QString refusal(HANDLE handle, const QString& path, const QString& accessReference)
+{
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (!GetFileInformationByHandle(handle, &info)) return "its details cannot be read";
+    if (info.nNumberOfLinks != 1) return "it is hard-linked";
+    if (const auto other = info.dwFileAttributes & ~harmlessAttributes) return QString("it has special attributes (0x%1)").arg(other, 0, 16);
+    if (!defaultAccess(handle, path) && (accessReference.isEmpty() || !defaultAccess(handle, accessReference, true))) return "it has custom permissions";
+    if (!singleStream(path)) return "it has alternate data streams";
+    return {};
+}
 HANDLE read(const QString& path, QString* error, DWORD access = GENERIC_READ, const QString& accessReference = {})
 {
     const auto name = native(path);
@@ -95,12 +108,9 @@ HANDLE read(const QString& path, QString* error, DWORD access = GENERIC_READ, co
         fail(error, "Cannot open file for a stable read");
         return handle;
     }
-    BY_HANDLE_FILE_INFORMATION info{};
-    if (!GetFileInformationByHandle(handle, &info) || info.nNumberOfLinks != 1 ||
-        (info.dwFileAttributes & ~(FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) ||
-        !(defaultAccess(handle, path) || (!accessReference.isEmpty() && defaultAccess(handle, accessReference, true))) || !singleStream(path)) {
+    if (const auto reason = refusal(handle, path, accessReference); !reason.isEmpty()) {
         CloseHandle(handle);
-        fail(error, "Linked files, alternate streams, custom permissions or special attributes are unsupported integration targets", ERROR_NOT_SUPPORTED);
+        fail(error, "Cannot safely use " + QFileInfo(path).fileName() + ": " + reason, ERROR_NOT_SUPPORTED);
         return INVALID_HANDLE_VALUE;
     }
     return handle;

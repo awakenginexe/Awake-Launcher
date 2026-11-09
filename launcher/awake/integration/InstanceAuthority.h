@@ -12,5 +12,7 @@ bool validate(const QString& root, const QString& physicalId, const QString& reg
 bool requireGameRecord(const QString& physicalId, QString* error = nullptr);
 // Undoes enroll for this registration so the instance is ordinary again. Files outside .awake-integration are untouched.
 bool unenroll(const QString& root, const QString& physicalId, const QString& registrationId, QString* error = nullptr);
+// Removes what a connect attempt left when it stopped before publishing. Returns false, changing nothing, for anything else.
+bool clearAbandoned(const QString& root, QString* error = nullptr);
 bool blocksNativeLoad(const QString& instanceRoot);
 }

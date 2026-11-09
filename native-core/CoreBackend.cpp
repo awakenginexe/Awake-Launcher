@@ -73,7 +73,7 @@ bool CoreBackend::start(const QString& requested, QString* error)
         options.capabilities = m_contract.capabilities(true);
         options.extension = "manager.v0.2"; options.legacyCapabilities = m_contract.capabilities(true, false);
         options.nextExtension = evidenceExtension; options.nextCapabilities = m_contract.capabilities(true, true, true);
-        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.4.0"}, {"storageVersion", 1}};
+        options.hello = {{"role", "modpack-core"}, {"coreVersion", "0.4.1"}, {"storageVersion", 1}};
         options.validate = [this](const QString& method, const QJsonObject& params) { return m_contract.valid(method + ".params", params); };
         if (!m_server.start(m_profile, {{"role", "modpack-core"}, {"profileId", m_profileId}},
             [this](const Request& request, IntegrationServer::Reply reply) { handle(request, std::move(reply)); }, options, &reason)) throw ServiceError{"IO_ERROR", reason};
@@ -237,7 +237,7 @@ QJsonObject CoreBackend::read(const Request& request)
     const auto method = request.method; const auto params = request.params;
     if (method == "core.info") {
         const auto recovery = services.recoveryStatus();
-        return {{"role", "modpack-core"}, {"coreVersion", "0.4.0"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
+        return {{"role", "modpack-core"}, {"coreVersion", "0.4.1"}, {"profileId", m_profileId}, {"dataRoot", m_profile},
             {"workspaceRoot", m_profile + "/workspaces"}, {"state", recovery["operations"].toArray().isEmpty() && recovery["blockedWorkspaces"].toArray().isEmpty() ? "ready" : "recovery_required"},
             {"supportedLoaders", request.managerExtensions ? QJsonArray{"vanilla", "fabric", "forge", "neoforge", "quilt"} : QJsonArray{"vanilla", "fabric"}}};
     }

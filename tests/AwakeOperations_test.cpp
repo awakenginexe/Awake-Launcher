@@ -63,6 +63,27 @@ class AwakeOperationsTest : public QObject {
         QFile original(path); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(), QByteArray("original"));
         QVERIFY(alternate.open(QIODevice::ReadOnly)); QCOMPARE(alternate.readAll(), QByteArray("preserve stream"));
     }
+    void filesThatInheritHarmlessFolderAttributesStayUsable()
+    {
+        QTemporaryDir temporary;
+        const auto folder = temporary.path() + "/pack", path = folder + "/mod.jar"; QVERIFY(QDir().mkdir(folder));
+        const auto nativeFolder = QDir::toNativeSeparators(folder), nativePath = QDir::toNativeSeparators(path);
+        QVERIFY(SetFileAttributesW(reinterpret_cast<LPCWSTR>(nativeFolder.utf16()), FILE_ATTRIBUTE_NOT_CONTENT_INDEXED));
+        QVERIFY(DurableIO::write(path, "original"));
+        QVERIFY(GetFileAttributesW(reinterpret_cast<LPCWSTR>(nativePath.utf16())) & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED);
+        QVERIFY(DurableIO::write(path, "replacement"));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), QByteArray("replacement"));
+    }
+    void refusedFilesNameTheReason()
+    {
+        QTemporaryDir temporary;
+        const auto path = temporary.path() + "/mod.jar", nativePath = QDir::toNativeSeparators(path);
+        QVERIFY(DurableIO::write(path, "original"));
+        QVERIFY(SetFileAttributesW(reinterpret_cast<LPCWSTR>(nativePath.utf16()), FILE_ATTRIBUTE_READONLY));
+        QString error; QVERIFY(!DurableIO::write(path, "replacement", &error));
+        QVERIFY2(error.contains("mod.jar") && error.contains("0x1"), qPrintable(error));
+        QVERIFY(SetFileAttributesW(reinterpret_cast<LPCWSTR>(nativePath.utf16()), FILE_ATTRIBUTE_NORMAL));
+    }
     void replacementsMustNotDiscardCustomAccessControl()
     {
         QTemporaryDir temporary;
