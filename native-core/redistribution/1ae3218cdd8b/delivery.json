@@ -1,0 +1,33 @@
+{
+  "sourceRepository": "https://github.com/awakenginexe/Awake-Launcher",
+  "sourceCommit": "1ae3218cdd8b1ddd67e4e356638bc127a22d52b0",
+  "sourceBranch": "release/3.2.1",
+  "implementationVersion": "0.4.1",
+  "protocol": {
+    "major": 2,
+    "minor": 0
+  },
+  "extension": "manager.v0.2.1",
+  "platform": "windows-x64",
+  "publicRelease": false,
+  "executableSha256": "330b04a3d92407b3b20e7c9349c9d6bf3cb8ec6a79360b9645cf6936b83ca7c3",
+  "reproducibleBuildVerified": false,
+  "sourceArchive": "awake-core-source-1ae3218cdd8b.zip",
+  "sourceArchiveSha256": "df3db5f64fba207d469e7f87db01b757d6d5a867d74f1b8d7200bc5c7ab68b58",
+  "helperZip": "awake-core-manager-v0.4.1-windows-x64.zip",
+  "helperZipSha256": "dd70b9c0ddae4f1b95d0358ebf47ed9526da3aafd6b7c8fbee916598188cd555",
+  "sumsSha256": "ae3db0ed62d3809b7d6538cbd83dc3d9b0afe036e27073ea4dd98ea0cb618eeb",
+  "sourceZipBytes": 107326584,
+  "sourceParts": [
+    {
+      "file": "awake-core-source-1ae3218cdd8b.zip.001",
+      "sha256": "fef811450005f78ab5cee157680b7be73c6ac644f95bf15c945d489c7ea698d7",
+      "size": 67108864
+    },
+    {
+      "file": "awake-core-source-1ae3218cdd8b.zip.002",
+      "sha256": "9a3f68898e37d96f0df1ad1de558f4dc8175988626c370fcde7b59e7d4359ed1",
+      "size": 40217720
+    }
+  ]
+}
