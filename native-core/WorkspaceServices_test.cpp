@@ -3,6 +3,7 @@
 #include "CoreBackend.h"
 #include "Contract.h"
 #include "InboxService.h"
+#include "CrossSiteMods.h"
 #include <archive.h>
 #include <archive_entry.h>
 #include "awake/integration/DurableIO.h"
@@ -291,6 +292,30 @@ private slots:
             try { adopt(foreign, "foreign"); } catch (const ServiceError& refused) { conflict = refused.code == "POLICY_CONFLICT"; }
             QVERIFY(conflict); QVERIFY(QFileInfo::exists(foreign + "/.awake-integration/ownership.json"));
         } catch (const ServiceError& error) { QFAIL(qPrintable(error.code + ": " + error.message)); }
+    }
+    void theSameFileFromTheOtherSiteCountsAsTheRequiredMod()
+    {
+        const auto file = [](const QString& name, const QString& sha1) { return QJsonObject{{"fileName", name}, {"sha1", sha1}}; };
+        const auto entry = [&](const QString& provider, const QString& name, const QString& sha1) {
+            QJsonObject version{{"files", QJsonArray{file(name, sha1)}}};
+            if (provider != "modrinth") version["provider"] = provider;
+            return QJsonObject{{"enabled", true}, {"version", version}};
+        };
+        QJsonObject desired{{"curseforge:306612", entry("curseforge", "fabric-api-1.jar", "aa")}, {"mouse", entry("modrinth", "mouse.jar", "bb")}};
+        QCOMPARE(crossSiteTwin(desired, "P7dR8mSH", file("fabric-api-1.jar", "other")), QString("curseforge:306612"));
+        QCOMPARE(crossSiteTwin(desired, "P7dR8mSH", file("renamed.jar", "aa")), QString("curseforge:306612"));
+        QVERIFY(crossSiteTwin(desired, "P7dR8mSH", file("different.jar", "cc")).isEmpty());
+        // The same site keeps the existing rule: that is a real collision, reported to the user.
+        QVERIFY(crossSiteTwin(desired, "other", file("mouse.jar", "bb")).isEmpty());
+        QVERIFY(crossSiteTwin(desired, "curseforge:1", file("fabric-api-1.jar", "aa")).isEmpty());
+        auto disabled = desired["curseforge:306612"].toObject(); disabled["enabled"] = false; desired["curseforge:306612"] = disabled;
+        QVERIFY(crossSiteTwin(desired, "P7dR8mSH", file("fabric-api-1.jar", "aa")).isEmpty());
+
+        QVERIFY(!providedAcrossSites(desired, "P7dR8mSH"));
+        auto holder = desired["mouse"].toObject(); holder["alsoProvides"] = QJsonArray{"P7dR8mSH"}; desired["mouse"] = holder;
+        QVERIFY(providedAcrossSites(desired, "P7dR8mSH"));
+        holder["enabled"] = false; desired["mouse"] = holder;
+        QVERIFY(!providedAcrossSites(desired, "P7dR8mSH"));
     }
     void policyStatesAreIndependent()
     {

@@ -10,7 +10,7 @@ $package=(Resolve-Path -LiteralPath $PackageDir).Path
 $output=(Resolve-Path -LiteralPath $OutputDir).Path
 if ((git -C $repo rev-parse HEAD) -ne $Commit) { throw 'Source commit mismatch.' }
 if ((Test-Path -LiteralPath (Join-Path $package 'core-host')) -or (Get-ChildItem -LiteralPath $package -Recurse -File -Filter 'awake-core-host.exe')) { throw 'Experimental helper must not be bundled with stable Launcher.' }
-$helper='1ae3218cdd8b1ddd67e4e356638bc127a22d52b0'
+$helper='3127db4507671ae587a61cd75a6ee5da381e0274'
 git -C $repo fetch origin $helper --depth=1
 if ($LASTEXITCODE) { throw 'Pinned helper source is unavailable.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -42,7 +42,7 @@ function Write-SourceArchive([string]$Revision,[string]$Name,[string]$Prefix) {
     } finally { $archive.Dispose() }
 }
 Write-SourceArchive $Commit "Awake-Launcher-v$Version-Source.zip" "Awake-Launcher-v$Version"
-Write-SourceArchive $helper 'Awake-Native-Core-1ae3218cd-Source.zip' 'Awake-Native-Core-1ae3218cd'
+Write-SourceArchive $helper 'Awake-Native-Core-3127db450-Source.zip' 'Awake-Native-Core-3127db450'
 $notices=Join-Path $package 'licenses'
 New-Item -ItemType Directory -Path $notices -Force | Out-Null
 Invoke-WebRequest 'https://www.gnu.org/licenses/lgpl-3.0.txt' -OutFile (Join-Path $notices 'LGPL-3.0.txt')

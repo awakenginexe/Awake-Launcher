@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "WorkspaceServices.h"
+#include "CrossSiteMods.h"
 #include "Contract.h"
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/ProfileAccess.h"
@@ -194,7 +195,17 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
                     }
                 }
                 // No compatible version: the graph check reports it with loader-metadata evidence.
-                if (resolved) choose(*resolved, provider == "curseforge" ? m_curseforge.project(depProject) : m_provider.project(depProject));
+                if (resolved) {
+                    const auto artifact = resolved->wire["files"].toArray().first().toObject();
+                    if (const auto twin = crossSiteTwin(desired, depKey, artifact); !twin.isEmpty()) {
+                        auto holder = desired.value(twin).toObject(); auto provides = holder["alsoProvides"].toArray();
+                        if (!provides.contains(QJsonValue(depKey))) provides.append(depKey);
+                        holder["alsoProvides"] = provides; desired[twin] = holder;
+                        warn(QString("%1 is already in this pack from another site, so it is not downloaded again.").arg(artifact["fileName"].toString().left(256)));
+                        continue;
+                    }
+                    choose(*resolved, provider == "curseforge" ? m_curseforge.project(depProject) : m_provider.project(depProject));
+                }
             }
             if (!desired.contains(depKey)) continue;
             const auto chosenVersion = desired.value(depKey).toObject()["version"].toObject()["versionId"].toString();
@@ -245,7 +256,7 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
                 if (match) flag("incompatible", project.isEmpty() ? (provider == "modrinth" ? m_provider.versionInfo(pinned, game, loaderId)["projectId"].toString() : pinned) : project, it.key(), pinned);
                 continue;
             }
-            if (match) continue;
+            if (match || (!project.isEmpty() && providedAcrossSites(desired, project))) continue;
             if (project.isEmpty()) throw ServiceError{"DEPENDENCY_CONFLICT", "Resulting mod graph violates a declared version-only dependency for " + it.key()};
             std::optional<QJsonValue> accepted; bool reviewedNow = false;
             if (resolutions.contains(project)) { accepted = resolutions[project]; reviewedNow = true; }
@@ -434,14 +445,15 @@ void WorkspaceServices::prepare(const QString& id, const QJsonObject& request, c
     for (auto it = desired.begin(); it != desired.end(); ++it)
         if (it.value().toObject()["loaderBridge"] == "sinytra-connector" && selected.contains(it.key()))
             warn(QString("%1 is a Fabric mod and will load through Sinytra Connector.").arg(title(it.key())));
-    QSet<QString> destinations, indexes;
+    QMap<QString, QString> destinations; QSet<QString> indexes;
     for (auto it = desired.begin(); it != desired.end(); ++it) {
         const auto entry = it.value().toObject();
         const auto filename = selected.contains(it.key()) ? selected[it.key()].wire["files"].toArray().first().toObject()["fileName"].toString() : entry["fileName"].toString();
         const auto index = selected.contains(it.key()) ? providerId(selected[it.key()].wire) + '-' + selected[it.key()].wire["projectId"].toString() + ".pw.toml" : entry["indexFile"].toString();
-        if (destinations.contains(filename.toCaseFolded()) || indexes.contains(index.toCaseFolded()))
-            throw ServiceError{"POLICY_CONFLICT", "Selected projects have colliding Windows filenames or metadata names."};
-        destinations.insert(filename.toCaseFolded()); indexes.insert(index.toCaseFolded());
+        if (destinations.contains(filename.toCaseFolded()))
+            throw ServiceError{"POLICY_CONFLICT", QString("%1 and %2 would use the same file (%3). Keep only one of them.").arg(title(destinations[filename.toCaseFolded()]), title(it.key()), filename.left(256))};
+        if (indexes.contains(index.toCaseFolded())) throw ServiceError{"POLICY_CONFLICT", "Selected projects have colliding metadata names."};
+        destinations[filename.toCaseFolded()] = it.key(); indexes.insert(index.toCaseFolded());
     }
     privateDirectory(directory + "/staging"); privateDirectory(directory + "/native-index");
     QMap<QString, FileChange> changes; int ordinal = 0;

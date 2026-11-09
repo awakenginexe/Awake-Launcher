@@ -106,6 +106,13 @@ QByteArray CurseForgeService::transfer(const QUrl& url, qint64 limit, const QStr
     QObject::connect(&timeout, &QTimer::timeout, &loop, [&] { timedOut = true; reply->abort(); });
     poll.start(); loop.exec(); consume(); checkCancelled();
     const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    // CurseForge's file links can redirect between its download hosts. The next request is checked like any other.
+    if (QList<int>{301, 302, 303, 307, 308}.contains(status) && m_redirects < 4) {
+        const auto next = url.resolved(reply->header(QNetworkRequest::LocationHeader).toUrl());
+        output.close(); if (!path.isEmpty()) QFile::remove(path);
+        ++m_redirects; auto restore = qScopeGuard([&] { --m_redirects; });
+        auto followed = transfer(next, limit, path, post); success = true; return followed;
+    }
     if (status == 429) throw ServiceError{"RATE_LIMITED", "CurseForge rate limit reached; retry later.", true};
     if (status == 401 || status == 403 || status == 451) throw ServiceError{"PROVIDER_RESTRICTED", "CurseForge denied this request."};
     if (status == 404) throw ServiceError{"NOT_FOUND", "CurseForge project or file was not found."};
