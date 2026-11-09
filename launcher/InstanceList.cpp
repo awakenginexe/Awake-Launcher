@@ -881,7 +881,7 @@ std::unique_ptr<MinecraftInstance> InstanceList::loadInstance(const InstanceId& 
     if (!managerLinked && ((ownership.exists() && !ownership.entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot).isEmpty()) ||
         Awake::Integration::InstanceAuthority::blocksNativeLoad(instanceRoot))) {
         sharedPhysicalId = Awake::Integration::sharedInstanceBinding(instanceRoot)["physicalId"].toString();
-        if (sharedPhysicalId.isEmpty()) {
+        if (sharedPhysicalId.isEmpty() && !Awake::Integration::InstanceAuthority::clearAbandoned(instanceRoot)) {
             qWarning() << "Instance requires external ownership/recovery coordination:" << instanceRoot;
             return nullptr;
         }

@@ -7,14 +7,17 @@
 #include <archive_entry.h>
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/InstanceAuthority.h"
+#include "awake/integration/InstanceDiscovery.h"
 #include "awake/integration/ProfileAccess.h"
 #include "awake/integration/TransactionEngine.h"
 #include <QCryptographicHash>
 #include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 #include <QTextStream>
 #include <QSemaphore>
 #include <QRunnable>
@@ -235,6 +238,58 @@ private slots:
             QVERIFY(!QFileInfo::exists(instance + "/.awake-integration")); QVERIFY(!InstanceAuthority::blocksNativeLoad(instance));
             QVERIFY(QFileInfo::exists(mods + "/p0-v2.jar")); QVERIFY(QFileInfo::exists(mods + "/manual.jar"));
             QCOMPARE(f.services.list({})["total"].toInt(), 1);
+        } catch (const ServiceError& error) { QFAIL(qPrintable(error.code + ": " + error.message)); }
+    }
+    void connectHandlesIndexingFlagsAndFailedAttempts()
+    {
+        try {
+            Fixture f(0);
+            const auto home = f.temporary.path() + "/launcher"; QVERIFY(createPrivateStorageDirectory(home));
+            const auto owner = physicalIdentityV2(f.profile), registry = f.profile + "/ownership";
+            const auto wide = [](const QString& path) { return reinterpret_cast<LPCWSTR>(path.utf16()); };
+            const auto make = [&](const QString& name, DWORD attributes = 0) -> QString {
+                const auto instance = home + '/' + name;
+                if (!QDir().mkdir(instance) || (attributes && !SetFileAttributesW(wide(QDir::toNativeSeparators(instance)), attributes))) return {};
+                const bool ok = QDir().mkpath(instance + "/minecraft/mods") && DurableIO::write(instance + "/instance.cfg", "InstanceType=OneSix\nname=Pack\n") &&
+                    DurableIO::write(instance + "/mmc-pack.json", R"({"formatVersion":1,"components":[{"uid":"net.minecraft","version":"1.21.1"},{"uid":"net.fabricmc.fabric-loader","version":"0.16.9"}]})");
+                return ok ? instance : QString{};
+            };
+            const auto adopt = [&](const QString& instance, const QString& key) { const QJsonObject params{{"idempotencyKey", key}, {"path", instance}}; f.services.adopt(f.begin("workspaces.adopt", params), params); };
+            const auto registration = [] { return QUuid::createUuid().toString(QUuid::WithoutBraces); };
+            /** The state a build without cleanup left behind: enrolled, but its marker never published. */
+            const auto unpublish = [&](const QString& instance) {
+                QFile marker(instance + "/.awake-integration/ownership.json"); if (!marker.open(QIODevice::ReadOnly)) return false;
+                auto body = QJsonDocument::fromJson(marker.readAll()).object()["body"].toObject(); marker.close(); body["published"] = false;
+                const auto sha = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+                return DurableIO::write(marker.fileName(), QJsonDocument(QJsonObject{{"body", body}, {"sha256", sha}}).toJson(QJsonDocument::Compact));
+            };
+
+            const auto indexed = make("indexed", FILE_ATTRIBUTE_NOT_CONTENT_INDEXED); QVERIFY(!indexed.isEmpty());
+            adopt(indexed, "indexed");
+            const auto markerPath = QDir::toNativeSeparators(indexed + "/.awake-integration/ownership.json");
+            QVERIFY(GetFileAttributesW(wide(markerPath)) & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED);
+
+            // A file where the coordination folder belongs makes enrollment fail after its lock exists.
+            const auto failing = make("failing"); QVERIFY(!failing.isEmpty());
+            QVERIFY(DurableIO::write(failing + "/.awake-integration", "in the way"));
+            QString error; QVERIFY(!InstanceAuthority::enroll(failing, physicalIdentityV2(failing), registry, owner, registration(), &error));
+            QVERIFY(!error.isEmpty()); QVERIFY(!InstanceAuthority::blocksNativeLoad(failing));
+            QVERIFY(QFileInfo(failing + "/.awake-integration").isFile());
+
+            const auto interrupted = make("interrupted"); QVERIFY(!interrupted.isEmpty());
+            QVERIFY(InstanceAuthority::enroll(interrupted, physicalIdentityV2(interrupted), registry, owner, registration())); QVERIFY(unpublish(interrupted));
+            QVERIFY(InstanceAuthority::blocksNativeLoad(interrupted));
+            QVERIFY(InstanceAuthority::clearAbandoned(interrupted));
+            QVERIFY(!QFileInfo::exists(interrupted + "/.awake-integration")); QVERIFY(!InstanceAuthority::blocksNativeLoad(interrupted));
+            QVERIFY(InstanceAuthority::enroll(interrupted, physicalIdentityV2(interrupted), registry, owner, registration())); QVERIFY(unpublish(interrupted));
+            adopt(interrupted, "retry");
+
+            const auto foreign = make("foreign"); QVERIFY(!foreign.isEmpty());
+            QVERIFY(InstanceAuthority::enroll(foreign, physicalIdentityV2(foreign), registry, "another-program", registration()));
+            QVERIFY(!InstanceAuthority::clearAbandoned(foreign));
+            bool conflict = false;
+            try { adopt(foreign, "foreign"); } catch (const ServiceError& refused) { conflict = refused.code == "POLICY_CONFLICT"; }
+            QVERIFY(conflict); QVERIFY(QFileInfo::exists(foreign + "/.awake-integration/ownership.json"));
         } catch (const ServiceError& error) { QFAIL(qPrintable(error.code + ": " + error.message)); }
     }
     void policyStatesAreIndependent()

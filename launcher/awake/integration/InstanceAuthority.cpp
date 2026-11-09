@@ -89,14 +89,14 @@ bool validate(const QString& root, const QString& id, const QString& registry, Q
     }
     return true;
 }
-bool enroll(const QString& root, const QString& id, const QString& registry, const QString& owner, const QString& registration, QString* error)
+namespace {
+bool enrollLocked(const QString& root, const QString& id, const QString& registry, const QString& owner, const QString& registration, QString* error)
 {
-    if (owner.isEmpty() || owner.size() > 128 || QUuid(registration).isNull() || physicalIdentityV2(root) != id ||
-        !profileAccessIsPrivate(root) || !createPrivateStorageDirectory(registry)) return false;
-    const auto held = lock(id, error); if (!held) return false;
-    auto release = qScopeGuard([&] { CloseHandle(held); });
     const auto markerDirectory = root + "/.awake-integration";
-    if (!createPrivateStorageDirectory(markerDirectory)) return false;
+    if (!createPrivateStorageDirectory(markerDirectory)) {
+        if (error) *error = "The instance's coordination folder cannot be created.";
+        return false;
+    }
     const auto name = stem(id, error), marker = markerDirectory + "/ownership.json";
     QJsonObject expected{{"format", 1}, {"kernelMajor", 2}, {"published", true}, {"physicalId", id}, {"ownerProfile", owner},
         {"registrationId", registration}, {"registry", QFileInfo(registry).canonicalFilePath()}, {"registryIdentity", physicalIdentityV2(registry)}};
@@ -115,6 +115,38 @@ bool enroll(const QString& root, const QString& id, const QString& registry, con
     if (!write(marker, pending, error)) return false;
     auto global = expected; global["gameRecordRequired"] = false;
     return write(name + ".json", global, error) && write(marker, expected, error) && validate(root, id, registry, error);
+}
+}
+bool enroll(const QString& root, const QString& id, const QString& registry, const QString& owner, const QString& registration, QString* error)
+{
+    if (owner.isEmpty() || owner.size() > 128 || QUuid(registration).isNull() || physicalIdentityV2(root) != id ||
+        !profileAccessIsPrivate(root) || !createPrivateStorageDirectory(registry)) return false;
+    const auto name = stem(id, error); if (name.isEmpty()) return false;
+    auto held = lock(id, error); if (!held) return false;
+    auto release = qScopeGuard([&] { if (held) CloseHandle(held); });
+    const auto markerDirectory = root + "/.awake-integration";
+    const bool fresh = !QFileInfo::exists(name + ".json") && QDir(markerDirectory).isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+    if (enrollLocked(root, id, registry, owner, registration, error)) return true;
+    if (!fresh) return false;
+    // The Launcher hides an instance that has any of these, so a first attempt that failed must not leave them.
+    QDir(markerDirectory).removeRecursively();
+    QFile::remove(name + ".json");
+    CloseHandle(held); held = nullptr;
+    QFile::remove(name + ".lock");
+    return false;
+}
+bool clearAbandoned(const QString& root, QString* error)
+{
+    const auto directory = root + "/.awake-integration";
+    if (QDir(directory).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot) != QStringList{"ownership.json"}) return false;
+    QFile marker(directory + "/ownership.json");
+    if (!marker.open(QIODevice::ReadOnly) || marker.size() > 16384) return false;
+    const auto body = QJsonDocument::fromJson(marker.readAll()).object()["body"].toObject();
+    marker.close();
+    // Enrollment publishes before it returns, so an unpublished marker with no enrollment running was abandoned.
+    const auto id = physicalIdentityV2(root), registration = body["registrationId"].toString();
+    if (body["published"] != false || id.isEmpty() || body["physicalId"] != id || QUuid(registration).isNull()) return false;
+    return unenroll(root, id, registration, error);
 }
 bool unenroll(const QString& root, const QString& id, const QString& registration, QString* error)
 {

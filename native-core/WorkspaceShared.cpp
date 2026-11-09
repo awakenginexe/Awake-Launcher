@@ -100,7 +100,7 @@ void WorkspaceServices::adopt(const QString& id, const QJsonObject& request)
     if (physical.isEmpty()) throw ServiceError{"IDENTITY_UNVERIFIABLE", "This instance's folder cannot be identified."};
     for (const auto& file : QDir(m_profile + "/catalog").entryInfoList({"*.json"}, QDir::Files | QDir::Hidden | QDir::System))
         if (readRecord(file.absoluteFilePath())["physicalId"] == physical) throw ServiceError{"POLICY_CONFLICT", "This instance is already managed here."};
-    if (QFileInfo::exists(root + "/.awake-integration") && !QDir(root + "/.awake-integration").isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot))
+    if (QFileInfo::exists(root + "/.awake-integration") && !QDir(root + "/.awake-integration").isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot) && !InstanceAuthority::clearAbandoned(root))
         throw ServiceError{"POLICY_CONFLICT", "Another program coordinates this instance. Its files were left alone."};
     QJsonObject record{{"format", 1}, {"workspaceId", id}, {"physicalId", physical}, {"sharedRoot", root}, {"modsPath", gameDirectory(root) + "/mods"}};
     describe(root, record);
