@@ -8,7 +8,7 @@
 int main(int argc, char** argv)
 {
     const auto keeper = Awake::Integration::GameProcessGroup::runKeeper(argc, argv); if (keeper >= 0) return keeper;
-    QCoreApplication app(argc, argv); app.setApplicationName("Awake Native Core"); app.setApplicationVersion("0.4.1");
+    QCoreApplication app(argc, argv); app.setApplicationName("Awake Native Core"); app.setApplicationVersion("0.4.2");
     QCoreApplication::setLibraryPaths({QCoreApplication::applicationDirPath()});
     QCommandLineParser parser; parser.addHelpOption(); parser.addVersionOption();
     parser.addOption({"profile", "Private absolute backend data directory.", "directory"}); parser.process(app);

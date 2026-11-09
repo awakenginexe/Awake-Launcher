@@ -26,6 +26,7 @@ private:
     std::shared_ptr<std::atomic_bool> m_cancel;
     Fetch m_fixture;
     bool m_packAuthoritative = false;
+    int m_redirects = 0;
     QHash<QString, QJsonObject> m_primed;
     QByteArray transfer(const QUrl& url, qint64 limit, const QString& path = {}, const QByteArray& post = {});
     QJsonObject json(const QUrl& url);
