@@ -50,6 +50,9 @@ QString askToUpdateInstanceDirName(BaseInstance* instance, const QString& oldNam
     QString renamingMode = APPLICATION->settings()->get("InstRenamingMode").toString();
     if (renamingMode == "MetadataOnly")
         return QString();
+    // The Manager verifies its instances by folder path; moving the folder makes the Launcher hide them.
+    if (instance->isManagerLinked())
+        return QString();
 
     auto oldRoot = instance->instanceRoot();
     auto newDirName = FS::DirNameFromString(newName, APPLICATION->instances()->instanceDirs());
