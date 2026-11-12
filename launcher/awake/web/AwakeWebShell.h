@@ -33,6 +33,7 @@ private slots:
     void denyPermission(const QWebEnginePermission& permission);
 private:
     void updateArtworkFocus();
+    void repaintSoon();
     QWebEngineProfile* m_profile;
     QWebEngineView* m_view;
     Assets* m_assets;

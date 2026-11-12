@@ -58,9 +58,10 @@ Shell::Shell(QWidget* parent) : QWidget(parent)
 {
 #ifdef Q_OS_WIN
     // shortcut: near-opaque layering targets NVIDIA's overlay heuristic; verify after driver updates.
-    window()->setWindowOpacity(254.0 / 255.0);
+    // AWAKE_OPAQUE_WINDOW=1 turns the layering off, to tell whether it is behind a vanishing interface.
+    if (!qEnvironmentVariableIsSet("AWAKE_OPAQUE_WINDOW")) window()->setWindowOpacity(254.0 / 255.0);
 #endif
-    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] { updateArtworkFocus(); });
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] { updateArtworkFocus(); repaintSoon(); });
     setObjectName("awakeWebShell");
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -203,10 +204,19 @@ bool Shell::eventFilter(QObject* watched, QEvent* event)
     if (watched == window()) {
         if (event->type() == QEvent::WindowStateChange)
             setSuspended(window()->isMinimized() || !isVisible());
-        if (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate || event->type() == QEvent::WindowStateChange)
+        if (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate || event->type() == QEvent::WindowStateChange) {
             updateArtworkFocus();
+            repaintSoon();
+        }
     }
     return QWidget::eventFilter(watched, event);
+}
+
+void Shell::repaintSoon()
+{
+    // The layered window can drop its composed frame when activation changes, and an idle page presents no new one.
+    for (const int delay : {0, 250, 1000})
+        QTimer::singleShot(delay, this, [this] { if (!m_stopped && m_view) m_view->update(); });
 }
 
 void Shell::updateArtworkFocus()

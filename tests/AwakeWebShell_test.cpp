@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <QAction>
 #include <QBuffer>
+#include <QCheckBox>
 #include <QDialog>
 #include <QDesktopServices>
 #include <QDir>
@@ -13,6 +14,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QTest>
@@ -651,6 +653,23 @@ class AwakeWebShellTest : public QObject {
             QTRY_VERIFY_WITH_TIMEOUT(opened, 5000);
             closer.stop();
         }
+    }
+    void standardDialogsUseThePopupLook()
+    {
+        QMessageBox box(QMessageBox::Question, "Rename instance folder", "Would you also like to rename the instance folder?\n\nOld name: one\nNew name: two",
+                        QMessageBox::Yes | QMessageBox::No, window);
+        box.setCheckBox(new QCheckBox("Remember my choice"));
+        box.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&box));
+        QVERIFY(box.windowFlags().testFlag(Qt::FramelessWindowHint));
+        QVERIFY(box.testAttribute(Qt::WA_TranslucentBackground));
+        auto* title = box.findChild<QLabel*>("awakeDialogTitle");
+        QVERIFY(title && title->isVisible());
+        QCOMPARE(title->text(), box.windowTitle());
+        QVERIFY(title->geometry().right() < box.width() - 20);
+        QVERIFY(bridge->isModalActive());
+        box.close();
+        QVERIFY(!bridge->isModalActive());
     }
     void nativeEditorAndSuspension()
     {
