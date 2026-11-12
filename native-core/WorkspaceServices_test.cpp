@@ -9,6 +9,7 @@
 #include "awake/integration/DurableIO.h"
 #include "awake/integration/InstanceAuthority.h"
 #include "awake/integration/InstanceDiscovery.h"
+#include "awake/integration/ManagerWorkspaceLink.h"
 #include "awake/integration/ProfileAccess.h"
 #include "awake/integration/TransactionEngine.h"
 #include <QCryptographicHash>
@@ -234,6 +235,14 @@ private slots:
             QVERIFY(!QFileInfo::exists(mods + "/.index/some-name.pw.toml")); QVERIFY(QFileInfo::exists(mods + "/.index/modrinth-p0.pw.toml"));
             QVERIFY(QFileInfo::exists(mods + "/manual.jar"));
             QVERIFY(InstanceAuthority::blocksNativeLoad(instance));
+            // Renaming the folder in the Launcher keeps the instance known to both programs.
+            const auto moved = home + "/renamed"; QString moveError;
+            QVERIFY2(moveSharedInstance(instance, moved, &moveError), qPrintable(moveError));
+            QVERIFY(!QFileInfo::exists(instance)); QVERIFY(!sharedInstanceBinding(moved).isEmpty());
+            QCOMPARE(f.services.list({})["total"].toInt(), 2); QCOMPARE(f.inventory()["total"].toInt(), 2);
+            QVERIFY(QDir().mkdir(instance)); QVERIFY(!moveSharedInstance(moved, instance)); QVERIFY(QDir().rmdir(instance)); // a taken name changes nothing
+            QVERIFY(!sharedInstanceBinding(moved).isEmpty());
+            QVERIFY2(moveSharedInstance(moved, instance, &moveError), qPrintable(moveError));
             const auto released = f.services.release({{"physicalId", f.workspace["physicalId"]}});
             QVERIFY(contract.valid("workspaces.release.result", released));
             QVERIFY(!QFileInfo::exists(instance + "/.awake-integration")); QVERIFY(!InstanceAuthority::blocksNativeLoad(instance));

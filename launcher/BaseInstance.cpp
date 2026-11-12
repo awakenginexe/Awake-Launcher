@@ -51,6 +51,9 @@
 
 #include "BuildConfig.h"
 #include "Commandline.h"
+#ifdef Q_OS_WIN
+#include "awake/integration/ManagerWorkspaceLink.h"
+#endif
 
 int getConsoleMaxLines(SettingsObject* settings)
 {
@@ -433,7 +436,14 @@ void BaseInstance::setName(const QString& val)
 bool BaseInstance::syncInstanceDirName(const QString& newRoot) const
 {
     auto oldRoot = instanceRoot();
-    return oldRoot == newRoot || QFile::rename(oldRoot, newRoot);
+    if (oldRoot == newRoot)
+        return true;
+#ifdef Q_OS_WIN
+    // The Manager saved this folder's path; a plain rename would make both programs lose the instance.
+    if (isManagerShared())
+        return Awake::Integration::moveSharedInstance(oldRoot, newRoot);
+#endif
+    return QFile::rename(oldRoot, newRoot);
 }
 
 void BaseInstance::registerShortcut(const ShortcutData& data)

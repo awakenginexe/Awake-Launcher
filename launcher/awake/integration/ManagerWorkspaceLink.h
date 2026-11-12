@@ -11,4 +11,6 @@ std::shared_ptr<PhysicalInstanceLease> acquireManagerWorkspace(const QString& ro
 // A Launcher instance the user connected to the Manager: same checks, but its files stay in the Launcher's folder.
 QJsonObject sharedInstanceBinding(const QString& root, const QString& expectedIdentity = {}, QString* error = nullptr);
 std::shared_ptr<PhysicalInstanceLease> acquireSharedInstance(const QString& root, const QString& expectedIdentity = {}, QString* error = nullptr);
+// Renames a shared instance's folder and updates the path the Manager saved for it, or changes nothing.
+bool moveSharedInstance(const QString& root, const QString& newRoot, QString* error = nullptr);
 }
