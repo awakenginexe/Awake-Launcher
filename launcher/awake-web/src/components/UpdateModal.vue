@@ -54,10 +54,10 @@ function trapFocus(event: KeyboardEvent) {
       </header>
       <div class="modal-body update-body">
         <div class="update-heading" role="status" aria-live="polite">
-          <svg class="update-icon" :class="{ 'is-checking': state.status === 'checking' }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <svg class="update-icon" :class="{ 'is-checking': state.status === 'checking' }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path v-if="state.status === 'upToDate'" d="m5 12 4 4L19 6" />
             <path v-else-if="state.status === 'error'" d="M12 4v10m0 4v2" />
-            <template v-else><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 6a8 8 0 0 1 13 2M18 18A8 8 0 0 1 5 16" /></template>
+            <path v-else d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
           <h2>{{ title }}</h2>
           <LoadingSkeleton v-if="state.status === 'checking'" :label="t('updateCheckingHint')" :rows="2" />
