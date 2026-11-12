@@ -56,4 +56,29 @@ QJsonObject managerWorkspaceBinding(const QString& root, const QString& expected
 QJsonObject sharedInstanceBinding(const QString& root, const QString& expected, QString* error) { return verifiedBinding(root, expected, true, error); }
 std::shared_ptr<PhysicalInstanceLease> acquireManagerWorkspace(const QString& root, const QString& expected, QString* error) { return acquireVerified(root, expected, false, error); }
 std::shared_ptr<PhysicalInstanceLease> acquireSharedInstance(const QString& root, const QString& expected, QString* error) { return acquireVerified(root, expected, true, error); }
+bool moveSharedInstance(const QString& root, const QString& newRoot, QString* error)
+{
+    const auto fail = [error](const QString& reason) { if (error && error->isEmpty()) *error = reason; return false; };
+    const auto binding = verifiedBinding(root, {}, true, error);
+    if (binding.isEmpty()) return false;
+    // Holding the lock proves no game or Manager change is using the folder. It lives outside the folder, so it does not block the move.
+    const auto lease = PhysicalInstanceLease::acquire(root, binding["physicalId"].toString(), binding["registry"].toString(), error);
+    if (!lease) return false;
+    if (QFileInfo::exists(root + "/.awake-integration/recovery.json")) return fail("Open Awake Modpack Manager and finish recovering this instance first.");
+    const auto catalog = QFileInfo(binding["registry"].toString()).dir().canonicalPath() + "/catalog/" + binding["registrationId"].toString() + ".json";
+    QFile file(catalog);
+    if (!file.open(QIODevice::ReadOnly)) return fail("The Manager's record of this instance cannot be read.");
+    const auto original = file.readAll();
+    auto body = QJsonDocument::fromJson(original).object()["body"].toObject();
+    file.close();
+    if (!QFile::rename(root, newRoot)) return fail("The instance folder is in use.");
+    // The Manager finds the instance by this path; a stale one makes both programs lose it.
+    body["sharedRoot"] = QFileInfo(newRoot).canonicalFilePath();
+    const auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
+    if (DurableIO::write(catalog, QJsonDocument(QJsonObject{{"body", body}, {"sha256", digest}}).toJson(QJsonDocument::Compact), error) &&
+        !verifiedBinding(newRoot, binding["physicalId"].toString(), true, error).isEmpty()) return true;
+    // shortcut: a crash between the move and this record update leaves a stale path, upgrade to a journaled move if that ever happens.
+    if (QFile::rename(newRoot, root)) DurableIO::write(catalog, original);
+    return fail("The Manager's record of this instance could not be updated.");
+}
 }

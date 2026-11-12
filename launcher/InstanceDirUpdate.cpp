@@ -50,8 +50,8 @@ QString askToUpdateInstanceDirName(BaseInstance* instance, const QString& oldNam
     QString renamingMode = APPLICATION->settings()->get("InstRenamingMode").toString();
     if (renamingMode == "MetadataOnly")
         return QString();
-    // The Manager verifies its instances by folder path; moving the folder makes the Launcher hide them.
-    if (instance->isManagerLinked())
+    // A Manager workspace lives in the Manager's own folder under a fixed name. A shared instance is moved together with its Manager record.
+    if (instance->isManagerLinked() && !instance->isManagerShared())
         return QString();
 
     auto oldRoot = instance->instanceRoot();
