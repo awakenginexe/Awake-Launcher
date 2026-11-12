@@ -959,8 +959,10 @@ QVariantMap MainWindow::invokeWebAction(const QString& action, const QString& id
 
 void MainWindow::setModalBackdrop(bool active)
 {
+    // Dialogs nest (a message box over a progress dialog); the backdrop stays until the last one closes.
+    m_modalBackdrops = qMax(0, m_modalBackdrops + (active ? 1 : -1));
     if (m_webBridge) {
-        m_webBridge->setModalActive(active);
+        m_webBridge->setModalActive(m_modalBackdrops > 0);
     }
 }
 #else

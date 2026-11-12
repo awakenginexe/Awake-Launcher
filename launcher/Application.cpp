@@ -60,6 +60,7 @@
 #include "ui/ToolTipFilter.h"
 #include "ui/ViewLogWindow.h"
 
+#include "ui/dialogs/AwakePopupDialog.h"
 #include "ui/dialogs/ProgressDialog.h"
 #include "ui/instanceview/AccessibleInstanceView.h"
 
@@ -1006,6 +1007,7 @@ Application::Application(int& argc, char** argv) : QApplication(argc, argv)
 
     // Themes
     m_themeManager = std::make_unique<ThemeManager>();
+    AwakePopupDialog::styleStandardDialogs();
     connect(m_settings.get(), &SettingsObject::SettingChanged, this, [this](const Setting& setting, QVariant) {
         if (setting.id() == "Language" && m_settings->get("ApplicationTheme").toString() == "awake-dark")
             setStyleSheet(Awake::Theme{}.appStyleSheet());

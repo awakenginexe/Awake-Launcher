@@ -11,6 +11,8 @@ class AwakePopupDialog : public QDialog {
    public:
     explicit AwakePopupDialog(QWidget* parent);
     static bool confirmAccountSetup(QWidget* parent);
+    // Gives every QMessageBox and QInputDialog in the application the popup look.
+    static void styleStandardDialogs();
     QWidget* panel() const { return m_panel; }
     QVBoxLayout* panelLayout() const { return m_content; }
     void setPanelSize(const QSize& size);

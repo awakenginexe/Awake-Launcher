@@ -6,8 +6,11 @@
 #include <QColor>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QInputDialog>
 #include <QLabel>
+#include <QLayout>
 #include <QLinearGradient>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
@@ -50,6 +53,92 @@ void paintClose(QPainter& painter, const QRectF& bounds, const QPushButton* butt
     painter.drawLine(center + QPointF(-4.5, 4.5), center + QPointF(4.5, -4.5));
 }
 
+QString popupStyleSheet()
+{
+    const auto regularFont = Awake::useRegularUiFont();
+    return QStringLiteral(
+        "QWidget { font-family: K2D; %1 }"
+        "QWidget#awakePopupPanel { background: transparent; border: none; border-radius: 18px; color: #eef4ff; }"
+        "QLabel { color: #dce7f9; background: transparent; }"
+        "QLabel[role=title] { font-size: 22px; font-weight: %2; color: #f3f7ff; }"
+        "QLabel[role=muted] { color: #b0bfd5; }"
+        "QLineEdit, QComboBox { color: #eef4ff; background: #08101d; border: 1px solid #3a5177; border-radius: 8px; padding: 9px 12px; font-size: 14px; selection-background-color: #326bc9; selection-color: #ffffff; }"
+        "QLineEdit:focus, QComboBox:focus { border: 2px solid #94baff; padding: 8px 11px; }"
+        "QComboBox::drop-down { border: none; width: 28px; }"
+        "QComboBox QAbstractItemView { color: #eef4ff; background: #08101d; border: 1px solid #3a5177; selection-background-color: #1c2e4c; selection-color: #eef4ff; outline: 0; padding: 4px; }"
+        "QCheckBox { color: #dce7f9; spacing: 8px; font-size: 13px; background: transparent; }"
+        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #3a5177; background: #08101d; }"
+        "QCheckBox::indicator:checked { background: #326bc9; border-color: #6a9ced; }"
+        "QPlainTextEdit { color: #dbeafe; background: #070e1b; border: 1px solid #2a3e60; border-radius: 8px; padding: 10px; font-family: Consolas, monospace; font-size: 12px; selection-background-color: #326bc9; selection-color: #ffffff; }"
+        "QPushButton, QPushButton:default { font-weight: %3; color: #eaf2ff; background: #1c2e4c; border: 1px solid #3a5177; border-radius: 8px; padding: 9px 15px; }"
+        "QPushButton:hover { background: #29456e; border-color: #6085bd; }"
+        "QPushButton:focus { border: 2px solid #94baff; padding: 8px 14px; }"
+        "QPushButton:disabled { color: #91a2bb; background: #15243a; border-color: #293c56; }"
+        "QPushButton[primary=true] { background: #326bc9; border-color: #6a9ced; color: white; }"
+        "QPushButton[primary=true]:hover { background: #3872d2; }"
+        "QScrollArea { background: transparent; border: none; }"
+        "QWidget#downloadRows { background: transparent; }"
+        "QFrame#downloadRow { background: #14223a; border: 1px solid #293c5a; border-radius: 10px; }")
+        .arg(regularFont ? QStringLiteral("font-weight: 400;") : QString{})
+        .arg(600)
+        .arg(regularFont ? 500 : 400);
+}
+
+// Qt's own message and input boxes are created all over the launcher; dress them here instead of at every call site.
+class StandardDialogStyle : public QObject {
+public:
+    using QObject::QObject;
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        const auto type = event->type();
+        if (type != QEvent::Polish && type != QEvent::Paint && type != QEvent::WindowTitleChange && type != QEvent::Show && type != QEvent::Hide)
+            return false;
+        if (!qobject_cast<QMessageBox*>(watched) && !qobject_cast<QInputDialog*>(watched))
+            return false;
+        auto* dialog = static_cast<QDialog*>(watched);
+        if (type == QEvent::Paint) {
+            QPainter painter(dialog);
+            paintPanel(painter, dialog->rect());
+            return true;
+        }
+        if (type == QEvent::Polish && !dialog->property("awakeStyled").toBool()) {
+            dialog->setProperty("awakeStyled", true);
+            dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+            dialog->setAttribute(Qt::WA_TranslucentBackground);
+            dialog->setStyleSheet(popupStyleSheet() + QStringLiteral(
+                "QMessageBox, QInputDialog { background: transparent; border: none; }"
+                "QLabel { font-size: 13px; }"
+                "QLabel#awakeDialogTitle { font-size: 17px; font-weight: 600; color: #f3f7ff; }"
+                "QPushButton { min-width: 64px; }"
+                "QPushButton:default { background: #326bc9; border-color: #6a9ced; color: white; }"
+                "QPushButton:default:hover { background: #3872d2; }"
+                "QTextEdit { color: #dbeafe; background: #070e1b; border: 1px solid #2a3e60; border-radius: 8px; }"));
+        }
+        if (type == QEvent::Polish || type == QEvent::WindowTitleChange) {
+            // The frame that carried the title is gone, so the title moves into the panel.
+            auto* title = dialog->findChild<QLabel*>(QStringLiteral("awakeDialogTitle"), Qt::FindDirectChildrenOnly);
+            if (!title) {
+                title = new QLabel(dialog);
+                title->setObjectName(QStringLiteral("awakeDialogTitle"));
+                title->move(24, 18);
+            }
+            title->setText(dialog->windowTitle());
+            title->setVisible(!title->text().isEmpty());
+            title->adjustSize();
+            dialog->setMinimumWidth(title->isHidden() ? 0 : title->width() + 48);
+            if (dialog->layout())
+                dialog->layout()->setContentsMargins(24, title->isHidden() ? 22 : 56, 24, 20);
+        }
+        if ((type == QEvent::Show || type == QEvent::Hide) && !event->spontaneous()) {
+            for (auto* window : QApplication::topLevelWidgets())
+                if (auto* main = qobject_cast<MainWindow*>(window))
+                    main->setModalBackdrop(type == QEvent::Show);
+        }
+        return false;
+    }
+};
+
 class PopupPanel : public QWidget {
 public:
     using QWidget::QWidget;
@@ -90,33 +179,7 @@ AwakePopupDialog::AwakePopupDialog(QWidget* parent)
     setWindowModality(Qt::WindowModal);
     resize(m_panelSize + QSize(40, 40));
     m_panel->setObjectName("awakePopupPanel");
-    const auto regularFont = Awake::useRegularUiFont();
-    m_panel->setStyleSheet(QStringLiteral(
-        "QWidget { font-family: K2D; %1 }"
-        "QWidget#awakePopupPanel { background: transparent; border: none; border-radius: 18px; color: #eef4ff; }"
-        "QLabel { color: #dce7f9; background: transparent; }"
-        "QLabel[role=title] { font-size: 22px; font-weight: %2; color: #f3f7ff; }"
-        "QLabel[role=muted] { color: #b0bfd5; }"
-        "QLineEdit, QComboBox { color: #eef4ff; background: #08101d; border: 1px solid #3a5177; border-radius: 8px; padding: 9px 12px; font-size: 14px; selection-background-color: #326bc9; selection-color: #ffffff; }"
-        "QLineEdit:focus, QComboBox:focus { border: 2px solid #94baff; padding: 8px 11px; }"
-        "QComboBox::drop-down { border: none; width: 28px; }"
-        "QComboBox QAbstractItemView { color: #eef4ff; background: #08101d; border: 1px solid #3a5177; selection-background-color: #1c2e4c; selection-color: #eef4ff; outline: 0; padding: 4px; }"
-        "QCheckBox { color: #dce7f9; spacing: 8px; font-size: 13px; background: transparent; }"
-        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #3a5177; background: #08101d; }"
-        "QCheckBox::indicator:checked { background: #326bc9; border-color: #6a9ced; }"
-        "QPlainTextEdit { color: #dbeafe; background: #070e1b; border: 1px solid #2a3e60; border-radius: 8px; padding: 10px; font-family: Consolas, monospace; font-size: 12px; selection-background-color: #326bc9; selection-color: #ffffff; }"
-        "QPushButton, QPushButton:default { font-weight: %3; color: #eaf2ff; background: #1c2e4c; border: 1px solid #3a5177; border-radius: 8px; padding: 9px 15px; }"
-        "QPushButton:hover { background: #29456e; border-color: #6085bd; }"
-        "QPushButton:focus { border: 2px solid #94baff; padding: 8px 14px; }"
-        "QPushButton:disabled { color: #91a2bb; background: #15243a; border-color: #293c56; }"
-        "QPushButton[primary=true] { background: #326bc9; border-color: #6a9ced; color: white; }"
-        "QPushButton[primary=true]:hover { background: #3872d2; }"
-        "QScrollArea { background: transparent; border: none; }"
-        "QWidget#downloadRows { background: transparent; }"
-        "QFrame#downloadRow { background: #14223a; border: 1px solid #293c5a; border-radius: 10px; }")
-        .arg(regularFont ? QStringLiteral("font-weight: 400;") : QString{})
-        .arg(600)
-        .arg(regularFont ? 500 : 400));
+    m_panel->setStyleSheet(popupStyleSheet());
     auto* overlay = new QVBoxLayout(this);
     overlay->setContentsMargins(20, 20, 20, 20);
     overlay->addWidget(m_panel, 0, Qt::AlignCenter);
@@ -153,6 +216,11 @@ AwakePopupDialog::AwakePopupDialog(QWidget* parent)
     layout->addLayout(m_content, 1);
     if (m_anchor)
         m_anchor->installEventFilter(this);
+}
+
+void AwakePopupDialog::styleStandardDialogs()
+{
+    qApp->installEventFilter(new StandardDialogStyle(qApp));
 }
 
 bool AwakePopupDialog::confirmAccountSetup(QWidget* parent)

@@ -265,6 +265,7 @@ class MainWindow : public QMainWindow {
     InstanceProxyModel* proxymodel = nullptr;
     Awake::LibraryWidget* m_library = nullptr;
     bool m_webMode = false;
+    int m_modalBackdrops = 0;
 #ifdef AWAKE_WEB_ENABLED
     Awake::Web::Shell* m_webShell = nullptr;
     Awake::Web::Bridge* m_webBridge = nullptr;
