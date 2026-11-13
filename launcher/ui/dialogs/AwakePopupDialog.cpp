@@ -104,8 +104,9 @@ protected:
         }
         if (type == QEvent::Polish && !dialog->property("awakeStyled").toBool()) {
             dialog->setProperty("awakeStyled", true);
-            dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+            // The window already exists here; setWindowFlags rebuilds it, so the attribute must come first or the corners stay opaque black.
             dialog->setAttribute(Qt::WA_TranslucentBackground);
+            dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
             dialog->setStyleSheet(popupStyleSheet() + QStringLiteral(
                 "QMessageBox, QInputDialog { background: transparent; border: none; }"
                 "QLabel { font-size: 13px; }"

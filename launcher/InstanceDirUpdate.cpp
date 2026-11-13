@@ -103,13 +103,15 @@ QString askToUpdateInstanceDirName(BaseInstance* instance, const QString& oldNam
         return QString();
 
     // Now we can confirm that a renaming is happening
-    if (!instance->syncInstanceDirName(newRoot)) {
+    QString reason;
+    if (!instance->syncInstanceDirName(newRoot, &reason)) {
         QMessageBox::warning(parent, QObject::tr("Cannot rename instance"),
-                             QObject::tr("An error occurred when performing the following renaming operation: <br/>"
+                             QObject::tr("The instance folder could not be renamed: <br/>"
                                          " - Old instance root: %1<br/>"
                                          " - New instance root: %2<br/>"
-                                         "Only the metadata is renamed.")
-                                 .arg(oldRoot, newRoot));
+                                         "%3<br/>"
+                                         "Only the name was changed.")
+                                 .arg(oldRoot, newRoot, reason.toHtmlEscaped()));
         return QString();
     }
     return newRoot;

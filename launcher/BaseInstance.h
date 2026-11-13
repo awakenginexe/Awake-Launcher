@@ -146,7 +146,7 @@ class BaseInstance : public QObject {
     void setName(const QString& val);
 
     /// Sync name and rename instance dir accordingly; returns true if successful
-    bool syncInstanceDirName(const QString& newRoot) const;
+    bool syncInstanceDirName(const QString& newRoot, QString* error = nullptr) const;
 
     /// Register a created shortcut
     void registerShortcut(const ShortcutData& data);

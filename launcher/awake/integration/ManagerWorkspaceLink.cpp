@@ -71,7 +71,7 @@ bool moveSharedInstance(const QString& root, const QString& newRoot, QString* er
     const auto original = file.readAll();
     auto body = QJsonDocument::fromJson(original).object()["body"].toObject();
     file.close();
-    if (!QFile::rename(root, newRoot)) return fail("The instance folder is in use.");
+    if (!QFile::rename(root, newRoot)) return fail("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");
     // The Manager finds the instance by this path; a stale one makes both programs lose it.
     body["sharedRoot"] = QFileInfo(newRoot).canonicalFilePath();
     const auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
