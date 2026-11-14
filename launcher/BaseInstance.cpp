@@ -443,7 +443,7 @@ bool BaseInstance::syncInstanceDirName(const QString& newRoot, QString* error) c
     if (isManagerShared())
         return Awake::Integration::moveSharedInstance(oldRoot, newRoot, error);
 #endif
-    if (QFile::rename(oldRoot, newRoot))
+    if (FS::renameFolder(oldRoot, newRoot))
         return true;
     if (error)
         *error = tr("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");

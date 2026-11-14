@@ -3,6 +3,7 @@
 #include "InstanceAuthority.h"
 #include "InstanceDiscovery.h"
 #include "DurableIO.h"
+#include "FileSystem.h"
 #include "ProfileAccess.h"
 #include "PhysicalInstanceLease.h"
 #include <QCryptographicHash>
@@ -71,14 +72,14 @@ bool moveSharedInstance(const QString& root, const QString& newRoot, QString* er
     const auto original = file.readAll();
     auto body = QJsonDocument::fromJson(original).object()["body"].toObject();
     file.close();
-    if (!QFile::rename(root, newRoot)) return fail("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");
+    if (!FS::renameFolder(root, newRoot)) return fail("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");
     // The Manager finds the instance by this path; a stale one makes both programs lose it.
     body["sharedRoot"] = QFileInfo(newRoot).canonicalFilePath();
     const auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
     if (DurableIO::write(catalog, QJsonDocument(QJsonObject{{"body", body}, {"sha256", digest}}).toJson(QJsonDocument::Compact), error) &&
         !verifiedBinding(newRoot, binding["physicalId"].toString(), true, error).isEmpty()) return true;
     // shortcut: a crash between the move and this record update leaves a stale path, upgrade to a journaled move if that ever happens.
-    if (QFile::rename(newRoot, root)) DurableIO::write(catalog, original);
+    if (FS::renameFolder(newRoot, root)) DurableIO::write(catalog, original);
     return fail("The Manager's record of this instance could not be updated.");
 }
 }

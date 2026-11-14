@@ -804,6 +804,27 @@ bool move(const QString& source, const QString& dest)
     return true;
 }
 
+bool renameFolder(const QString& source, const QString& dest)
+{
+    if (QFile::rename(source, dest))
+        return true;
+#ifdef Q_OS_WIN32
+    // File Explorer keeps folders it has shown open, which blocks a plain rename. A shell rename makes it let go first.
+    auto from = QDir::toNativeSeparators(QFileInfo(source).absoluteFilePath()).toStdWString();
+    auto to = QDir::toNativeSeparators(QFileInfo(dest).absoluteFilePath()).toStdWString();
+    from.push_back(L'\0');  // the shell expects a double-terminated list
+    to.push_back(L'\0');
+    SHFILEOPSTRUCTW op{};
+    op.wFunc = FO_RENAME;
+    op.pFrom = from.c_str();
+    op.pTo = to.c_str();
+    op.fFlags = FOF_NO_UI;
+    return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted && !QFileInfo::exists(source);
+#else
+    return false;
+#endif
+}
+
 bool deletePath(QString path)
 {
     std::error_code err;
