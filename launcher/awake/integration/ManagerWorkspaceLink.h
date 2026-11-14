@@ -12,5 +12,7 @@ std::shared_ptr<PhysicalInstanceLease> acquireManagerWorkspace(const QString& ro
 QJsonObject sharedInstanceBinding(const QString& root, const QString& expectedIdentity = {}, QString* error = nullptr);
 std::shared_ptr<PhysicalInstanceLease> acquireSharedInstance(const QString& root, const QString& expectedIdentity = {}, QString* error = nullptr);
 // Renames a shared instance's folder and updates the path the Manager saved for it, or changes nothing.
-bool moveSharedInstance(const QString& root, const QString& newRoot, QString* error = nullptr);
+using FolderRename = bool (*)(const QString& from, const QString& to);
+// The launcher passes its own rename, which also works while File Explorer holds the folder; this library cannot link it.
+bool moveSharedInstance(const QString& root, const QString& newRoot, QString* error = nullptr, FolderRename rename = nullptr);
 }
