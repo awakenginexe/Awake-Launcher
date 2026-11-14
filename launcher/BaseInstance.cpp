@@ -433,7 +433,7 @@ void BaseInstance::setName(const QString& val)
     emit propertiesChanged();
 }
 
-bool BaseInstance::syncInstanceDirName(const QString& newRoot) const
+bool BaseInstance::syncInstanceDirName(const QString& newRoot, QString* error) const
 {
     auto oldRoot = instanceRoot();
     if (oldRoot == newRoot)
@@ -441,9 +441,13 @@ bool BaseInstance::syncInstanceDirName(const QString& newRoot) const
 #ifdef Q_OS_WIN
     // The Manager saved this folder's path; a plain rename would make both programs lose the instance.
     if (isManagerShared())
-        return Awake::Integration::moveSharedInstance(oldRoot, newRoot);
+        return Awake::Integration::moveSharedInstance(oldRoot, newRoot, error);
 #endif
-    return QFile::rename(oldRoot, newRoot);
+    if (QFile::rename(oldRoot, newRoot))
+        return true;
+    if (error)
+        *error = tr("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");
+    return false;
 }
 
 void BaseInstance::registerShortcut(const ShortcutData& data)
