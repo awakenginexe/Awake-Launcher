@@ -663,6 +663,8 @@ class AwakeWebShellTest : public QObject {
         QVERIFY(QTest::qWaitForWindowExposed(&box));
         QVERIFY(box.windowFlags().testFlag(Qt::FramelessWindowHint));
         QVERIFY(box.testAttribute(Qt::WA_TranslucentBackground));
+        // Windows only blends a frameless window per pixel when it is layered; an opaque one shows black corners.
+        QVERIFY(GetWindowLongPtrW(HWND(box.winId()), GWL_EXSTYLE) & WS_EX_LAYERED);
         auto* title = box.findChild<QLabel*>("awakeDialogTitle");
         QVERIFY(title && title->isVisible());
         QCOMPARE(title->text(), box.windowTitle());

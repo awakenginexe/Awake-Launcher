@@ -297,6 +297,9 @@ class create_link : public QObject {
  */
 bool move(const QString& source, const QString& dest);
 
+/// Rename a folder in place, also when File Explorer has it or a subfolder open.
+bool renameFolder(const QString& source, const QString& dest);
+
 /**
  * Delete a folder recursively
  */

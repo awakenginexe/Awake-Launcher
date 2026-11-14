@@ -19,6 +19,7 @@
 #include <QShowEvent>
 #include <QSize>
 #include <QVBoxLayout>
+#include <QWindow>
 
 #include "Application.h"
 #include "awake/AwakeTheme.h"
@@ -104,7 +105,9 @@ protected:
         }
         if (type == QEvent::Polish && !dialog->property("awakeStyled").toBool()) {
             dialog->setProperty("awakeStyled", true);
-            // The window already exists here; setWindowFlags rebuilds it, so the attribute must come first or the corners stay opaque black.
+            // The native window already exists here, built opaque, and setWindowFlags keeps it. Drop it so the next one is built translucent; otherwise the corners stay black.
+            if (auto* handle = dialog->windowHandle())
+                handle->destroy();
             dialog->setAttribute(Qt::WA_TranslucentBackground);
             dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
             dialog->setStyleSheet(popupStyleSheet() + QStringLiteral(
