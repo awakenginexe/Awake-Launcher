@@ -441,7 +441,7 @@ bool BaseInstance::syncInstanceDirName(const QString& newRoot, QString* error) c
 #ifdef Q_OS_WIN
     // The Manager saved this folder's path; a plain rename would make both programs lose the instance.
     if (isManagerShared())
-        return Awake::Integration::moveSharedInstance(oldRoot, newRoot, error);
+        return Awake::Integration::moveSharedInstance(oldRoot, newRoot, error, FS::renameFolder);
 #endif
     if (FS::renameFolder(oldRoot, newRoot))
         return true;

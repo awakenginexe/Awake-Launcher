@@ -56,9 +56,10 @@ QJsonObject managerWorkspaceBinding(const QString& root, const QString& expected
 QJsonObject sharedInstanceBinding(const QString& root, const QString& expected, QString* error) { return verifiedBinding(root, expected, true, error); }
 std::shared_ptr<PhysicalInstanceLease> acquireManagerWorkspace(const QString& root, const QString& expected, QString* error) { return acquireVerified(root, expected, false, error); }
 std::shared_ptr<PhysicalInstanceLease> acquireSharedInstance(const QString& root, const QString& expected, QString* error) { return acquireVerified(root, expected, true, error); }
-bool moveSharedInstance(const QString& root, const QString& newRoot, QString* error)
+bool moveSharedInstance(const QString& root, const QString& newRoot, QString* error, FolderRename rename)
 {
     const auto fail = [error](const QString& reason) { if (error && error->isEmpty()) *error = reason; return false; };
+    if (!rename) rename = [](const QString& from, const QString& to) { return QFile::rename(from, to); };
     const auto binding = verifiedBinding(root, {}, true, error);
     if (binding.isEmpty()) return false;
     // Holding the lock proves no game or Manager change is using the folder. It lives outside the folder, so it does not block the move.
@@ -71,14 +72,14 @@ bool moveSharedInstance(const QString& root, const QString& newRoot, QString* er
     const auto original = file.readAll();
     auto body = QJsonDocument::fromJson(original).object()["body"].toObject();
     file.close();
-    if (!QFile::rename(root, newRoot)) return fail("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");
+    if (!rename(root, newRoot)) return fail("Another program is using the instance folder. Close any File Explorer window or program opened inside it, then rename again.");
     // The Manager finds the instance by this path; a stale one makes both programs lose it.
     body["sharedRoot"] = QFileInfo(newRoot).canonicalFilePath();
     const auto digest = QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(body).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
     if (DurableIO::write(catalog, QJsonDocument(QJsonObject{{"body", body}, {"sha256", digest}}).toJson(QJsonDocument::Compact), error) &&
         !verifiedBinding(newRoot, binding["physicalId"].toString(), true, error).isEmpty()) return true;
     // shortcut: a crash between the move and this record update leaves a stale path, upgrade to a journaled move if that ever happens.
-    if (QFile::rename(newRoot, root)) DurableIO::write(catalog, original);
+    if (rename(newRoot, root)) DurableIO::write(catalog, original);
     return fail("The Manager's record of this instance could not be updated.");
 }
 }
