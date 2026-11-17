@@ -9,7 +9,9 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QUuid>
+#include <qt_windows.h>
 namespace Awake::Integration {
 namespace {
 QJsonObject verifiedBinding(const QString& root, const QString& expected, bool shared, QString* error)
@@ -62,9 +64,11 @@ bool moveSharedInstance(const QString& root, const QString& newRoot, QString* er
     if (!rename) rename = [](const QString& from, const QString& to) { return QFile::rename(from, to); };
     const auto binding = verifiedBinding(root, {}, true, error);
     if (binding.isEmpty()) return false;
-    // Holding the lock proves no game or Manager change is using the folder. It lives outside the folder, so it does not block the move.
-    const auto lease = PhysicalInstanceLease::acquire(root, binding["physicalId"].toString(), binding["registry"].toString(), error);
-    if (!lease) return false;
+    // The Manager lock stops Manager changes. As in Prism Launcher, a running game is caught by Windows refusing the move, because
+    // the game keeps files open inside the folder. A launch lease is not used: a game whose end went unrecorded would block renaming forever.
+    const auto lock = InstanceAuthority::lock(binding["physicalId"].toString(), error);
+    if (!lock) return false;
+    const auto unlock = qScopeGuard([lock] { CloseHandle(lock); });
     if (QFileInfo::exists(root + "/.awake-integration/recovery.json")) return fail("Open Awake Modpack Manager and finish recovering this instance first.");
     const auto catalog = QFileInfo(binding["registry"].toString()).dir().canonicalPath() + "/catalog/" + binding["registrationId"].toString() + ".json";
     QFile file(catalog);
