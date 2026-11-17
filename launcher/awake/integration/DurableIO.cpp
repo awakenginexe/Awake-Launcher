@@ -84,7 +84,15 @@ bool singleStream(const QString& path)
     const auto search = FindFirstStreamW(wide(name), FindStreamInfoStandard, &stream, 0);
     if (search == INVALID_HANDLE_VALUE) return false;
     auto close = qScopeGuard([&] { FindClose(search); });
-    return QString::fromWCharArray(stream.cStreamName) == "::$DATA" && !FindNextStreamW(search, &stream) && GetLastError() == ERROR_HANDLE_EOF;
+    // Besides the content, only small download markers are allowed: Windows' Zone.Identifier and security tools'
+    // copies of it (MBAM.Zone.Identifier). They record where a file came from and are on every jar saved by a browser.
+    do {
+        const auto stream_name = QString::fromWCharArray(stream.cStreamName);
+        if (stream_name == "::$DATA") continue;
+        const bool marker = stream_name.compare(":Zone.Identifier:$DATA", Qt::CaseInsensitive) == 0 || stream_name.endsWith(".Zone.Identifier:$DATA", Qt::CaseInsensitive);
+        if (!marker || stream.StreamSize.QuadPart > 4096) return false;
+    } while (FindNextStreamW(search, &stream));
+    return GetLastError() == ERROR_HANDLE_EOF;
 }
 // Files take these from their folder and they do not change how a file reads or moves. The Launcher's staging
 // folder is marked not-indexed, so every file of a pack installed through it carries that attribute.

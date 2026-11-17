@@ -23,6 +23,8 @@ using namespace Awake::Integration;
 namespace {
 QByteArray encode(const QJsonObject& object) { return QJsonDocument(object).toJson(QJsonDocument::Compact); }
 QString sha(const QByteArray& bytes) { return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()); }
+// Names the file that is in the way, so the user can fix it.
+QString unverifiable(const QString& what, const QString& why) { return what + " cannot be verified" + (why.isEmpty() ? QString(".") : ": " + why.left(400)); }
 bool uuid(const QString& value) { return !QUuid(value).isNull() && QUuid(value).toString(QUuid::WithoutBraces) == value; }
 bool leaf(const QString& name)
 {
@@ -111,8 +113,8 @@ QJsonObject WorkspaceServices::workspaceRecord(const QString& id) const
 }
 QJsonObject WorkspaceServices::workspaceView(const QJsonObject& record) const
 {
-    TransactionEngine engine(m_store, root(record), modsPath(record)); const auto revision = engine.revision();
-    if (revision.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Workspace inventory cannot be verified."};
+    TransactionEngine engine(m_store, root(record), modsPath(record)); QString why; const auto revision = engine.revision(&why);
+    if (revision.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", unverifiable("Workspace inventory", why)};
     QJsonObject value;
     for (const auto* key : {"workspaceId", "physicalId", "name", "minecraftVersion", "loader"}) value[key] = record[key];
     value["instanceRevision"] = revision; value["ownership"] = "manager-owned";
@@ -185,10 +187,12 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
         // A project being changed or played stays listed; only its content revision is unknown until it is free.
         try { auto lease = acquire(record, 0); result.append(workspaceView(record)); }
         catch (const ServiceError& error) {
-            if (error.code != "BUSY") throw;
+            // One instance whose files cannot be verified must not hide the others, or itself: it is listed as needing attention.
+            const bool unverified = error.code == "RECOVERY_REQUIRED";
+            if (error.code != "BUSY" && !unverified) throw;
             QJsonObject busy; for (const auto* key : {"workspaceId", "physicalId", "name", "minecraftVersion", "loader"}) busy[key] = record[key];
             busy["instanceRevision"] = sha(encode({{"busy", record["workspaceId"]}})); busy["ownership"] = "manager-owned";
-            busy["recoveryRequired"] = QFileInfo::exists(root(record) + "/.awake-integration/recovery.json");
+            busy["recoveryRequired"] = unverified || QFileInfo::exists(root(record) + "/.awake-integration/recovery.json");
             if (record.contains("sharedRoot")) busy["sharedRoot"] = record["sharedRoot"];
             result.append(busy);
         }
@@ -198,8 +202,8 @@ QJsonObject WorkspaceServices::list(const QJsonObject& params)
 QJsonObject WorkspaceServices::inventory(const QJsonObject& params)
 {
     const auto record = workspaceRecord(params["physicalId"].toString()); auto lease = acquire(record);
-    TransactionEngine engine(m_store, root(record), modsPath(record)); const auto before = engine.revision();
-    if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", "Inventory cannot be verified."};
+    TransactionEngine engine(m_store, root(record), modsPath(record)); QString why; const auto before = engine.revision(&why);
+    if (before.isEmpty()) throw ServiceError{"RECOVERY_REQUIRED", unverifiable("Inventory", why)};
     if (params.contains("instanceRevision") && params["instanceRevision"] != before) throw ServiceError{"STALE_INSTANCE", "Inventory changed between pages."};
     auto result = paged("items", scan(record), params);
     if (engine.revision() != before) throw ServiceError{"STALE_INSTANCE", "Inventory changed while reading."};

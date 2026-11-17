@@ -226,6 +226,24 @@ private slots:
             QCOMPARE(f.workspace["name"].toString(), QString("Existing pack"));
             QCOMPARE(f.item("p0")["metadataState"].toString(), QString("verified"));
             QCOMPARE(f.inventory()["total"].toInt(), 2);
+            // A jar saved from a browser carries "downloaded from" marker streams; it is a mod like any other.
+            const auto stream = [&](const QString& name, bool present) {
+                if (!present) return QFile::remove(mods + "/manual.jar:" + name);
+                QFile file(mods + "/manual.jar:" + name); return file.open(QIODevice::WriteOnly) && file.write("[ZoneTransfer]\nZoneId=3\n") > 0;
+            };
+            QVERIFY(stream("Zone.Identifier", true)); QVERIFY(stream("MBAM.Zone.Identifier", true));
+            QCOMPARE(f.services.list({})["total"].toInt(), 2); QCOMPARE(f.inventory()["total"].toInt(), 2);
+            // Any other hidden stream is refused, but only this instance needs attention: every workspace stays listed.
+            QVERIFY(stream("payload", true));
+            const auto listed = f.services.list({})["workspaces"].toArray(); QCOMPARE(listed.size(), 2);
+            for (const auto& value : listed) {
+                QVERIFY(contract.valid("workspace", value.toObject()));
+                QCOMPARE(value.toObject()["recoveryRequired"].toBool(), value.toObject().contains("sharedRoot"));
+            }
+            bool named = false;
+            try { f.inventory(); } catch (const ServiceError& error) { named = error.message.contains("manual.jar"); }
+            QVERIFY(named); QVERIFY(stream("payload", false));
+            QCOMPARE(f.inventory()["total"].toInt(), 2);
             bool refused = false;
             try { f.services.rename({{"physicalId", f.workspace["physicalId"]}, {"name", "Other"}}); } catch (const ServiceError& error) { refused = error.code == "UNSUPPORTED_CAPABILITY"; }
             QVERIFY(refused);
@@ -237,7 +255,18 @@ private slots:
             QVERIFY(InstanceAuthority::blocksNativeLoad(instance));
             // Renaming the folder in the Launcher keeps the instance known to both programs.
             const auto moved = home + "/renamed"; QString moveError;
+            {
+                // As in Prism Launcher, a game still using the folder is caught by Windows refusing the move.
+                QFile game(mods + "/manual.jar"); QVERIFY(game.open(QIODevice::ReadOnly));
+                QVERIFY(!moveSharedInstance(instance, moved)); QVERIFY(!sharedInstanceBinding(instance).isEmpty());
+            }
+            // A game session whose end was never recorded (its keeper died with the launcher) still blocks launching, but not renaming.
+            const auto games = f.profile + "/ownership/games";
+            const auto record = games + '/' + digest(f.workspace["physicalId"].toString().toUtf8(), QCryptographicHash::Sha256) + ".json";
+            QVERIFY(createPrivateStorageDirectory(games)); QVERIFY(DurableIO::write(record, "{}"));
+            QVERIFY(!acquireSharedInstance(instance));
             QVERIFY2(moveSharedInstance(instance, moved, &moveError), qPrintable(moveError));
+            QVERIFY(QFile::remove(record));
             QVERIFY(!QFileInfo::exists(instance)); QVERIFY(!sharedInstanceBinding(moved).isEmpty());
             QCOMPARE(f.services.list({})["total"].toInt(), 2); QCOMPARE(f.inventory()["total"].toInt(), 2);
             QVERIFY(QDir().mkdir(instance)); QVERIFY(!moveSharedInstance(moved, instance)); QVERIFY(QDir().rmdir(instance)); // a taken name changes nothing
