@@ -45,8 +45,7 @@ Write-SourceArchive $Commit "Awake-Launcher-v$Version-Source.zip" "Awake-Launche
 Write-SourceArchive $helper 'Awake-Native-Core-3127db450-Source.zip' 'Awake-Native-Core-3127db450'
 $notices=Join-Path $package 'licenses'
 New-Item -ItemType Directory -Path $notices -Force | Out-Null
-Invoke-WebRequest 'https://www.gnu.org/licenses/lgpl-3.0.txt' -OutFile (Join-Path $notices 'LGPL-3.0.txt')
-Invoke-WebRequest 'https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt' -OutFile (Join-Path $notices 'LGPL-2.1.txt')
+Copy-Item (Join-Path $repo 'program_info/licenses/LGPL-3.0.txt'), (Join-Path $repo 'program_info/licenses/LGPL-2.1.txt') $notices  # kept in the repo: gnu.org often times out from CI runners
 foreach($port in Get-ChildItem -LiteralPath (Join-Path $repo 'build/vcpkg_installed/x64-windows/share') -Directory) {
     $copyright=Join-Path $port.FullName 'copyright'
     if(Test-Path -LiteralPath $copyright) {
