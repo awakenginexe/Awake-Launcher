@@ -302,7 +302,7 @@ onUnmounted(() => {
 
         <div class="launch-dock glass">
           <LoadingSkeleton v-if="busy" class="launch-status" :label="t('working')" :rows="1" /><p v-else class="launch-status" role="status">{{ t(selectedStatus) }}</p>
-          <button id="play" class="play-button" :disabled="!canPlay" @click="launch()"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="m5 3 11 7-11 7Z" /></svg>{{ t(selected.running ? 'running' : 'play') }}</button>
+          <button id="play" class="play-button" :disabled="!canPlay" @click="launch()"><span class="play-icon" aria-hidden="true"><svg viewBox="0 0 20 20" width="16" height="16"><path d="m6 3.5 10 6.5-10 6.5Z" /></svg></span><span class="play-label">{{ t(selected.running ? 'running' : 'play') }}</span></button>
           <details ref="moreActions" class="more-actions"><summary>{{ t('more') }}</summary><div class="action-menu"><button :disabled="!enabled || selected.managerLinked" @click="openEditor(selected, 'mods')">{{ t('manage') }}</button><button :disabled="!enabled || selected.managerLinked" @click="openEditor(selected, 'settings')">{{ t('launchOptions') }}</button><button :disabled="!enabled" @click="openEditor(selected, 'log')">{{ t('logs') }}</button></div></details>
         </div>
       </div>

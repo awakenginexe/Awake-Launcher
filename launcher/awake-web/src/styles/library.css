@@ -609,19 +609,21 @@ p, h1, h2, h3 { margin: 0; }
 .play-button {
   background: var(--accent-gradient);
   color: var(--accent-contrast);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  min-height: 52px;
-  padding: 12px 30px;
-  border-radius: var(--radius-control);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  min-height: 58px;
+  padding: 9px 30px 9px 10px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
-  box-shadow: 0 4px 22px rgba(37, 99, 235, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+  box-shadow: 0 12px 32px -10px rgba(37, 99, 235, 0.75), inset 0 0 0 1px rgba(191, 219, 254, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.32);
   position: relative;
   isolation: isolate;
+  overflow: hidden;
   transition: transform var(--duration-fast) var(--ease-out);
 }
 /* Hover fades a pre-painted gradient layer instead of animating shadow and filter, which repaint every frame. */
@@ -629,24 +631,48 @@ p, h1, h2, h3 { margin: 0; }
   content: '';
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: -2;
   border-radius: inherit;
   background: var(--accent-gradient-hover);
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease);
 }
+/* Light sweep on hover: a transform-only animation, so it stays on the compositor. */
+.play-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.32) 50%, transparent 70%);
+  transform: translateX(-110%);
+}
 .play-button:hover:not(:disabled) {
   background: var(--accent-gradient);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 .play-button:hover:not(:disabled)::after { opacity: 1; }
+.play-button:hover:not(:disabled)::before { transform: translateX(110%); transition: transform 650ms var(--ease-out); }
 .play-button:active:not(:disabled) {
   background: var(--accent-gradient-active);
-  transform: translateY(1px) scale(0.985);
+  transform: translateY(0) scale(0.98);
   transition-duration: 60ms;
 }
 .play-button:active:not(:disabled)::after { opacity: 0; }
-.play-button svg { fill: currentColor; }
+.play-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.20);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.30);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.play-button:hover:not(:disabled) .play-icon { transform: scale(1.08); }
+/* Nudge the triangle right so it looks centered in the circle. */
+.play-icon svg { fill: currentColor; transform: translateX(1px); }
+.play-label { flex: 1; text-align: center; }
 
 .more-actions { position: relative; }
 .more-actions summary {

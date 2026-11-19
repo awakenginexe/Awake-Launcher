@@ -6,6 +6,7 @@
 #include "InstanceAuthority.h"
 #include <QCryptographicHash>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -90,6 +91,10 @@ GameProcessGroup::State GameProcessGroup::probe(const QString& id, const QString
     const auto job = OpenJobObjectW(JOB_OBJECT_QUERY, FALSE, reinterpret_cast<LPCWSTR>(name.utf16()));
     if (!job) {
         if (GetLastError() != ERROR_FILE_NOT_FOUND) return unknown("Recorded job cannot be inspected.");
+        // A reboot ends every process in the job, so a dead keeper's record from before boot owns nothing.
+        // shortcut: trusts the wall clock; a large forward clock jump after boot could misdate a record. Store a boot id if that matters.
+        if (file.fileTime(QFileDevice::FileModificationTime) < QDateTime::currentDateTime().addMSecs(-qint64(GetTickCount64())))
+            return State::Inactive;
         const auto certificate = certificatePath(directory, id, nonce);
         if (!storageAccessIsPrivate(certificate) || DurableIO::hash(certificate).isEmpty())
             return unknown("Game ownership was interrupted without a verified completion certificate.");

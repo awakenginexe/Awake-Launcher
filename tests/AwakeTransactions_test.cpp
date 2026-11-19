@@ -242,6 +242,13 @@ class AwakeTransactionsTest : public QObject {
         QCOMPARE(bytes(path).size(), 36);
         QVERIFY(!fixtureLease(root, id, registry));
         QVERIFY(QFileInfo(path.chopped(8)).isDir());
+        // A record written before the last boot cannot own a live game.
+        QFile record(QDir(registry + "/games").entryInfoList({"*.json"}, QDir::Files).value(0).filePath());
+        QVERIFY(record.open(QIODevice::ReadWrite));
+        QVERIFY(record.setFileTime(QDateTime::currentDateTime().addMSecs(-qint64(GetTickCount64()) - 60000), QFileDevice::FileModificationTime));
+        record.close();
+        QCOMPARE(GameProcessGroup::probe(id, registry), GameProcessGroup::State::Inactive);
+        QVERIFY(fixtureLease(root, id, registry));
     }
     void gameOwnershipIsDurableAndGuardsOtherProcesses()
     {
